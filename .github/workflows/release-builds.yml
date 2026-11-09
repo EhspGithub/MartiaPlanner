@@ -98,14 +98,15 @@ jobs:
           npm install --legacy-peer-deps -D @tauri-apps/cli@^2.0.0
           npx tauri icon public/pwa-512x512.png
           npx tauri android init
-          npx tauri android build --apk true
+          npx tauri android build --apk
 
       - name: Sign APK for direct phone installation
         run: |
           APK_PATH=$(find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" | head -n 1)
           echo "Found APK: $APK_PATH"
+          $ANDROID_HOME/build-tools/34.0.0/zipalign -v -p 4 "$APK_PATH" aligned.apk || cp "$APK_PATH" aligned.apk
           keytool -genkey -v -keystore martia-release.keystore -alias martia -keyalg RSA -keysize 2048 -validity 10000 -storepass martia123 -keypass martia123 -dname "CN=MartiaPlanner, OU=Education, O=MartiaPlanner, L=Tehran, S=Tehran, C=IR"
-          $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks martia-release.keystore --ks-pass pass:martia123 --key-pass pass:martia123 --out MartiaPlanner-Android-v1.0.0.apk "$APK_PATH"
+          $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks martia-release.keystore --ks-pass pass:martia123 --key-pass pass:martia123 --out MartiaPlanner-Android-v1.0.0.apk aligned.apk
 
       - name: Upload Android APK Artifact
         uses: actions/upload-artifact@v4
