@@ -56,14 +56,14 @@ export default function App() {
   }, [loadBootstrap]);
 
   return (
-    <div dir="rtl" className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div dir="rtl" className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 bg-student-canvas text-slate-900 dark:text-slate-100">
       {/* =====================================================================
           STRICT 3-ZONE TOP BAR CONTRACT
           Zone 1: Single text element wordmark
           Zone 2: 4 concise single-line text navigation links
           Zone 3: Primary action / theme control
       ===================================================================== */}
-      <header className="sticky top-0 z-30 flex items-center justify-between gap-8 px-4 sm:px-8 h-16 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-8 px-4 sm:px-8 h-16 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
         {/* Zone 1: Single text element wordmark */}
         <a
           href="#planner"
@@ -71,7 +71,7 @@ export default function App() {
             e.preventDefault();
             setActiveMenu('planner');
           }}
-          className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white whitespace-nowrap shrink-0"
+          className="text-lg font-black tracking-tight bg-gradient-to-l from-indigo-600 via-violet-600 to-purple-600 bg-clip-text text-transparent whitespace-nowrap shrink-0"
         >
           MartiaPlanner
         </a>

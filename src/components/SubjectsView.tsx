@@ -9,6 +9,14 @@ import {
   Layers,
   Check,
   X,
+  Calculator,
+  Atom,
+  Feather,
+  Languages,
+  Globe2,
+  Cpu,
+  HeartHandshake,
+  Sparkles,
 } from 'lucide-react';
 import type { Subject, SubjectUnit } from '../types.ts';
 import { api } from '../services/api.ts';
@@ -21,6 +29,55 @@ interface SubjectsViewProps {
 
 const GRADE_OPTIONS = ['هفتم', 'هشتم', 'نهم'];
 const UNIT_TYPE_OPTIONS = ['درس', 'فصل', 'پودمان', 'بخش'];
+
+function getTextbookVisual(name: string) {
+  if (name.includes('ریاضی')) {
+    return {
+      icon: Calculator,
+      iconBg: 'bg-blue-100 dark:bg-blue-950/70 text-blue-600 dark:text-blue-400',
+    };
+  }
+  if (name.includes('علوم')) {
+    return {
+      icon: Atom,
+      iconBg: 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400',
+    };
+  }
+  if (name.includes('فارسی') || name.includes('نگارش')) {
+    return {
+      icon: Feather,
+      iconBg: 'bg-rose-100 dark:bg-rose-950/70 text-rose-600 dark:text-rose-400',
+    };
+  }
+  if (name.includes('زبان') || name.includes('عربی')) {
+    return {
+      icon: Languages,
+      iconBg: 'bg-violet-100 dark:bg-violet-950/70 text-violet-600 dark:text-violet-400',
+    };
+  }
+  if (name.includes('مطالعات')) {
+    return {
+      icon: Globe2,
+      iconBg: 'bg-amber-100 dark:bg-amber-950/70 text-amber-600 dark:text-amber-400',
+    };
+  }
+  if (name.includes('کار و فناوری')) {
+    return {
+      icon: Cpu,
+      iconBg: 'bg-cyan-100 dark:bg-cyan-950/70 text-cyan-600 dark:text-cyan-400',
+    };
+  }
+  if (name.includes('پیام') || name.includes('قرآن')) {
+    return {
+      icon: HeartHandshake,
+      iconBg: 'bg-teal-100 dark:bg-teal-950/70 text-teal-600 dark:text-teal-400',
+    };
+  }
+  return {
+    icon: BookOpen,
+    iconBg: 'bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400',
+  };
+}
 
 export const SubjectsView: React.FC<SubjectsViewProps> = ({
   subjects,
@@ -177,41 +234,47 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            تعریف درس‌ها و ساختار آموزشی کتاب‌ها
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            مدیریت فهرست کتاب‌های درسی و تعریف فصل‌ها یا درس‌های هر کتاب جهت انتخاب سریع در فرم برنامه‌ریزی
-          </p>
-        </div>
+      {/* Vibrant Header Banner */}
+      <div className="rounded-3xl bg-gradient-to-l from-indigo-600 via-indigo-700 to-violet-700 text-white p-6 shadow-md">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-300">
+              <Sparkles className="w-4 h-4" />
+              <span>قفسه کتاب‌های درسی متوسطه اول (هفتم، هشتم و نهم)</span>
+            </div>
+            <h1 className="text-2xl font-black tracking-tight">
+              تعریف درس‌ها و ساختار آموزشی کتاب‌ها
+            </h1>
+            <p className="text-xs sm:text-sm text-indigo-100/90">
+              هر کتاب درسی و فصل‌ها، درس‌ها یا پودمان‌های آن را مدیریت کن تا در فرم برنامه‌ریزی روزانه با یک کلیک انتخاب شوند.
+            </p>
+          </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setNewSubjectName('');
-            setNewSubjectUnitType('درس');
-            setNewSubjectInitialUnits('درس اول\nدرس دوم\nدرس سوم\nدرس چهارم');
-            setSubjectError(null);
-            setShowAddSubjectModal(true);
-          }}
-          className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors cursor-pointer self-start sm:self-auto min-h-[42px]"
-        >
-          <Plus className="w-4 h-4" />
-          <span>تعریف درس جدید</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => {
+              setNewSubjectName('');
+              setNewSubjectUnitType('درس');
+              setNewSubjectInitialUnits('درس اول\nدرس دوم\nدرس سوم\nدرس چهارم');
+              setSubjectError(null);
+              setShowAddSubjectModal(true);
+            }}
+            className="flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-xs font-black text-indigo-950 hover:bg-indigo-50 transition-colors cursor-pointer self-start sm:self-auto min-h-[42px] shadow-sm shrink-0"
+          >
+            <Plus className="w-4 h-4 text-indigo-600" />
+            <span>افزودن کتاب درسی جدید</span>
+          </button>
+        </div>
       </div>
 
       {/* Main 2-Column Split: Subjects List (Right) + Active Subject Units (Left) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Right Column: Subjects List */}
-        <div className="lg:col-span-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+        <div className="lg:col-span-5 rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
           <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <h2 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <span>فهرست درس‌های تعریف‌شده ({toPersianDigits(subjects.length)})</span>
+              <span>کتاب‌های درسی من ({toPersianDigits(subjects.length)})</span>
             </h2>
           </div>
 
@@ -219,6 +282,8 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
             {subjects.map((subj) => {
               const isSelected = activeSubject?.id === subj.id;
               const isEditing = editingSubjectId === subj.id;
+              const visual = getTextbookVisual(subj.name);
+              const SubjIcon = visual.icon;
 
               return (
                 <div
@@ -226,7 +291,7 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                   onClick={() => !isEditing && setSelectedSubjectId(subj.id)}
                   className={`p-4 transition-colors cursor-pointer ${
                     isSelected
-                      ? 'bg-indigo-50/70 dark:bg-indigo-950/40'
+                      ? 'bg-indigo-50/80 dark:bg-indigo-950/40'
                       : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
                   }`}
                 >
@@ -282,13 +347,20 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                     </div>
                   ) : (
                     <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-bold text-slate-900 dark:text-white">
-                          {subj.name}
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${visual.iconBg}`}
+                        >
+                          <SubjIcon className="w-5 h-5" />
                         </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
-                          پایه {subj.grade_level} · ساختار بر اساس «{subj.unit_type_label}» ·{' '}
-                          {toPersianDigits(subj.units.length)} {subj.unit_type_label}
+                        <div>
+                          <div className="text-sm font-bold text-slate-900 dark:text-white">
+                            {subj.name}
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                            پایه {subj.grade_level} · ساختار بر اساس «{subj.unit_type_label}» ·{' '}
+                            {toPersianDigits(subj.units.length)} {subj.unit_type_label}
+                          </div>
                         </div>
                       </div>
 
@@ -327,12 +399,12 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
         </div>
 
         {/* Left Column: Units (فصل‌ها / درس‌ها) of Selected Subject */}
-        <div className="lg:col-span-7 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+        <div className="lg:col-span-7 rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
           {activeSubject ? (
             <>
               <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                     <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                     <span>
                       ساختار آموزشی کتاب «{activeSubject.name}» ({toPersianDigits(activeSubject.units.length)}{' '}
@@ -360,7 +432,7 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                 <button
                   type="submit"
                   disabled={submitting || !newUnitTitle.trim()}
-                  className="flex items-center gap-1.5 rounded-xl bg-slate-900 dark:bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40 transition-opacity cursor-pointer whitespace-nowrap shrink-0 min-h-[40px]"
+                  className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-40 transition-colors cursor-pointer whitespace-nowrap shrink-0 min-h-[40px]"
                 >
                   <Plus className="w-4 h-4" />
                   <span>افزودن {activeSubject.unit_type_label}</span>
@@ -382,7 +454,7 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                         className="px-6 py-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
                       >
                         <div className="flex items-center gap-3 flex-1">
-                          <span className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold flex items-center justify-center tabular-nums shrink-0">
+                          <span className="w-7 h-7 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-xs font-black flex items-center justify-center tabular-nums shrink-0">
                             {toPersianDigits(idx + 1)}
                           </span>
 
@@ -412,7 +484,7 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                               </button>
                             </div>
                           ) : (
-                            <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                               {unit.title}
                             </span>
                           )}
@@ -479,7 +551,7 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
           <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xl">
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200 dark:border-slate-800">
               <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                تعریف درس جدید
+                تعریف کتاب درسی جدید
               </h3>
               <button
                 type="button"

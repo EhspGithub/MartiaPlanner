@@ -17,6 +17,20 @@ import {
   FileCheck2,
   Award,
   X,
+  Trophy,
+  Flame,
+  Target,
+  Sparkles,
+  Calculator,
+  Atom,
+  Languages,
+  Globe2,
+  Compass,
+  Cpu,
+  Smartphone,
+  Tv,
+  Gamepad2,
+  Dumbbell,
 } from 'lucide-react';
 import type {
   ActivityCategory,
@@ -48,16 +62,115 @@ interface PlannerViewProps {
 }
 
 const QUALITY_LABELS: Record<string, string> = {
-  excellent: 'کیفیت عالی',
-  good: 'کیفیت خوب',
-  average: 'کیفیت متوسط',
+  excellent: 'تسلط عالی',
+  good: 'یادگیری خوب',
+  average: 'متوسط',
   weak: 'نیازمند مرور',
 };
 
+function getSubjectVisualTheme(subjectName: string | null, categoryTitle: string, isStudy: boolean) {
+  if (!isStudy) {
+    if (categoryTitle.includes('گوشی')) {
+      return {
+        icon: Smartphone,
+        iconBg: 'bg-amber-500 text-white shadow-sm shadow-amber-500/30',
+        tintBg: 'bg-amber-50/50 dark:bg-amber-950/20',
+        accentText: 'text-amber-600 dark:text-amber-400',
+      };
+    }
+    if (categoryTitle.includes('تلویزیون')) {
+      return {
+        icon: Tv,
+        iconBg: 'bg-sky-500 text-white shadow-sm shadow-sky-500/30',
+        tintBg: 'bg-sky-50/50 dark:bg-sky-950/20',
+        accentText: 'text-sky-600 dark:text-sky-400',
+      };
+    }
+    if (categoryTitle.includes('بازی')) {
+      return {
+        icon: Gamepad2,
+        iconBg: 'bg-purple-500 text-white shadow-sm shadow-purple-500/30',
+        tintBg: 'bg-purple-50/50 dark:bg-purple-950/20',
+        accentText: 'text-purple-600 dark:text-purple-400',
+      };
+    }
+    if (categoryTitle.includes('ورزش')) {
+      return {
+        icon: Dumbbell,
+        iconBg: 'bg-teal-500 text-white shadow-sm shadow-teal-500/30',
+        tintBg: 'bg-teal-50/50 dark:bg-teal-950/20',
+        accentText: 'text-teal-600 dark:text-teal-400',
+      };
+    }
+    return {
+      icon: Coffee,
+      iconBg: 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30',
+      tintBg: 'bg-emerald-50/50 dark:bg-emerald-950/20',
+      accentText: 'text-emerald-600 dark:text-emerald-400',
+    };
+  }
+
+  const name = subjectName || '';
+  if (name.includes('ریاضی')) {
+    return {
+      icon: Calculator,
+      iconBg: 'bg-blue-600 text-white shadow-sm shadow-blue-600/30',
+      tintBg: 'bg-blue-50/40 dark:bg-blue-950/20',
+      accentText: 'text-blue-600 dark:text-blue-400',
+    };
+  }
+  if (name.includes('علوم')) {
+    return {
+      icon: Atom,
+      iconBg: 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30',
+      tintBg: 'bg-emerald-50/40 dark:bg-emerald-950/20',
+      accentText: 'text-emerald-600 dark:text-emerald-400',
+    };
+  }
+  if (name.includes('انگلیسی') || name.includes('عربی')) {
+    return {
+      icon: Languages,
+      iconBg: 'bg-purple-600 text-white shadow-sm shadow-purple-600/30',
+      tintBg: 'bg-purple-50/40 dark:bg-purple-950/20',
+      accentText: 'text-purple-600 dark:text-purple-400',
+    };
+  }
+  if (name.includes('اجتماعی')) {
+    return {
+      icon: Globe2,
+      iconBg: 'bg-teal-600 text-white shadow-sm shadow-teal-600/30',
+      tintBg: 'bg-teal-50/40 dark:bg-teal-950/20',
+      accentText: 'text-teal-600 dark:text-teal-400',
+    };
+  }
+  if (name.includes('فناوری')) {
+    return {
+      icon: Cpu,
+      iconBg: 'bg-slate-700 text-white shadow-sm shadow-slate-700/30',
+      tintBg: 'bg-slate-100/60 dark:bg-slate-800/40',
+      accentText: 'text-slate-700 dark:text-slate-300',
+    };
+  }
+  if (name.includes('قرآن') || name.includes('آسمان')) {
+    return {
+      icon: Compass,
+      iconBg: 'bg-sky-600 text-white shadow-sm shadow-sky-600/30',
+      tintBg: 'bg-sky-50/40 dark:bg-sky-950/20',
+      accentText: 'text-sky-600 dark:text-sky-400',
+    };
+  }
+  return {
+    icon: BookOpen,
+    iconBg: 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30',
+    tintBg: 'bg-indigo-50/40 dark:bg-indigo-950/20',
+    accentText: 'text-indigo-600 dark:text-indigo-400',
+  };
+}
+
 function getPriorityColorText(code: string): string {
-  if (code.startsWith('A')) return 'text-rose-600 dark:text-rose-400 font-bold';
+  if (code.startsWith('A')) return 'text-rose-600 dark:text-rose-400 font-extrabold';
   if (code.startsWith('B')) return 'text-amber-600 dark:text-amber-400 font-bold';
-  return 'text-sky-600 dark:text-sky-400 font-bold';
+  return 'text-sky-600 dark:text-sky-400 font-semibold';
 }
 
 export const PlannerView: React.FC<PlannerViewProps> = ({
@@ -70,21 +183,16 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   const todayIso = getTodayISO();
   const tomorrowIso = getTomorrowISO();
 
-  // Top-level mode: 'today' | 'tomorrow' | 'custom_day' | 'weekly'
   const [activeTab, setActiveTab] = useState<'today' | 'tomorrow' | 'weekly'>('today');
   const [selectedDate, setSelectedDate] = useState<string>(todayIso);
   const [weekRefDate, setWeekRefDate] = useState<string>(todayIso);
-
-  // Sorting mode: 'priority' (A1..C3) or 'custom' (manual drag/up-down order)
   const [sortBy, setSortBy] = useState<'priority' | 'custom'>('priority');
 
-  // Plans state
   const [dailyPlans, setDailyPlans] = useState<DailyPlanItem[]>([]);
   const [weeklyPlans, setWeeklyPlans] = useState<DailyPlanItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Form State (Create or Edit Plan)
   const [showPlanForm, setShowPlanForm] = useState<boolean>(false);
   const [editingPlan, setEditingPlan] = useState<DailyPlanItem | null>(null);
 
@@ -99,13 +207,9 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [formSubmitting, setFormSubmitting] = useState<boolean>(false);
 
-  // Performance Modal State
   const [activePerformancePlan, setActivePerformancePlan] = useState<DailyPlanItem | null>(null);
-
-  // Delete Confirmation Modal State
   const [deletingPlan, setDeletingPlan] = useState<DailyPlanItem | null>(null);
 
-  // Sync selectedDate when switching between Today and Tomorrow tabs
   useEffect(() => {
     if (activeTab === 'today') {
       setSelectedDate(todayIso);
@@ -114,7 +218,6 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     }
   }, [activeTab, todayIso, tomorrowIso]);
 
-  // Update available units whenever formSubjectId changes
   const selectedSubjectObj = useMemo(
     () => subjects.find((s) => s.id === formSubjectId) || null,
     [subjects, formSubjectId]
@@ -127,7 +230,6 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     }
   }, [formSubjectId, selectedSubjectObj, editingPlan]);
 
-  // Fetch daily plans
   const loadDailyPlans = async (dateStr: string) => {
     try {
       setLoading(true);
@@ -141,7 +243,6 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     }
   };
 
-  // Fetch weekly plans
   const weekDays = useMemo(() => getPersianWeekDays(weekRefDate), [weekRefDate]);
 
   const loadWeeklyPlans = async () => {
@@ -334,46 +435,159 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     await api.reorderPlans(list.map((item) => item.id));
   };
 
-  // Summary metrics for the currently displayed day
+  // Gamified student progress calculations for the selected day
   const daySummary = useMemo(() => {
     let predTotal = 0;
     let actualTotal = 0;
     let completedCount = 0;
+    let partialCount = 0;
+    let totalExercises = 0;
     for (const p of dailyPlans) {
       predTotal += Number(p.initial_predicted_minutes || p.predicted_minutes || 0);
       if (p.performance) {
         actualTotal += Number(p.performance.actual_minutes || 0);
+        totalExercises += Number(p.performance.exercises_count || 0);
       }
       if (p.status === 'completed') completedCount++;
+      else if (p.status === 'partial') partialCount++;
     }
-    return { predTotal, actualTotal, completedCount, totalCount: dailyPlans.length };
+    const totalCount = dailyPlans.length;
+    const progressPercent =
+      totalCount > 0 ? Math.round(((completedCount + partialCount * 0.5) / totalCount) * 100) : 0;
+    const xpEarned = completedCount * 50 + partialCount * 25 + totalExercises * 2;
+    return {
+      predTotal,
+      actualTotal,
+      completedCount,
+      partialCount,
+      totalCount,
+      totalExercises,
+      progressPercent,
+      xpEarned,
+    };
   }, [dailyPlans]);
+
+  // SVG Ring calculation
+  const ringRadius = 34;
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  const ringStrokeDashoffset =
+    ringCircumference - (daySummary.progressPercent / 100) * ringCircumference;
 
   return (
     <div className="space-y-6">
-      {/* Top Header & Mode Switcher (برنامه امروز | برنامه فردا | نمای هفتگی) */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            برنامه‌ریزی و ثبت عملکرد واقعی
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            {activeTab === 'weekly'
-              ? `نمای هفتگی از ${weekDays[0].fullLabel} تا ${weekDays[6].fullLabel}`
-              : `نمایش و مدیریت برنامه روز: ${formatJalaliFull(selectedDate)}`}
-          </p>
+      {/* =====================================================================
+          ENERGETIC STUDENT MISSION HERO BANNER
+      ===================================================================== */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-indigo-900 via-indigo-800 to-violet-900 text-white p-6 sm:p-7 shadow-lg shadow-indigo-950/15">
+        {/* Subtle decorative geometric light circles */}
+        <div className="pointer-events-none absolute -top-24 -left-24 w-72 h-72 rounded-full bg-violet-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 right-1/3 w-64 h-64 rounded-full bg-emerald-400/15 blur-2xl" />
+
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          {/* Right Side: Greeting, Date & Motivational Status */}
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-2 text-indigo-200 text-xs font-semibold">
+              <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
+              <span>ایستگاه برنامه‌ریزی هوشمند دانش‌آموز</span>
+              <span aria-hidden="true">·</span>
+              <span>{formatJalaliFull(selectedDate)}</span>
+            </div>
+
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+              {activeTab === 'today' && selectedDate === todayIso
+                ? 'مأموریت‌های مطالعه امروزت رو با قدرت پیش ببر!'
+                : activeTab === 'tomorrow' && selectedDate === tomorrowIso
+                ? 'برنامه‌ریزی هوشمندانه برای موفقیت فردا'
+                : activeTab === 'weekly'
+                ? 'نمای کلی برنامه هفتگی (شنبه تا جمعه)'
+                : `برنامه و گزارش عملکرد ${formatJalaliFull(selectedDate)}`}
+            </h1>
+
+            {/* Quick Student Achievement Metrics */}
+            <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-indigo-100 tabular-nums">
+              <span className="flex items-center gap-1.5 font-semibold">
+                <Trophy className="w-4 h-4 text-amber-300" />
+                امتیاز تلاش این روز: {toPersianDigits(daySummary.xpEarned)} XP
+              </span>
+              <span aria-hidden="true" className="text-indigo-400">
+                ·
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Flame className="w-4 h-4 text-orange-300" />
+                {toPersianDigits(daySummary.completedCount)} از {toPersianDigits(daySummary.totalCount)} مأموریت تکمیل‌شده
+              </span>
+              <span aria-hidden="true" className="text-indigo-400">
+                ·
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Target className="w-4 h-4 text-emerald-300" />
+                {toPersianDigits(daySummary.totalExercises)} تست و تمرین حل‌شده
+              </span>
+            </div>
+          </div>
+
+          {/* Left Side: Progress Ring + Primary Add CTA */}
+          <div className="flex flex-wrap items-center gap-5 shrink-0">
+            <div className="flex items-center gap-3.5 bg-white/10 backdrop-blur-md rounded-2xl px-4 py-3 border border-white/15">
+              <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
+                <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                  <circle
+                    cx="40"
+                    cy="40"
+                    r={ringRadius}
+                    fill="transparent"
+                    stroke="rgba(255,255,255,0.18)"
+                    strokeWidth="7"
+                  />
+                  <circle
+                    cx="40"
+                    cy="40"
+                    r={ringRadius}
+                    fill="transparent"
+                    stroke="#34d399"
+                    strokeWidth="7"
+                    strokeLinecap="round"
+                    strokeDasharray={ringCircumference}
+                    strokeDashoffset={ringStrokeDashoffset}
+                    className="transition-all duration-500"
+                  />
+                </svg>
+                <span className="absolute text-sm font-extrabold text-white tabular-nums">
+                  {toPersianDigits(daySummary.progressPercent)}٪
+                </span>
+              </div>
+              <div className="space-y-1 text-xs tabular-nums">
+                <div className="font-bold text-white">پیشرفت برنامه روز</div>
+                <div className="text-indigo-200">
+                  هدف: {formatMinutesPersian(daySummary.predTotal)}
+                </div>
+                <div className="text-emerald-300 font-semibold">
+                  انجام‌شده: {formatMinutesPersian(daySummary.actualTotal)}
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => openCreateForm()}
+              className="flex items-center gap-2 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 px-5 py-3.5 text-xs font-extrabold shadow-lg shadow-amber-400/25 active:scale-95 transition-all cursor-pointer whitespace-nowrap shrink-0 min-h-[48px]"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>ثبت فعالیت جدید</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Segmented Tabs: برنامه امروز / برنامه فردا / برنامه هفتگی */}
-          <div className="flex items-center gap-1 p-1 bg-slate-200/70 dark:bg-slate-800 rounded-xl">
+        {/* Mode Switcher Tabs inside Hero Footer */}
+        <div className="relative z-10 mt-6 pt-5 border-t border-white/15 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-950/35 backdrop-blur-md rounded-2xl">
             <button
               type="button"
               onClick={() => setActiveTab('today')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer min-h-[40px] ${
+              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer min-h-[40px] ${
                 activeTab === 'today' && selectedDate === todayIso
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                  ? 'bg-white text-indigo-950 shadow-sm'
+                  : 'text-indigo-100 hover:text-white hover:bg-white/10'
               }`}
             >
               برنامه امروز ({formatJalaliCompact(todayIso)})
@@ -381,10 +595,10 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('tomorrow')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer min-h-[40px] ${
+              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer min-h-[40px] ${
                 activeTab === 'tomorrow' && selectedDate === tomorrowIso
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                  ? 'bg-white text-indigo-950 shadow-sm'
+                  : 'text-indigo-100 hover:text-white hover:bg-white/10'
               }`}
             >
               برنامه فردا ({formatJalaliCompact(tomorrowIso)})
@@ -392,24 +606,36 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('weekly')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer min-h-[40px] ${
+              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer min-h-[40px] ${
                 activeTab === 'weekly'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                  ? 'bg-white text-indigo-950 shadow-sm'
+                  : 'text-indigo-100 hover:text-white hover:bg-white/10'
               }`}
             >
-              نمای هفتگی
+              نمای هفتگی (۷ روزه)
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => openCreateForm()}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors cursor-pointer whitespace-nowrap shrink-0 min-h-[42px]"
-          >
-            <Plus className="w-4 h-4" />
-            <span>افزودن فعالیت جدید</span>
-          </button>
+          {activeTab !== 'weekly' && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedDate(addDaysISO(selectedDate, -1))}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-colors cursor-pointer min-h-[38px]"
+              >
+                <ChevronRight className="w-4 h-4" />
+                <span>روز قبل</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedDate(addDaysISO(selectedDate, 1))}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-colors cursor-pointer min-h-[38px]"
+              >
+                <span>روز بعد</span>
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -418,79 +644,50 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       ===================================================================== */}
       {activeTab !== 'weekly' && (
         <div className="space-y-5">
-          {/* Day Navigation & Sorting Toolbar */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedDate(addDaysISO(selectedDate, -1))}
-                className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center"
-                title="روز قبل"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-              <div className="px-3">
-                <span className="text-sm font-bold text-slate-900 dark:text-white block">
-                  {formatJalaliFull(selectedDate)}
-                </span>
-                <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-                  {selectedDate === todayIso
-                    ? 'امروز'
-                    : selectedDate === tomorrowIso
-                    ? 'فردا'
-                    : selectedDate === addDaysISO(todayIso, -1)
-                    ? 'دیروز'
-                    : 'تاریخ انتخابی'}
-                  {' · '}
-                  پیش‌بینی کل: {formatMinutesPersian(daySummary.predTotal)}
-                  {' · '}
-                  واقعی کل: {formatMinutesPersian(daySummary.actualTotal)}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedDate(addDaysISO(selectedDate, 1))}
-                className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center"
-                title="روز بعد"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
+          {/* Sorting & Filter Control Strip */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 px-5 py-3.5 shadow-xs">
+            <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+              <span className="font-bold text-slate-900 dark:text-white">
+                لیست کارت‌های فعالیت ({toPersianDigits(sortedDailyPlans.length)} مورد)
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>روی هر کارت کلیک کن تا عملکرد واقعی و تعداد تست‌هات رو ثبت کنی!</span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 self-start sm:self-auto">
               <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                 <ListOrdered className="w-3.5 h-3.5" />
-                مرتب‌سازی:
+                چینش کارت‌ها:
               </span>
-              <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
+              <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
                 <button
                   type="button"
                   onClick={() => setSortBy('priority')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
                     sortBy === 'priority'
-                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
                       : 'text-slate-600 dark:text-slate-400'
                   }`}
                 >
-                  بر اساس اولویت (A1 تا C3)
+                  بر اساس اولویت (A1 ← C3)
                 </button>
                 <button
                   type="button"
                   onClick={() => setSortBy('custom')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
                     sortBy === 'custom'
-                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
                       : 'text-slate-600 dark:text-slate-400'
                   }`}
                 >
-                  ترتیب دستی دانش‌آموز
+                  ترتیب دلخواه من
                 </button>
               </div>
             </div>
           </div>
 
           {error && (
-            <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-4 text-xs text-rose-700 dark:text-rose-300">
+            <div className="rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-4 text-xs text-rose-700 dark:text-rose-300">
               {error}
             </div>
           )}
@@ -500,30 +697,32 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
               {Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
-                  className="h-36 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 animate-pulse"
+                  className="h-44 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 animate-pulse"
                 />
               ))}
             </div>
           ) : sortedDailyPlans.length === 0 ? (
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-12 text-center">
-              <Calendar className="w-10 h-10 text-slate-400 mx-auto mb-3" />
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                هنوز فعالیتی برای {formatJalaliFull(selectedDate)} ثبت نشده است
+            <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-12 text-center space-y-3">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
+                <Calendar className="w-8 h-8" />
+              </div>
+              <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">
+                هنوز مأموریتی برای {formatJalaliFull(selectedDate)} ثبت نکردی!
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-                می‌توانید درس‌های تدریس‌شده امروز در مدرسه، تکالیف، امتحانات و فعالیت‌های غیردرسی (استراحت، گوشی و...) را به همراه زمان پیش‌بینی‌شده ثبت کنید.
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+                درس‌هایی که امروز در مدرسه تدریس شدن، تکالیف، امتحانات یا حتی زمان استراحت و بازی خودت رو با دکمه زیر اضافه کن.
               </p>
               <button
                 type="button"
                 onClick={() => openCreateForm()}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors cursor-pointer"
+                className="mt-2 inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-xs font-extrabold text-white hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>ثبت اولین فعالیت این روز</span>
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {sortedDailyPlans.map((plan, index) => {
                 const isStudy = Number(plan.is_study) === 1;
                 const predMins = plan.initial_predicted_minutes || plan.predicted_minutes;
@@ -531,40 +730,54 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                 const hasPerf = Boolean(plan.performance);
                 const diff = hasPerf && actualMins !== undefined ? actualMins - predMins : null;
 
+                const theme = getSubjectVisualTheme(
+                  plan.subject_name_snapshot,
+                  plan.category_title_snapshot,
+                  isStudy
+                );
+                const ThemeIcon = theme.icon;
+
+                const timeProgressRatio =
+                  hasPerf && actualMins !== undefined && predMins > 0
+                    ? Math.min(100, Math.round((actualMins / predMins) * 100))
+                    : 0;
+
                 return (
                   <div
                     key={plan.id}
                     onClick={() => setActivePerformancePlan(plan)}
-                    className="group rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 hover:border-indigo-300 dark:hover:border-indigo-800 transition-all cursor-pointer flex flex-col justify-between"
+                    className="group rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 hover:border-indigo-400 dark:hover:border-indigo-600 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between shadow-xs"
                   >
                     <div>
-                      {/* Card Header: Title + Unboxed Metadata Line (Section 7.1: فارسی | درس دوم | A1 | 90 دقیقه) */}
+                      {/* Card Top Row: Colorful Subject Icon + Title + Action Controls */}
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3">
+                        <div className="flex items-start gap-3.5">
                           <div
-                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                              isStudy
-                                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
-                                : 'bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400'
-                            }`}
+                            className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${theme.iconBg}`}
                           >
-                            {isStudy ? (
-                              <BookOpen className="w-5 h-5" />
-                            ) : (
-                              <Coffee className="w-5 h-5" />
-                            )}
+                            <ThemeIcon className="w-6 h-6" />
                           </div>
                           <div>
-                            <h3 className="text-base font-bold text-slate-900 dark:text-white leading-snug">
-                              {isStudy
-                                ? `${plan.subject_name_snapshot}`
-                                : plan.category_title_snapshot}
-                            </h3>
-                            {/* Clean unboxed metadata with typographic separators */}
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-lg font-extrabold text-slate-900 dark:text-white leading-snug">
+                                {isStudy
+                                  ? `${plan.subject_name_snapshot}`
+                                  : plan.category_title_snapshot}
+                              </h3>
+                              <span
+                                className={`text-xs tabular-nums ${getPriorityColorText(
+                                  plan.priority_code
+                                )}`}
+                              >
+                                · {plan.priority_code}
+                              </span>
+                            </div>
+
+                            {/* Clean Unboxed Metadata Line (Section 7.1: فارسی | درس دوم | تکلیف | 90 دقیقه) */}
                             <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
                               {isStudy && plan.unit_title_snapshot && (
                                 <>
-                                  <span className="text-slate-700 dark:text-slate-300 font-medium">
+                                  <span className={`font-bold ${theme.accentText}`}>
                                     {plan.unit_title_snapshot}
                                   </span>
                                   <span aria-hidden="true">|</span>
@@ -572,41 +785,39 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                               )}
                               {isStudy && plan.study_type_title_snapshot && (
                                 <>
-                                  <span>{plan.study_type_title_snapshot}</span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                    {plan.study_type_title_snapshot}
+                                  </span>
                                   <span aria-hidden="true">|</span>
                                 </>
                               )}
-                              <span className={getPriorityColorText(plan.priority_code)}>
-                                اولویت {plan.priority_code}
-                              </span>
-                              <span aria-hidden="true">|</span>
                               <span>پیش‌بینی: {formatMinutesPersian(predMins)}</span>
                             </div>
                           </div>
                         </div>
 
-                        {/* Quick Edit / Delete / Reorder Controls (Stop propagation so card click opens Performance Modal) */}
+                        {/* Quick Reorder / Edit / Delete Controls */}
                         <div
-                          className="flex items-center gap-1 shrink-0"
+                          className="flex items-center gap-0.5 shrink-0"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <button
                             type="button"
                             onClick={() => handleMoveOrder(index, 'up')}
                             disabled={index === 0}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-30 cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-25 cursor-pointer"
                             title="جابه‌جایی به بالا"
                           >
-                            <ArrowUp className="w-3.5 h-3.5" />
+                            <ArrowUp className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleMoveOrder(index, 'down')}
                             disabled={index === sortedDailyPlans.length - 1}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-30 cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-25 cursor-pointer"
                             title="جابه‌جایی به پایین"
                           >
-                            <ArrowDown className="w-3.5 h-3.5" />
+                            <ArrowDown className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
@@ -628,88 +839,115 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                       </div>
 
                       {plan.description && (
-                        <p className="mt-3 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                        <div
+                          className={`mt-3.5 rounded-2xl px-3.5 py-2.5 text-xs text-slate-700 dark:text-slate-300 leading-relaxed ${theme.tintBg}`}
+                        >
                           {plan.description}
-                        </p>
+                        </div>
                       )}
                     </div>
 
-                    {/* Performance Status Footer on Card (Section 7.3) */}
-                    <div className="mt-4 pt-3.5 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
-                      {!hasPerf ? (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                          <Clock className="w-3.5 h-3.5 text-slate-400" />
-                          <span>انجام‌نشده (در انتظار ثبت عملکرد)</span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums">
-                          {plan.status === 'completed' ? (
-                            <span className="flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              تکمیل‌شده
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 font-semibold text-amber-700 dark:text-amber-400">
-                              <AlertCircle className="w-3.5 h-3.5" />
-                              ناقص (نیمه‌تمام)
-                            </span>
-                          )}
-                          <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">
-                            ·
-                          </span>
-                          <span className="text-slate-700 dark:text-slate-200 font-medium">
-                            زمان واقعی: {formatMinutesPersian(actualMins || 0)}
-                          </span>
-                          {diff !== null && (
-                            <>
-                              <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">
-                                ·
-                              </span>
-                              <span
-                                className={
-                                  diff === 0
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : diff > 0
-                                    ? 'text-amber-600 dark:text-amber-400'
-                                    : 'text-indigo-600 dark:text-indigo-400'
-                                }
-                              >
-                                {diff === 0
-                                  ? 'منطبق با پیش‌بینی'
-                                  : diff > 0
-                                  ? `${toPersianDigits(diff)}+ دقیقه`
-                                  : `${toPersianDigits(Math.abs(diff))}- دقیقه`}
-                              </span>
-                            </>
-                          )}
-                          {isStudy && plan.performance?.exercises_count !== null && (
-                            <>
-                              <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">
-                                ·
-                              </span>
-                              <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1">
-                                <FileCheck2 className="w-3 h-3" />
-                                {toPersianDigits(plan.performance?.exercises_count)} تمرین/تست
-                              </span>
-                            </>
-                          )}
-                          {isStudy && plan.performance?.learning_quality && (
-                            <>
-                              <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">
-                                ·
-                              </span>
-                              <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1">
-                                <Award className="w-3 h-3" />
-                                {QUALITY_LABELS[plan.performance.learning_quality]}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      )}
+                    {/* Visual Dual Time Comparison Bar & Status Footer */}
+                    <div className="mt-4 pt-3.5 border-t border-slate-100 dark:border-slate-800/80 space-y-2.5">
+                      {/* Visual Progress Bar comparing Actual vs Predicted */}
+                      <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            !hasPerf
+                              ? 'w-0'
+                              : plan.status === 'completed'
+                              ? 'bg-emerald-500'
+                              : 'bg-amber-500'
+                          }`}
+                          style={{ width: `${hasPerf ? Math.max(15, timeProgressRatio) : 0}%` }}
+                        />
+                      </div>
 
-                      <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 group-hover:underline whitespace-nowrap">
-                        {hasPerf ? 'ویرایش عملکرد ←' : 'ثبت عملکرد واقعی ←'}
-                      </span>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        {!hasPerf ? (
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                            <Clock className="w-4 h-4 text-amber-500" />
+                            <span>آماده انجام (هنوز عملکردی ثبت نشده)</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums">
+                            {plan.status === 'completed' ? (
+                              <span className="flex items-center gap-1 font-extrabold text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 className="w-4 h-4" />
+                                تکمیل شد (+۵۰ XP)
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 font-extrabold text-amber-600 dark:text-amber-400">
+                                <AlertCircle className="w-4 h-4" />
+                                ناقص / نیمه‌تمام (+۲۵ XP)
+                              </span>
+                            )}
+                            <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">
+                              ·
+                            </span>
+                            <span className="text-slate-800 dark:text-slate-200 font-bold">
+                              واقعی: {formatMinutesPersian(actualMins || 0)}
+                            </span>
+                            {diff !== null && (
+                              <>
+                                <span
+                                  aria-hidden="true"
+                                  className="text-slate-300 dark:text-slate-700"
+                                >
+                                  ·
+                                </span>
+                                <span
+                                  className={
+                                    diff === 0
+                                      ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
+                                      : diff > 0
+                                      ? 'text-amber-600 dark:text-amber-400 font-semibold'
+                                      : 'text-indigo-600 dark:text-indigo-400 font-semibold'
+                                  }
+                                >
+                                  {diff === 0
+                                    ? 'دقیقاً طبق هدف'
+                                    : diff > 0
+                                    ? `${toPersianDigits(diff)}+ دقیقه بیشتر`
+                                    : `${toPersianDigits(Math.abs(diff))}- دقیقه سریع‌تر`}
+                                </span>
+                              </>
+                            )}
+                            {isStudy && plan.performance?.exercises_count !== null && (
+                              <>
+                                <span
+                                  aria-hidden="true"
+                                  className="text-slate-300 dark:text-slate-700"
+                                >
+                                  ·
+                                </span>
+                                <span className="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1">
+                                  <FileCheck2 className="w-3.5 h-3.5 text-blue-500" />
+                                  {toPersianDigits(plan.performance?.exercises_count)} تست/تمرین
+                                </span>
+                              </>
+                            )}
+                            {isStudy && plan.performance?.learning_quality && (
+                              <>
+                                <span
+                                  aria-hidden="true"
+                                  className="text-slate-300 dark:text-slate-700"
+                                >
+                                  ·
+                                </span>
+                                <span className="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1">
+                                  <Award className="w-3.5 h-3.5 text-purple-500" />
+                                  {QUALITY_LABELS[plan.performance.learning_quality]}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        )}
+
+                        <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-[-2px] transition-transform whitespace-nowrap">
+                          {hasPerf ? 'ویرایش گزارش ←' : 'ثبت عملکرد ←'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -720,17 +958,16 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       )}
 
       {/* =====================================================================
-          WEEKLY VIEW (نمای هفتگی ۷ روزه - شنبه تا جمعه، سازگار با موبایل و لپ‌تاپ)
+          WEEKLY VIEW (نمای هفتگی ۷ روزه - شنبه تا جمعه)
       ===================================================================== */}
       {activeTab === 'weekly' && (
         <div className="space-y-5">
-          {/* Week Navigation Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setWeekRefDate(addDaysISO(weekRefDate, -7))}
-                className="flex items-center gap-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer min-h-[40px]"
+                className="flex items-center gap-1 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer min-h-[40px]"
               >
                 <ChevronRight className="w-4 h-4" />
                 <span>هفته قبل</span>
@@ -738,26 +975,25 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
               <button
                 type="button"
                 onClick={() => setWeekRefDate(todayIso)}
-                className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer min-h-[40px]"
+                className="px-4 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-xs font-extrabold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 cursor-pointer min-h-[40px]"
               >
-                بازگشت به هفته جاری
+                هفته جاری
               </button>
               <button
                 type="button"
                 onClick={() => setWeekRefDate(addDaysISO(weekRefDate, 7))}
-                className="flex items-center gap-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer min-h-[40px]"
+                className="flex items-center gap-1 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer min-h-[40px]"
               >
                 <span>هفته بعد</span>
                 <ChevronLeft className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-              کل فعالیت‌های ثبت‌شده این هفته: {toPersianDigits(weeklyPlans.length)} مورد
+            <div className="text-xs font-semibold text-slate-600 dark:text-slate-400 tabular-nums">
+              مجموع فعالیت‌های این هفته: {toPersianDigits(weeklyPlans.length)} فعالیت
             </div>
           </div>
 
-          {/* 7-Day Vertical/Grid Cards (Mobile friendly vertical cards, Desktop 2-col or 3-col layout) */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {weekDays.map((day) => {
               const dayPlans = weeklyPlans
@@ -776,22 +1012,21 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
               return (
                 <div
                   key={day.isoDate}
-                  className={`rounded-2xl border bg-white dark:bg-slate-900 p-4 flex flex-col justify-between ${
+                  className={`rounded-3xl border bg-white dark:bg-slate-900 p-5 flex flex-col justify-between transition-all ${
                     day.isToday
-                      ? 'border-indigo-500 dark:border-indigo-500'
+                      ? 'border-indigo-500 dark:border-indigo-500 shadow-md shadow-indigo-500/10'
                       : 'border-slate-200 dark:border-slate-800'
                   }`}
                 >
                   <div>
-                    {/* Day Header */}
                     <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-800">
                       <div>
                         <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                          <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
                             {day.weekdayName}
                           </h3>
                           {day.isToday && (
-                            <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
+                            <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
                               · امروز
                             </span>
                           )}
@@ -804,17 +1039,16 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                       <button
                         type="button"
                         onClick={() => openCreateForm(day.isoDate)}
-                        className="p-2 rounded-lg text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
+                        className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
                         title={`افزودن فعالیت برای ${day.fullLabel}`}
                       >
                         <Plus className="w-4 h-4" />
                       </button>
                     </div>
 
-                    {/* Day Activities List */}
                     {dayPlans.length === 0 ? (
-                      <p className="text-xs text-slate-400 dark:text-slate-500 py-6 text-center">
-                        فعالیتی ثبت نشده است
+                      <p className="text-xs text-slate-400 dark:text-slate-500 py-8 text-center">
+                        برنامه‌ای ثبت نشده
                       </p>
                     ) : (
                       <div className="space-y-2.5">
@@ -822,18 +1056,32 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                           const isStudy = Number(plan.is_study) === 1;
                           const pred = plan.initial_predicted_minutes || plan.predicted_minutes;
                           const act = plan.performance?.actual_minutes;
+                          const theme = getSubjectVisualTheme(
+                            plan.subject_name_snapshot,
+                            plan.category_title_snapshot,
+                            isStudy
+                          );
+                          const MiniIcon = theme.icon;
+
                           return (
                             <div
                               key={plan.id}
                               onClick={() => setActivePerformancePlan(plan)}
-                              className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              className={`p-3 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-indigo-300 transition-colors cursor-pointer ${theme.tintBg}`}
                             >
                               <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                                  {isStudy
-                                    ? plan.subject_name_snapshot
-                                    : plan.category_title_snapshot}
-                                </span>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div
+                                    className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${theme.iconBg}`}
+                                  >
+                                    <MiniIcon className="w-3.5 h-3.5" />
+                                  </div>
+                                  <span className="text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                                    {isStudy
+                                      ? plan.subject_name_snapshot
+                                      : plan.category_title_snapshot}
+                                  </span>
+                                </div>
                                 <span
                                   className={`text-[11px] tabular-nums shrink-0 ${getPriorityColorText(
                                     plan.priority_code
@@ -843,16 +1091,16 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                                 </span>
                               </div>
                               {isStudy && plan.unit_title_snapshot && (
-                                <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                <div className="text-[11px] text-slate-600 dark:text-slate-300 truncate mt-1 pr-8">
                                   {plan.unit_title_snapshot}
                                 </div>
                               )}
-                              <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-2 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/50 tabular-nums">
-                                <span>پیش‌بینی: {toPersianDigits(pred)} د</span>
-                                <span>
+                              <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-2 pt-1.5 border-t border-slate-200/50 dark:border-slate-700/50 tabular-nums">
+                                <span>هدف: {toPersianDigits(pred)} د</span>
+                                <span className="font-semibold">
                                   {act !== undefined
                                     ? `واقعی: ${toPersianDigits(act)} د (${
-                                        plan.status === 'completed' ? 'کامل' : 'ناقص'
+                                        plan.status === 'completed' ? '✓' : 'ناقص'
                                       })`
                                     : 'در انتظار'}
                                 </span>
@@ -864,10 +1112,11 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                     )}
                   </div>
 
-                  {/* Day Footer Totals */}
-                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-400 tabular-nums">
                     <span>پیش‌بینی: {formatMinutesPersian(totalPred)}</span>
-                    <span>واقعی: {formatMinutesPersian(totalActual)}</span>
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      واقعی: {formatMinutesPersian(totalActual)}
+                    </span>
                   </div>
                 </div>
               );
@@ -877,17 +1126,17 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       )}
 
       {/* =====================================================================
-          SMART DYNAMIC PLAN FORM MODAL (Section 5.1 Field Visibility Logic)
+          SMART DYNAMIC PLAN FORM MODAL
       ===================================================================== */}
       {showPlanForm && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/55 backdrop-blur-xs p-0 sm:p-4">
-          <div className="w-full max-w-lg rounded-t-3xl sm:rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
+          <div className="w-full max-w-lg rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl max-h-[92vh] overflow-y-auto">
             <div className="w-10 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mt-3 sm:hidden" />
 
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
               <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                  {editingPlan ? 'ویرایش فعالیت برنامه‌ریزی‌شده' : 'ثبت فعالیت جدید در برنامه'}
+                <h2 className="text-base font-extrabold text-slate-900 dark:text-white">
+                  {editingPlan ? 'ویرایش مأموریت برنامه‌ریزی‌شده' : 'افزودن مأموریت جدید به برنامه'}
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   تاریخ: {formatJalaliFull(editingPlan ? editingPlan.plan_date : selectedDate)}
@@ -896,7 +1145,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
               <button
                 type="button"
                 onClick={() => setShowPlanForm(false)}
-                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -909,9 +1158,8 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                 </div>
               )}
 
-              {/* 1. عنوان فعالیت (درس، استراحت، استفاده از گوشی، تماشای تلویزیون، بازی و...) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   ۱. عنوان فعالیت
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -922,9 +1170,9 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                         key={cat.id}
                         type="button"
                         onClick={() => setFormCategoryId(cat.id)}
-                        className={`py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all cursor-pointer min-h-[42px] ${
+                        className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer min-h-[42px] ${
                           isSelected
-                            ? 'border-indigo-600 bg-indigo-50/90 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300'
+                            ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm shadow-indigo-600/25'
                             : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                         }`}
                       >
@@ -935,18 +1183,16 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                 </div>
               </div>
 
-              {/* DYNAMIC FIELDS: ONLY SHOWN WHEN ACTIVITY IS "درس" (is_study === 1) */}
               {isFormStudyActivity && (
-                <div className="space-y-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 p-4">
-                  {/* 2. نام درس */}
+                <div className="space-y-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/25 border border-indigo-100 dark:border-indigo-900/50 p-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                       ۲. نام درس
                     </label>
                     <select
                       value={formSubjectId}
                       onChange={(e) => setFormSubjectId(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2.5 text-sm font-semibold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
                     >
                       {subjects.map((subj) => (
                         <option key={subj.id} value={subj.id}>
@@ -956,9 +1202,8 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                     </select>
                   </div>
 
-                  {/* 3. فصل / درس (Single unified field dynamically populated from Subject's units) */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                       ۳. فصل / درس ({selectedSubjectObj?.unit_type_label || 'بخش'} آموزشی کتاب{' '}
                       {selectedSubjectObj?.name || ''})
                     </label>
@@ -966,7 +1211,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                       <select
                         value={formUnitId}
                         onChange={(e) => setFormUnitId(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2.5 text-sm font-semibold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
                       >
                         {selectedSubjectObj.units.map((u) => (
                           <option key={u.id} value={u.id}>
@@ -981,9 +1226,8 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                     )}
                   </div>
 
-                  {/* 4. نوع فعالیت درسی (تکلیف، امتحان، بدون فعالیت، پس‌خوانی) */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                       ۴. نوع فعالیت درسی
                     </label>
                     <div className="grid grid-cols-2 gap-2">
@@ -996,13 +1240,19 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                             onClick={() => setFormStudyTypeId(st.id)}
                             className={`text-right p-2.5 rounded-xl border transition-all cursor-pointer ${
                               isSelected
-                                ? 'border-indigo-600 bg-indigo-50/90 dark:bg-indigo-950/50 text-indigo-800 dark:text-indigo-200'
+                                ? 'border-indigo-600 bg-indigo-600 text-white shadow-xs'
                                 : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300'
                             }`}
                           >
                             <div className="text-xs font-bold">{st.title}</div>
                             {st.description && (
-                              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
+                              <div
+                                className={`text-[10px] mt-0.5 line-clamp-1 ${
+                                  isSelected
+                                    ? 'text-indigo-100'
+                                    : 'text-slate-500 dark:text-slate-400'
+                                }`}
+                              >
                                 {st.description}
                               </div>
                             )}
@@ -1014,9 +1264,8 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                 </div>
               )}
 
-              {/* 5. اولویت (A1 تا C3) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   {isFormStudyActivity ? '۵. اولویت انجام فعالیت' : '۲. اولویت انجام فعالیت'} (A1 بالاترین ← C3 پایین‌ترین)
                 </label>
                 <div className="grid grid-cols-3 sm:grid-cols-9 gap-1.5">
@@ -1028,9 +1277,9 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                         type="button"
                         onClick={() => setFormPriorityCode(p.code)}
                         title={p.label}
-                        className={`py-2 rounded-xl border text-xs font-bold tabular-nums transition-all cursor-pointer min-h-[40px] ${
+                        className={`py-2 rounded-xl border text-xs font-extrabold tabular-nums transition-all cursor-pointer min-h-[40px] ${
                           isSelected
-                            ? 'border-slate-900 dark:border-white bg-slate-900 dark:bg-white text-white dark:text-slate-900'
+                            ? 'border-indigo-600 bg-indigo-600 text-white shadow-xs'
                             : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                         }`}
                       >
@@ -1041,16 +1290,15 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                 </div>
               </div>
 
-              {/* 6. پیش‌بینی زمان انجام فعالیت (دقیقه) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   {isFormStudyActivity
                     ? '۶. زمان پیش‌بینی‌شده (دقیقه)'
                     : '۳. زمان پیش‌بینی‌شده (دقیقه)'}
                 </label>
                 {editingPlan && editingPlan.performance ? (
                   <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300">
-                    برای این فعالیت قبلاً عملکرد واقعی ثبت شده است؛ بنابراین طبق قوانین تحلیلی سیستم، زمان پیش‌بینی‌شده اولیه ({formatMinutesPersian(editingPlan.initial_predicted_minutes)}) جهت حفظ صحت مقایسه‌ها قفل شده است.
+                    برای این فعالیت قبلاً عملکرد واقعی ثبت شده است؛ بنابراین زمان پیش‌بینی‌شده اولیه ({formatMinutesPersian(editingPlan.initial_predicted_minutes)}) جهت حفظ صحت مقایسه‌ها قفل شده است.
                   </div>
                 ) : (
                   <>
@@ -1061,7 +1309,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                       required
                       value={formPredictedMinutes}
                       onChange={(e) => setFormPredictedMinutes(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
                       placeholder="مثلاً 90"
                     />
                     <div className="flex items-center gap-1.5 mt-2 flex-wrap">
@@ -1070,7 +1318,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                           key={m}
                           type="button"
                           onClick={() => setFormPredictedMinutes(String(m))}
-                          className="px-2.5 py-1 text-[11px] rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:text-indigo-600 transition-colors tabular-nums cursor-pointer"
+                          className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:text-indigo-600 transition-colors tabular-nums cursor-pointer"
                         >
                           {toPersianDigits(m)} دقیقه
                         </button>
@@ -1080,9 +1328,8 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                 )}
               </div>
 
-              {/* 7. توضیحات (اختیاری) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   {isFormStudyActivity ? '۷. توضیحات تکمیلی (اختیاری)' : '۴. توضیحات تکمیلی (اختیاری)'}
                 </label>
                 <textarea
@@ -1102,14 +1349,14 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowPlanForm(false)}
-                  className="rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[44px]"
+                  className="rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[44px]"
                 >
                   انصراف
                 </button>
                 <button
                   type="submit"
                   disabled={formSubmitting}
-                  className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors cursor-pointer min-h-[44px]"
+                  className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition-all cursor-pointer min-h-[44px]"
                 >
                   {formSubmitting
                     ? 'در حال ذخیره...'
@@ -1123,7 +1370,6 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
         </div>
       )}
 
-      {/* Performance Logging Modal */}
       <PerformanceModal
         plan={activePerformancePlan}
         onClose={() => setActivePerformancePlan(null)}
@@ -1131,11 +1377,10 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
         onResetPerformance={handleResetPerformance}
       />
 
-      {/* Delete Confirmation Modal (Section 12 requirement: برای حذف اطلاعات مهم، تأییدیه نمایش داده شود) */}
       {deletingPlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-xs p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xl">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xl">
+            <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
               تأیید حذف فعالیت از برنامه
             </h3>
             <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 leading-relaxed">
@@ -1151,14 +1396,14 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
               <button
                 type="button"
                 onClick={() => setDeletingPlan(null)}
-                className="rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer min-h-[40px]"
+                className="rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer min-h-[40px]"
               >
                 انصراف
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDelete}
-                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 cursor-pointer min-h-[40px]"
+                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 cursor-pointer min-h-[40px]"
               >
                 بله، حذف شود
               </button>

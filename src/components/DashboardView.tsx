@@ -12,6 +12,10 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Plus,
+  Trophy,
+  Flame,
+  Sparkles,
+  Target,
 } from 'lucide-react';
 import type { DashboardMetrics } from '../types.ts';
 import { api } from '../services/api.ts';
@@ -64,54 +68,96 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
       ? 'این هفته (شنبه تا جمعه)'
       : 'این ماه شمسی';
 
-  return (
-    <div className="space-y-8">
-      {/* Header & Timeframe Filter Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            داشبورد تحلیل عملکرد و مطالعه
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            بررسی مقایسه‌ای برنامه پیش‌بینی‌شده و عملکرد واقعی در بازه: {rangeTitle}
-          </p>
-        </div>
+  const totalXp = metrics
+    ? metrics.completedActivitiesCount * 50 +
+      metrics.partialActivitiesCount * 25 +
+      metrics.totalExercisesSolved * 2
+    : 0;
 
-        {/* Interactive Segmented Control */}
-        <div className="flex items-center gap-1 p-1 bg-slate-200/70 dark:bg-slate-800 rounded-xl self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setRange('today')}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer min-h-[40px] ${
-              range === 'today'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            امروز
-          </button>
-          <button
-            type="button"
-            onClick={() => setRange('week')}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer min-h-[40px] ${
-              range === 'week'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            این هفته
-          </button>
-          <button
-            type="button"
-            onClick={() => setRange('month')}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer min-h-[40px] ${
-              range === 'month'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            این ماه
-          </button>
+  const studentRankTitle =
+    !metrics || metrics.adherencePercentage === 0
+      ? 'آماده شروع مأموریت 🚀'
+      : metrics.adherencePercentage >= 85
+      ? 'قهرمان برنامه‌ریزی پایه هشتم 🏆'
+      : metrics.adherencePercentage >= 60
+      ? 'پیشگام پرانرژی و باانگیزه ⚡'
+      : 'در مسیر پیشرفت و تلاش مستمر 🌱';
+
+  return (
+    <div className="space-y-7">
+      {/* Vibrant Student Achievement & Timeframe Banner */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-indigo-600 via-violet-600 to-purple-700 text-white p-6 sm:p-7 shadow-lg shadow-indigo-500/15">
+        <div className="pointer-events-none absolute -top-20 -left-20 h-60 w-60 rounded-full bg-white/10 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-16 right-1/3 h-48 w-48 rounded-full bg-amber-400/15 blur-2xl" />
+
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 text-xs font-bold text-amber-300">
+              <Sparkles className="w-4 h-4" />
+              <span>کارنامه هوشمند و تحلیل پیشرفت تحصیلی · {rangeTitle}</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
+              {studentRankTitle}
+            </h1>
+            <p className="text-xs sm:text-sm text-indigo-100/90 max-w-2xl leading-relaxed">
+              مقایسه دقیق برنامه پیش‌بینی‌شده با ساعت مطالعه واقعی، تعداد تست‌ها و کیفیت یادگیری در ۱۰ شاخص استاندارد
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* XP & Trophy Summary */}
+            {metrics && (
+              <div className="flex items-center gap-3 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 px-4 py-2.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-400/25 flex items-center justify-center text-amber-300">
+                  <Trophy className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-[11px] text-indigo-100">امتیاز کسب‌شده (XP)</div>
+                  <div className="text-base font-black text-amber-300 tabular-nums flex items-center gap-1">
+                    <Flame className="w-4 h-4 text-amber-300" />
+                    <span>{toPersianDigits(totalXp)} امتیاز</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Interactive Segmented Control */}
+            <div className="flex items-center gap-1 p-1.5 bg-slate-950/30 backdrop-blur-md border border-white/15 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => setRange('today')}
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer min-h-[38px] ${
+                  range === 'today'
+                    ? 'bg-white text-indigo-950 shadow-sm'
+                    : 'text-indigo-100 hover:text-white'
+                }`}
+              >
+                امروز
+              </button>
+              <button
+                type="button"
+                onClick={() => setRange('week')}
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer min-h-[38px] ${
+                  range === 'week'
+                    ? 'bg-white text-indigo-950 shadow-sm'
+                    : 'text-indigo-100 hover:text-white'
+                }`}
+              >
+                این هفته
+              </button>
+              <button
+                type="button"
+                onClick={() => setRange('month')}
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer min-h-[38px] ${
+                  range === 'month'
+                    ? 'bg-white text-indigo-950 shadow-sm'
+                    : 'text-indigo-100 hover:text-white'
+                }`}
+              >
+                این ماه
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -120,7 +166,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
           {Array.from({ length: 10 }).map((_, idx) => (
             <div
               key={idx}
-              className="h-28 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 animate-pulse"
+              className="h-32 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 animate-pulse"
             >
               <div className="h-3 w-24 bg-slate-200 dark:bg-slate-800 rounded mb-4" />
               <div className="h-6 w-16 bg-slate-200 dark:bg-slate-800 rounded" />
@@ -140,12 +186,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
           {/* 10 Mandatory Core Indicators (Section 10 of Mega Prompt) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {/* 1. مجموع زمان پیش‌بینی‌شده مطالعه */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
-                <span>۱. زمان پیش‌بینی‌شده مطالعه</span>
-                <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <div className="rounded-2xl border border-indigo-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  ۱. زمان پیش‌بینی مطالعه
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                  <Clock className="w-4 h-4" />
+                </div>
               </div>
-              <div className="mt-3 text-xl font-bold text-slate-900 dark:text-white tabular-nums">
+              <div className="mt-3 text-xl font-black text-slate-900 dark:text-white tabular-nums">
                 {formatMinutesPersian(metrics.totalPredictedStudyMinutes)}
               </div>
               <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
@@ -154,12 +204,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
             </div>
 
             {/* 2. مجموع زمان واقعی مطالعه */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
-                <span>۲. زمان واقعی مطالعه</span>
-                <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <div className="rounded-2xl border border-emerald-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  ۲. زمان واقعی مطالعه
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <BookOpen className="w-4 h-4" />
+                </div>
               </div>
-              <div className="mt-3 text-xl font-bold text-slate-900 dark:text-white tabular-nums">
+              <div className="mt-3 text-xl font-black text-emerald-700 dark:text-emerald-400 tabular-nums">
                 {formatMinutesPersian(metrics.totalActualStudyMinutes)}
               </div>
               <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
@@ -168,16 +222,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
             </div>
 
             {/* 3. اختلاف زمان پیش‌بینی‌شده و واقعی */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
-                <span>۳. اختلاف زمان مطالعه</span>
-                {metrics.studyTimeVarianceMinutes >= 0 ? (
-                  <ArrowUpRight className="w-4 h-4 text-emerald-600 shrink-0" />
-                ) : (
-                  <ArrowDownRight className="w-4 h-4 text-amber-600 shrink-0" />
-                )}
+            <div className="rounded-2xl border border-amber-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  ۳. اختلاف زمان مطالعه
+                </span>
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                    metrics.studyTimeVarianceMinutes >= 0
+                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600'
+                      : 'bg-amber-50 dark:bg-amber-950/60 text-amber-600'
+                  }`}
+                >
+                  {metrics.studyTimeVarianceMinutes >= 0 ? (
+                    <ArrowUpRight className="w-4 h-4" />
+                  ) : (
+                    <ArrowDownRight className="w-4 h-4" />
+                  )}
+                </div>
               </div>
-              <div className="mt-3 text-xl font-bold text-slate-900 dark:text-white tabular-nums">
+              <div className="mt-3 text-xl font-black text-slate-900 dark:text-white tabular-nums">
                 {metrics.studyTimeVarianceMinutes === 0
                   ? '۰ دقیقه (منطبق)'
                   : metrics.studyTimeVarianceMinutes > 0
@@ -190,12 +254,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
             </div>
 
             {/* 4. مجموع تعداد تمرین‌ها و تست‌های حل‌شده */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
-                <span>۴. تمرین و تست حل‌شده</span>
-                <FileCheck2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <div className="rounded-2xl border border-blue-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  ۴. تمرین و تست حل‌شده
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                  <FileCheck2 className="w-4 h-4" />
+                </div>
               </div>
-              <div className="mt-3 text-xl font-bold text-slate-900 dark:text-white tabular-nums">
+              <div className="mt-3 text-xl font-black text-blue-700 dark:text-blue-400 tabular-nums">
                 {toPersianDigits(metrics.totalExercisesSolved)} تمرین/تست
               </div>
               <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
@@ -204,12 +272,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
             </div>
 
             {/* 5. میانگین کیفیت یادگیری */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
-                <span>۵. میانگین کیفیت یادگیری</span>
-                <Award className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+            <div className="rounded-2xl border border-purple-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  ۵. میانگین کیفیت یادگیری
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                  <Award className="w-4 h-4" />
+                </div>
               </div>
-              <div className="mt-3 text-xl font-bold text-slate-900 dark:text-white tabular-nums">
+              <div className="mt-3 text-xl font-black text-purple-700 dark:text-purple-400 tabular-nums">
                 {metrics.averageLearningQualityLabel}
               </div>
               <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 tabular-nums">
@@ -220,12 +292,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
             </div>
 
             {/* 6. تعداد فعالیت‌های برنامه‌ریزی‌شده */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
-                <span>۶. کل فعالیت‌های برنامه‌ریزی</span>
-                <Layers className="w-4 h-4 text-slate-600 dark:text-slate-300 shrink-0" />
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  ۶. کل فعالیت‌های برنامه
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0">
+                  <Layers className="w-4 h-4" />
+                </div>
               </div>
-              <div className="mt-3 text-xl font-bold text-slate-900 dark:text-white tabular-nums">
+              <div className="mt-3 text-xl font-black text-slate-900 dark:text-white tabular-nums">
                 {toPersianDigits(metrics.totalPlannedActivities)} فعالیت
               </div>
               <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
@@ -234,12 +310,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
             </div>
 
             {/* 7. تعداد فعالیت‌های تکمیل‌شده */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
-                <span>۷. فعالیت‌های تکمیل‌شده</span>
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <div className="rounded-2xl border border-emerald-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  ۷. فعالیت‌های تکمیل‌شده
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
               </div>
-              <div className="mt-3 text-xl font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">
+              <div className="mt-3 text-xl font-black text-emerald-700 dark:text-emerald-400 tabular-nums">
                 {toPersianDigits(metrics.completedActivitiesCount)} مورد کامل
               </div>
               <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
@@ -248,12 +328,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
             </div>
 
             {/* 8. تعداد فعالیت‌های ناقص یا انجام‌نشده */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
-                <span>۸. ناقص یا انجام‌نشده</span>
-                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <div className="rounded-2xl border border-amber-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  ۸. ناقص یا در انتظار
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <AlertCircle className="w-4 h-4" />
+                </div>
               </div>
-              <div className="mt-3 text-xl font-bold text-amber-700 dark:text-amber-400 tabular-nums">
+              <div className="mt-3 text-xl font-black text-amber-700 dark:text-amber-400 tabular-nums">
                 {toPersianDigits(metrics.incompleteOrPendingCount)} مورد
               </div>
               <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 tabular-nums">
@@ -263,29 +347,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
             </div>
 
             {/* 9. میزان پایبندی به برنامه */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
-                <span>۹. میزان پایبندی به برنامه</span>
-                <TrendingUp className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <div className="rounded-2xl border border-indigo-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  ۹. میزان پایبندی به برنامه
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                  <TrendingUp className="w-4 h-4" />
+                </div>
               </div>
-              <div className="mt-3 text-xl font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
+              <div className="mt-3 text-xl font-black text-indigo-600 dark:text-indigo-400 tabular-nums">
                 {toPersianDigits(metrics.adherencePercentage)}٪
               </div>
-              <div className="mt-2 w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+              <div className="mt-2 w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
                 <div
-                  className="bg-indigo-600 dark:bg-indigo-400 h-full rounded-full transition-all"
+                  className="bg-gradient-to-l from-indigo-600 to-violet-500 h-full rounded-full transition-all"
                   style={{ width: `${Math.min(100, metrics.adherencePercentage)}%` }}
                 />
               </div>
             </div>
 
             {/* 10. میزان زمان صرف‌شده برای فعالیت‌های غیردرسی */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
-                <span>۱۰. زمان فعالیت‌های غیردرسی</span>
-                <Coffee className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+            <div className="rounded-2xl border border-teal-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  ۱۰. زمان فعالیت غیردرسی
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
+                  <Coffee className="w-4 h-4" />
+                </div>
               </div>
-              <div className="mt-3 text-xl font-bold text-slate-900 dark:text-white tabular-nums">
+              <div className="mt-3 text-xl font-black text-slate-900 dark:text-white tabular-nums">
                 {formatMinutesPersian(metrics.nonStudyActualMinutes)}
               </div>
               <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 tabular-nums">
@@ -294,21 +386,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
             </div>
           </div>
 
-          {/* Subject-by-Subject Comparison Table (Section 8 & 10) */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                  جدول تفکیکی مقایسه زمان پیش‌بینی‌شده و واقعی دروس
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  تحلیل انحراف زمانی و تعداد تمرین‌های حل‌شده به تفکیک هر درس
-                </p>
+          {/* Subject-by-Subject Visual Progress & Comparison Table */}
+          <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+            <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                  <Target className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-slate-900 dark:text-white">
+                    مقایسه دیداری پیش‌بینی و عملکرد واقعی در هر درس
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    بررسی تعادل مطالعه بین دروس مختلف پایه هشتم و تعداد تمرین‌های حل‌شده
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={onNavigateToPlanner}
-                className="flex items-center gap-1.5 rounded-xl bg-slate-900 dark:bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:opacity-90 transition-opacity cursor-pointer whitespace-nowrap shrink-0"
+                className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-indigo-700 transition-colors cursor-pointer whitespace-nowrap shrink-0 self-start sm:self-auto"
               >
                 <Plus className="w-4 h-4" />
                 <span>ثبت برنامه جدید</span>
@@ -316,14 +413,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
             </div>
 
             {metrics.subjectBreakdown.length === 0 ? (
-              <div className="p-10 text-center">
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+              <div className="p-12 text-center">
+                <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
                   در این بازه زمانی هنوز فعالیت درسی ثبت نشده است.
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  اولین درس امروزت را برنامه‌ریزی کن تا نمودار پیشرفت هر کتاب اینجا فعال شود!
                 </p>
                 <button
                   type="button"
                   onClick={onNavigateToPlanner}
-                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors cursor-pointer"
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-indigo-700 transition-colors cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   <span>افزودن اولین فعالیت درسی</span>
@@ -332,11 +432,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-right text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-xs font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                  <thead className="bg-slate-50/90 dark:bg-slate-800/50 text-xs font-bold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                     <tr>
                       <th className="py-3.5 px-6">نام درس</th>
                       <th className="py-3.5 px-6">زمان پیش‌بینی‌شده</th>
-                      <th className="py-3.5 px-6">زمان واقعی</th>
+                      <th className="py-3.5 px-6">زمان واقعی و نمودار تحقق</th>
                       <th className="py-3.5 px-6">اختلاف زمان</th>
                       <th className="py-3.5 px-6">تعداد تمرین / تست</th>
                       <th className="py-3.5 px-6">وضعیت تکمیل</th>
@@ -345,41 +445,62 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                     {metrics.subjectBreakdown.map((item) => {
                       const diff = item.actualMinutes - item.predictedMinutes;
+                      const ratio =
+                        item.predictedMinutes > 0
+                          ? Math.min(100, Math.round((item.actualMinutes / item.predictedMinutes) * 100))
+                          : 0;
                       return (
                         <tr
                           key={item.subjectName}
                           className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                         >
-                          <td className="py-3.5 px-6 font-semibold text-slate-900 dark:text-white">
+                          <td className="py-4 px-6 font-bold text-slate-900 dark:text-white">
                             {item.subjectName}
                           </td>
-                          <td className="py-3.5 px-6 text-slate-600 dark:text-slate-300 tabular-nums">
+                          <td className="py-4 px-6 text-slate-600 dark:text-slate-300 tabular-nums">
                             {formatMinutesPersian(item.predictedMinutes)}
                           </td>
-                          <td className="py-3.5 px-6 font-medium text-slate-900 dark:text-white tabular-nums">
-                            {formatMinutesPersian(item.actualMinutes)}
+                          <td className="py-4 px-6 min-w-[200px]">
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-900 dark:text-white tabular-nums mb-1.5">
+                              <span>{formatMinutesPersian(item.actualMinutes)}</span>
+                              <span className="text-indigo-600 dark:text-indigo-400">
+                                {toPersianDigits(ratio)}٪
+                              </span>
+                            </div>
+                            <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  ratio >= 100
+                                    ? 'bg-emerald-500'
+                                    : ratio >= 60
+                                    ? 'bg-indigo-600'
+                                    : 'bg-amber-500'
+                                }`}
+                                style={{ width: `${ratio}%` }}
+                              />
+                            </div>
                           </td>
-                          <td className="py-3.5 px-6 tabular-nums">
+                          <td className="py-4 px-6 tabular-nums">
                             {item.actualMinutes === 0 ? (
                               <span className="text-xs text-slate-400">ثبت‌نشده</span>
                             ) : diff === 0 ? (
-                              <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
                                 منطبق با پیش‌بینی
                               </span>
                             ) : diff > 0 ? (
-                              <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                                {toPersianDigits(diff)} دقیقه بیشتر از پیش‌بینی
+                              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                {toPersianDigits(diff)}+ دقیقه بیشتر
                               </span>
                             ) : (
-                              <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
-                                {toPersianDigits(Math.abs(diff))} دقیقه کمتر از پیش‌بینی
+                              <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                                {toPersianDigits(Math.abs(diff))} دقیقه کمتر
                               </span>
                             )}
                           </td>
-                          <td className="py-3.5 px-6 text-slate-600 dark:text-slate-300 tabular-nums">
-                            {toPersianDigits(item.exercisesCount)} مورد
+                          <td className="py-4 px-6 font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                            {toPersianDigits(item.exercisesCount)} تمرین
                           </td>
-                          <td className="py-3.5 px-6 text-slate-600 dark:text-slate-300 tabular-nums">
+                          <td className="py-4 px-6 text-slate-700 dark:text-slate-300 font-semibold tabular-nums">
                             {toPersianDigits(item.completedCount)} از {toPersianDigits(item.totalCount)} کامل
                           </td>
                         </tr>
