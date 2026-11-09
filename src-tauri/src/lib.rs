@@ -64,6 +64,7 @@ pub fn run() {
               priority_code TEXT NOT NULL,
               initial_predicted_minutes INTEGER NOT NULL,
               predicted_minutes INTEGER NOT NULL,
+              reminder_time TEXT,
               description TEXT NOT NULL DEFAULT '',
               status TEXT NOT NULL DEFAULT 'pending',
               custom_sort_order INTEGER NOT NULL DEFAULT 0,
@@ -81,6 +82,16 @@ pub fn run() {
               logged_at TEXT NOT NULL,
               updated_at TEXT NOT NULL,
               FOREIGN KEY (plan_id) REFERENCES daily_plans(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS daily_study_goals (
+              id TEXT PRIMARY KEY,
+              goal_date TEXT NOT NULL,
+              title TEXT NOT NULL,
+              goal_type TEXT NOT NULL DEFAULT 'study_minutes',
+              target_value INTEGER NOT NULL DEFAULT 120,
+              current_value INTEGER NOT NULL DEFAULT 0,
+              unit_label TEXT NOT NULL DEFAULT 'دقیقه',
+              created_at TEXT NOT NULL
             );
         ",
         kind: MigrationKind::Up,

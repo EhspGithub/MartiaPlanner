@@ -13,6 +13,8 @@ import type {
   ActivityCategory,
   StudyActivityType,
   PriorityLevel,
+  DailyStudyGoalConfig,
+  CustomNumericGoal,
 } from '../types.ts';
 import { localSQLiteFallback } from './localSqliteFallback.ts';
 
@@ -84,6 +86,7 @@ export const api = {
     study_type_id?: string | null;
     priority_code: string;
     predicted_minutes: number;
+    reminder_time?: string | null;
     description: string;
   }) =>
     requestJSON<DailyPlanItem>(
@@ -104,6 +107,7 @@ export const api = {
       study_type_id?: string | null;
       priority_code?: string;
       predicted_minutes?: number;
+      reminder_time?: string | null;
       description?: string;
     }
   ) =>
@@ -170,6 +174,30 @@ export const api = {
       `/api/dashboard?range=${encodeURIComponent(range)}&date=${encodeURIComponent(date)}`,
       undefined,
       () => localSQLiteFallback.getDashboardMetrics(range, date)
+    ),
+
+  // Daily Numeric Study Goals
+  getDailyGoal: (date: string) =>
+    requestJSON<DailyStudyGoalConfig>(
+      `/api/goals?date=${encodeURIComponent(date)}`,
+      undefined,
+      () => localSQLiteFallback.getDailyGoal(date)
+    ),
+
+  saveDailyGoal: (payload: {
+    goal_date: string;
+    target_study_minutes: number;
+    target_exercises_count: number;
+    target_completed_tasks: number;
+    custom_goals: CustomNumericGoal[];
+  }) =>
+    requestJSON<DailyStudyGoalConfig>(
+      '/api/goals',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+      () => localSQLiteFallback.saveDailyGoal(payload)
     ),
 
   // Subjects & Units
@@ -365,6 +393,7 @@ export const api = {
   pushToGitHub: (payload: {
     token?: string;
     repoName: string;
+    version?: string;
     commitMessage?: string;
     isPrivate?: boolean;
   }) =>
@@ -374,6 +403,8 @@ export const api = {
       owner: string;
       repo: string;
       branch: string;
+      version: string;
+      releaseTag: string;
       filesCount: number;
       commitSha: string;
       createdNewRepo: boolean;

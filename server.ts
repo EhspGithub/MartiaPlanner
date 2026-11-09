@@ -269,6 +269,7 @@ app.post('/api/plans', (req, res) => {
       study_type_id,
       priority_code = 'A1',
       predicted_minutes,
+      reminder_time = null,
       description = '',
     } = req.body;
 
@@ -320,9 +321,9 @@ app.post('/api/plans', (req, res) => {
         id, plan_date, category_id, category_title_snapshot, is_study,
         subject_id, subject_name_snapshot, unit_id, unit_title_snapshot,
         study_type_id, study_type_title_snapshot, priority_code,
-        initial_predicted_minutes, predicted_minutes, description, status,
+        initial_predicted_minutes, predicted_minutes, reminder_time, description, status,
         custom_sort_order, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
     `).run(
       id,
       plan_date,
@@ -338,6 +339,7 @@ app.post('/api/plans', (req, res) => {
       priority_code,
       predMins,
       predMins,
+      reminder_time ? String(reminder_time).trim() : null,
       String(description || '').trim(),
       maxOrder + 1,
       now,
@@ -366,6 +368,7 @@ app.put('/api/plans/:id', (req, res) => {
       study_type_id,
       priority_code = existing.priority_code,
       predicted_minutes = existing.predicted_minutes,
+      reminder_time,
       description = existing.description,
     } = req.body;
 
@@ -425,6 +428,13 @@ app.put('/api/plans/:id', (req, res) => {
       newInitialPredictedMinutes = predMins;
     }
 
+    const finalReminderTime =
+      reminder_time === undefined
+        ? existing.reminder_time
+        : reminder_time
+        ? String(reminder_time).trim()
+        : null;
+
     db.prepare(`
       UPDATE daily_plans
       SET category_id = ?,
@@ -439,6 +449,7 @@ app.put('/api/plans/:id', (req, res) => {
           priority_code = ?,
           initial_predicted_minutes = ?,
           predicted_minutes = ?,
+          reminder_time = ?,
           description = ?,
           updated_at = ?
       WHERE id = ?
@@ -455,6 +466,7 @@ app.put('/api/plans/:id', (req, res) => {
       priority_code,
       newInitialPredictedMinutes,
       newPredictedMinutes,
+      finalReminderTime,
       String(description || '').trim(),
       now,
       id
@@ -732,6 +744,101 @@ app.get('/api/dashboard', (req, res) => {
       nonStudyActualMinutes,
       nonStudyPredictedMinutes,
       subjectBreakdown: Array.from(subjectMap.values()),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================================
+// 5.5 DAILY NUMERIC STUDY GOALS API (اهداف عددی روزانه دانش‌آموز)
+// ============================================================================
+app.get('/api/goals', (req, res) => {
+  try {
+    const goalDate = String(req.query.date || getTodayISO());
+    const row = db
+      .prepare('SELECT * FROM daily_study_goals WHERE goal_date = ?')
+      .get(goalDate) as any;
+
+    if (!row) {
+      return res.json({
+        goal_date: goalDate,
+        target_study_minutes: 210, // Default: 3.5 hours (210 mins)
+        target_exercises_count: 50, // Default: 50 exercises/tests
+        target_completed_tasks: 3, // Default: 3 study lessons
+        custom_goals: [
+          {
+            id: 'cgoal-vocab',
+            title: 'حفظ لغات جدید (زبان و عربی)',
+            unitLabel: 'لغت',
+            targetValue: 15,
+            currentValue: 12,
+            color: 'purple',
+          },
+        ],
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    let customGoals = [];
+    try {
+      customGoals = JSON.parse(row.custom_goals_json || '[]');
+    } catch {
+      customGoals = [];
+    }
+
+    res.json({
+      goal_date: row.goal_date,
+      target_study_minutes: Number(row.target_study_minutes || 210),
+      target_exercises_count: Number(row.target_exercises_count || 50),
+      target_completed_tasks: Number(row.target_completed_tasks || 3),
+      custom_goals: customGoals,
+      updated_at: row.updated_at,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/goals', (req, res) => {
+  try {
+    const {
+      goal_date = getTodayISO(),
+      target_study_minutes = 210,
+      target_exercises_count = 50,
+      target_completed_tasks = 3,
+      custom_goals = [],
+    } = req.body;
+
+    const now = new Date().toISOString();
+    const customGoalsStr = JSON.stringify(Array.isArray(custom_goals) ? custom_goals : []);
+
+    db.prepare(`
+      INSERT INTO daily_study_goals (
+        goal_date, target_study_minutes, target_exercises_count, target_completed_tasks, custom_goals_json, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(goal_date) DO UPDATE SET
+        target_study_minutes = excluded.target_study_minutes,
+        target_exercises_count = excluded.target_exercises_count,
+        target_completed_tasks = excluded.target_completed_tasks,
+        custom_goals_json = excluded.custom_goals_json,
+        updated_at = excluded.updated_at
+    `).run(
+      String(goal_date),
+      Math.max(10, Number(target_study_minutes)),
+      Math.max(1, Number(target_exercises_count)),
+      Math.max(1, Number(target_completed_tasks)),
+      customGoalsStr,
+      now
+    );
+
+    res.json({
+      goal_date: String(goal_date),
+      target_study_minutes: Math.max(10, Number(target_study_minutes)),
+      target_exercises_count: Math.max(1, Number(target_exercises_count)),
+      target_completed_tasks: Math.max(1, Number(target_completed_tasks)),
+      custom_goals: Array.isArray(custom_goals) ? custom_goals : [],
+      updated_at: now,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1046,7 +1153,7 @@ app.get(['/auth/github/callback', '/auth/github/callback/'], githubCallbackHandl
 
 app.post('/api/github/push', async (req, res) => {
   try {
-    const { token, repoName = 'MartiaPlanner', commitMessage, isPrivate = false } = req.body;
+    const { token, repoName = 'MartiaPlanner', version, commitMessage, isPrivate = false } = req.body;
     const finalToken = (token && String(token).trim()) || storedGitHubToken;
 
     if (!finalToken) {
@@ -1059,9 +1166,10 @@ app.post('/api/github/push', async (req, res) => {
     const result = await syncLocalGitAndPushToGitHub({
       token: finalToken,
       repoName: String(repoName || 'MartiaPlanner').trim(),
+      version: version ? String(version).trim() : undefined,
       commitMessage:
         commitMessage ||
-        'feat: complete MartiaPlanner student planner app (Tauri 2 + React + SQLite)',
+        'feat: update MartiaPlanner student planner app (Tauri 2 + React + SQLite)',
       isPrivate: Boolean(isPrivate),
     });
 

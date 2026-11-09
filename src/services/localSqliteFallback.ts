@@ -346,7 +346,7 @@ function createInitialDatabaseSeed(): LocalSQLiteDatabaseDump {
       updated_at: now,
     },
     {
-      id: 'perf-5',
+      id: 'plan-perf-5',
       plan_id: 'plan-yest-1',
       actual_minutes: 45,
       exercises_count: 18,
@@ -357,6 +357,51 @@ function createInitialDatabaseSeed(): LocalSQLiteDatabaseDump {
       updated_at: now,
     },
   ];
+
+  // Add past 5 days (-6 to -2) study history for the 7-day Recharts study chart
+  const pastHistory = [
+    { offset: -6, subjId: 'subj-math', subjName: 'ریاضی', unitId: 'subj-math-u1', unitTitle: 'فصل اول: عددهای صحیح و گویا', pred: 135, actual: 145, ex: 32 },
+    { offset: -5, subjId: 'subj-science', subjName: 'علوم تجربی', unitId: 'subj-science-u1', unitTitle: 'فصل اول: مخلوط و جداسازی مواد', pred: 120, actual: 115, ex: 30 },
+    { offset: -4, subjId: 'subj-math', subjName: 'ریاضی', unitId: 'subj-math-u2', unitTitle: 'فصل دوم: عددهای اول', pred: 130, actual: 135, ex: 38 },
+    { offset: -3, subjId: 'subj-science', subjName: 'علوم تجربی', unitId: 'subj-science-u2', unitTitle: 'فصل دوم: تغییرهای شیمیایی در خدمت زندگی', pred: 105, actual: 105, ex: 24 },
+    { offset: -2, subjId: 'subj-farsi', subjName: 'فارسی', unitId: 'subj-farsi-u2', unitTitle: 'درس دوم: راه خوشبختی', pred: 150, actual: 170, ex: 44 },
+  ];
+
+  pastHistory.forEach((h, idx) => {
+    const pid = `plan-hist-local-${idx}`;
+    plans.push({
+      id: pid,
+      plan_date: addDaysISO(todayIso, h.offset),
+      category_id: 'cat-study',
+      category_title_snapshot: 'درس',
+      is_study: 1,
+      subject_id: h.subjId,
+      subject_name_snapshot: h.subjName,
+      unit_id: h.unitId,
+      unit_title_snapshot: h.unitTitle,
+      study_type_id: 'st-homework',
+      study_type_title_snapshot: 'تکلیف',
+      priority_code: 'A1',
+      initial_predicted_minutes: h.pred,
+      predicted_minutes: h.pred,
+      description: 'مطالعه و حل تمرین‌های هفتگی',
+      status: 'completed',
+      custom_sort_order: 1,
+      created_at: now,
+      updated_at: now,
+    });
+    performances.push({
+      id: `perf-hist-local-${idx}`,
+      plan_id: pid,
+      actual_minutes: h.actual,
+      exercises_count: h.ex,
+      learning_quality: 'excellent',
+      completion_status: 'completed',
+      notes: 'ثبت‌شده در کارنامه هفتگی',
+      logged_at: now,
+      updated_at: now,
+    });
+  });
 
   return {
     version: 1,
@@ -453,6 +498,7 @@ export const localSQLiteFallback = {
     study_type_id?: string | null;
     priority_code: string;
     predicted_minutes: number;
+    reminder_time?: string | null;
     description: string;
   }): DailyPlanItem {
     const db = loadDB();
@@ -492,6 +538,7 @@ export const localSQLiteFallback = {
       priority_code: payload.priority_code,
       initial_predicted_minutes: Number(payload.predicted_minutes),
       predicted_minutes: Number(payload.predicted_minutes),
+      reminder_time: payload.reminder_time || null,
       description: payload.description || '',
       status: 'pending',
       custom_sort_order: maxOrder + 1,
@@ -513,6 +560,7 @@ export const localSQLiteFallback = {
       study_type_id?: string | null;
       priority_code?: string;
       predicted_minutes?: number;
+      reminder_time?: string | null;
       description?: string;
     }
   ): DailyPlanItem {
@@ -556,6 +604,8 @@ export const localSQLiteFallback = {
       predicted_minutes: hasPerf
         ? existing.predicted_minutes
         : Number(payload.predicted_minutes ?? existing.predicted_minutes),
+      reminder_time:
+        payload.reminder_time === undefined ? existing.reminder_time : payload.reminder_time,
       description: payload.description ?? existing.description,
       updated_at: new Date().toISOString(),
     };
@@ -959,4 +1009,48 @@ export const localSQLiteFallback = {
     saveDB(db);
     return { success: true };
   },
+
+  getDailyGoal(date: string) {
+    const key = `martia_daily_goal_${date}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return {
+      goal_date: date,
+      target_study_minutes: 210,
+      target_exercises_count: 50,
+      target_completed_tasks: 3,
+      custom_goals: [
+        {
+          id: 'cgoal-vocab',
+          title: 'حفظ لغات جدید (زبان و عربی)',
+          unitLabel: 'لغت',
+          targetValue: 15,
+          currentValue: 12,
+          color: 'purple' as const,
+        },
+      ],
+      updated_at: new Date().toISOString(),
+    };
+  },
+
+  saveDailyGoal(payload: {
+    goal_date: string;
+    target_study_minutes: number;
+    target_exercises_count: number;
+    target_completed_tasks: number;
+    custom_goals: any[];
+  }) {
+    const key = `martia_daily_goal_${payload.goal_date}`;
+    const saved = {
+      ...payload,
+      updated_at: new Date().toISOString(),
+    };
+    try {
+      localStorage.setItem(key, JSON.stringify(saved));
+    } catch {}
+    return saved;
+  },
 };
+

@@ -25,6 +25,9 @@ import {
   formatJalaliFull,
   getTodayISO,
 } from '../utils/jalali.ts';
+import { WeeklyStudyChart } from './WeeklyStudyChart.tsx';
+import { DailyNumericGoalsPanel } from './DailyNumericGoalsPanel.tsx';
+import { WeeklyAnalyticalReport } from './WeeklyAnalyticalReport.tsx';
 
 interface DashboardViewProps {
   onNavigateToPlanner: () => void;
@@ -385,6 +388,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
               </div>
             </div>
           </div>
+
+          {/* Daily Numeric Study Goals & Progress Bars */}
+          <DailyNumericGoalsPanel />
+
+          {/* 7-Day Daily Study Hours Chart (Recharts) */}
+          <WeeklyStudyChart />
+
+          {/* Weekly Analytical Study Performance & Goal Fulfillment Report */}
+          <WeeklyAnalyticalReport />
 
           {/* Subject-by-Subject Visual Progress & Comparison Table */}
           <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">

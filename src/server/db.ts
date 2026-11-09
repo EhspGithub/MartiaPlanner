@@ -93,6 +93,7 @@ export function initDatabase() {
       priority_code TEXT NOT NULL,
       initial_predicted_minutes INTEGER NOT NULL,
       predicted_minutes INTEGER NOT NULL,
+      reminder_time TEXT,
       description TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'pending',
       custom_sort_order INTEGER NOT NULL DEFAULT 0,
@@ -125,9 +126,35 @@ export function initDatabase() {
       reason TEXT NOT NULL DEFAULT '',
       FOREIGN KEY (plan_id) REFERENCES daily_plans(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS daily_study_goals (
+      goal_date TEXT PRIMARY KEY,
+      target_study_minutes INTEGER NOT NULL DEFAULT 210,
+      target_exercises_count INTEGER NOT NULL DEFAULT 50,
+      target_completed_tasks INTEGER NOT NULL DEFAULT 3,
+      custom_goals_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL
+    );
   `);
 
+  // Safe migration for existing databases to add reminder_time column
+  try {
+    db.exec('ALTER TABLE daily_plans ADD COLUMN reminder_time TEXT');
+  } catch {
+    // Column already exists
+  }
+
   seedInitialDataIfEmpty();
+
+  // Ensure default sample reminder times exist on today's incomplete study tasks
+  try {
+    db.prepare(
+      "UPDATE daily_plans SET reminder_time = '17:30' WHERE id = 'plan-today-3' AND reminder_time IS NULL"
+    ).run();
+    db.prepare(
+      "UPDATE daily_plans SET reminder_time = '19:00' WHERE id = 'plan-today-5' AND reminder_time IS NULL"
+    ).run();
+  } catch {}
 }
 
 function seedInitialDataIfEmpty() {
@@ -372,6 +399,235 @@ function seedInitialDataIfEmpty() {
     // Seed realistic student plans for Today, Yesterday, and Tomorrow so the app immediately demonstrates
     // predicted vs. actual comparison, completed/partial/pending states, and weekly/daily analytics.
     seedSamplePlans();
+  }
+
+  ensureSevenDayHistorySeed();
+}
+
+function ensureSevenDayHistorySeed() {
+  const existing = db
+    .prepare("SELECT id FROM daily_plans WHERE id = 'plan-hist-d2-1'")
+    .get();
+  if (existing) return;
+
+  const todayIso = getTodayISO();
+  const now = new Date().toISOString();
+
+  const insertPlan = db.prepare(`
+    INSERT OR IGNORE INTO daily_plans (
+      id, plan_date, category_id, category_title_snapshot, is_study,
+      subject_id, subject_name_snapshot, unit_id, unit_title_snapshot,
+      study_type_id, study_type_title_snapshot, priority_code,
+      initial_predicted_minutes, predicted_minutes, description, status,
+      custom_sort_order, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const insertPerf = db.prepare(`
+    INSERT OR IGNORE INTO performance_logs (
+      id, plan_id, actual_minutes, exercises_count, learning_quality,
+      completion_status, notes, logged_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const pastDaysData = [
+    {
+      id: 'plan-hist-d6-1',
+      offset: -6,
+      subjId: 'subj-math',
+      subjName: 'ریاضی',
+      unitId: 'subj-math-u1',
+      unitTitle: 'فصل اول: عددهای صحیح و گویا',
+      stId: 'st-homework',
+      stTitle: 'تکلیف',
+      priority: 'A1',
+      pred: 90,
+      actual: 95,
+      exercises: 22,
+      quality: 'excellent',
+      desc: 'حل تمرین‌های مرور فصل اول و تست‌های تکمیلی عددهای گویا',
+    },
+    {
+      id: 'plan-hist-d6-2',
+      offset: -6,
+      subjId: 'subj-farsi',
+      subjName: 'فارسی',
+      unitId: 'subj-farsi-u1',
+      unitTitle: 'درس اول: زیبایی‌های آفرینش',
+      stId: 'st-review',
+      stTitle: 'پس‌خوانی',
+      priority: 'B1',
+      pred: 45,
+      actual: 50,
+      exercises: 10,
+      quality: 'good',
+      desc: 'مرور آرایه‌های ادبی و تاریخ ادبیات درس اول',
+    },
+    {
+      id: 'plan-hist-d5-1',
+      offset: -5,
+      subjId: 'subj-science',
+      subjName: 'علوم تجربی',
+      unitId: 'subj-science-u1',
+      unitTitle: 'فصل اول: مخلوط و جداسازی مواد',
+      stId: 'st-exam',
+      stTitle: 'امتحان',
+      priority: 'A1',
+      pred: 75,
+      actual: 70,
+      exercises: 16,
+      quality: 'excellent',
+      desc: 'آمادگی برای پرسش کلاسی انحلال‌پذیری و جداسازی مخلوط‌ها',
+    },
+    {
+      id: 'plan-hist-d5-2',
+      offset: -5,
+      subjId: 'subj-english',
+      subjName: 'زبان انگلیسی',
+      unitId: 'subj-english-u1',
+      unitTitle: 'Lesson 1: My Nationality',
+      stId: 'st-homework',
+      stTitle: 'تکلیف',
+      priority: 'B2',
+      pred: 45,
+      actual: 45,
+      exercises: 14,
+      quality: 'good',
+      desc: 'تمرین مکالمه و دیکته کلمات کشورها و ملیت‌ها',
+    },
+    {
+      id: 'plan-hist-d4-1',
+      offset: -4,
+      subjId: 'subj-math',
+      subjName: 'ریاضی',
+      unitId: 'subj-math-u2',
+      unitTitle: 'فصل دوم: عددهای اول',
+      stId: 'st-exam',
+      stTitle: 'امتحان',
+      priority: 'A1',
+      pred: 80,
+      actual: 90,
+      exercises: 26,
+      quality: 'excellent',
+      desc: 'حل نمونه سؤالات غربال اراتستن و ب.م.م / ک.م.م',
+    },
+    {
+      id: 'plan-hist-d4-2',
+      offset: -4,
+      subjId: 'subj-arabic',
+      subjName: 'عربی',
+      unitId: 'subj-arabic-u1',
+      unitTitle: 'درس اول: مراجعه و یادآوری',
+      stId: 'st-homework',
+      stTitle: 'تکلیف',
+      priority: 'B1',
+      pred: 50,
+      actual: 45,
+      exercises: 12,
+      quality: 'good',
+      desc: 'صرف فعل ماضی و مضارع و ترجمه تمارین درس اول',
+    },
+    {
+      id: 'plan-hist-d3-1',
+      offset: -3,
+      subjId: 'subj-science',
+      subjName: 'علوم تجربی',
+      unitId: 'subj-science-u2',
+      unitTitle: 'فصل دوم: تغییرهای شیمیایی در خدمت زندگی',
+      stId: 'st-review',
+      stTitle: 'پس‌خوانی',
+      priority: 'A2',
+      pred: 60,
+      actual: 65,
+      exercises: 15,
+      quality: 'good',
+      desc: 'بررسی مثلث آتش و واکنش‌های شیمیایی گرماده و گرماگیر',
+    },
+    {
+      id: 'plan-hist-d3-2',
+      offset: -3,
+      subjId: 'subj-social',
+      subjName: 'مطالعات اجتماعی',
+      unitId: 'subj-social-u1',
+      unitTitle: 'درس اول: تعاون و همیاری',
+      stId: 'st-homework',
+      stTitle: 'تکلیف',
+      priority: 'B2',
+      pred: 45,
+      actual: 40,
+      exercises: 9,
+      quality: 'excellent',
+      desc: 'پاسخ به کاربرگه شماره ۱ و خلاصه‌نویسی درس',
+    },
+    {
+      id: 'plan-hist-d2-1',
+      offset: -2,
+      subjId: 'subj-math',
+      subjName: 'ریاضی',
+      unitId: 'subj-math-u3',
+      unitTitle: 'فصل سوم: چندضلعی‌ها و تقارن',
+      stId: 'st-homework',
+      stTitle: 'تکلیف',
+      priority: 'A1',
+      pred: 90,
+      actual: 105,
+      exercises: 30,
+      quality: 'excellent',
+      desc: 'حل تمرین‌های کتاب و تست‌های تقارن چرخشی و محوری',
+    },
+    {
+      id: 'plan-hist-d2-2',
+      offset: -2,
+      subjId: 'subj-farsi',
+      subjName: 'فارسی',
+      unitId: 'subj-farsi-u2',
+      unitTitle: 'درس دوم: راه خوشبختی',
+      stId: 'st-review',
+      stTitle: 'پس‌خوانی',
+      priority: 'A2',
+      pred: 60,
+      actual: 65,
+      exercises: 14,
+      quality: 'good',
+      desc: 'روخوانی و معنی حکایت و املای واژگان مهم درس دوم',
+    },
+  ];
+
+  for (const item of pastDaysData) {
+    const planDate = addDaysISO(todayIso, item.offset);
+    insertPlan.run(
+      item.id,
+      planDate,
+      'cat-study',
+      'درس',
+      1,
+      item.subjId,
+      item.subjName,
+      item.unitId,
+      item.unitTitle,
+      item.stId,
+      item.stTitle,
+      item.priority,
+      item.pred,
+      item.pred,
+      item.desc,
+      'completed',
+      1,
+      now,
+      now
+    );
+
+    insertPerf.run(
+      `perf-${item.id}`,
+      item.id,
+      item.actual,
+      item.exercises,
+      item.quality,
+      'completed',
+      'ثبت‌شده در کارنامه هفتگی دانش‌آموز',
+      now,
+      now
+    );
   }
 }
 

@@ -31,6 +31,7 @@ import {
   Tv,
   Gamepad2,
   Dumbbell,
+  Bell,
 } from 'lucide-react';
 import type {
   ActivityCategory,
@@ -52,6 +53,7 @@ import {
   formatMinutesPersian,
 } from '../utils/jalali.ts';
 import { PerformanceModal } from './PerformanceModal.tsx';
+import { StudyReminderManager } from './StudyReminderManager.tsx';
 
 interface PlannerViewProps {
   categories: ActivityCategory[];
@@ -203,6 +205,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   const [formStudyTypeId, setFormStudyTypeId] = useState<string>(studyTypes[0]?.id || '');
   const [formPriorityCode, setFormPriorityCode] = useState<string>('A1');
   const [formPredictedMinutes, setFormPredictedMinutes] = useState<string>('60');
+  const [formReminderTime, setFormReminderTime] = useState<string>('');
   const [formDescription, setFormDescription] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
   const [formSubmitting, setFormSubmitting] = useState<boolean>(false);
@@ -287,6 +290,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     setFormStudyTypeId(studyTypes[0]?.id || '');
     setFormPriorityCode('A1');
     setFormPredictedMinutes('60');
+    setFormReminderTime('17:30');
     setFormDescription('');
     setFormError(null);
     setShowPlanForm(true);
@@ -303,6 +307,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     }
     setFormPriorityCode(plan.priority_code);
     setFormPredictedMinutes(String(plan.predicted_minutes));
+    setFormReminderTime(plan.reminder_time || '');
     setFormDescription(plan.description || '');
     setFormError(null);
     setShowPlanForm(true);
@@ -333,6 +338,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
           study_type_id: isFormStudyActivity ? formStudyTypeId : null,
           priority_code: formPriorityCode,
           predicted_minutes: mins,
+          reminder_time: formReminderTime.trim() || null,
           description: formDescription.trim(),
         });
       } else {
@@ -344,6 +350,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
           study_type_id: isFormStudyActivity ? formStudyTypeId : null,
           priority_code: formPriorityCode,
           predicted_minutes: mins,
+          reminder_time: formReminderTime.trim() || null,
           description: formDescription.trim(),
         });
       }
@@ -644,6 +651,13 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       ===================================================================== */}
       {activeTab !== 'weekly' && (
         <div className="space-y-5">
+          {/* Smart Study Reminder Status & Instant Test Strip */}
+          <StudyReminderManager
+            plans={dailyPlans}
+            selectedDate={selectedDate}
+            onOpenPlan={(plan) => setActivePerformancePlan(plan)}
+          />
+
           {/* Sorting & Filter Control Strip */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 px-5 py-3.5 shadow-xs">
             <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
@@ -792,6 +806,15 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                                 </>
                               )}
                               <span>پیش‌بینی: {formatMinutesPersian(predMins)}</span>
+                              {plan.reminder_time && (
+                                <>
+                                  <span aria-hidden="true">|</span>
+                                  <span className="inline-flex items-center gap-1 font-extrabold text-indigo-600 dark:text-indigo-400">
+                                    <Bell className="w-3.5 h-3.5 text-amber-500" />
+                                    یادآور: ساعت {toPersianDigits(plan.reminder_time)}
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1328,9 +1351,60 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                 )}
               </div>
 
+              {/* Smart Study Time Reminder Input */}
+              <div className="rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/50 p-4 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-1.5 text-xs font-extrabold text-slate-800 dark:text-slate-200">
+                    <Bell className="w-4 h-4 text-amber-500" />
+                    <span>
+                      {isFormStudyActivity
+                        ? '۷. ساعت یادآوری شروع مطالعه (اعلان خودکار)'
+                        : '۴. ساعت یادآوری فعالیت (اختیاری)'}
+                    </span>
+                  </label>
+                  {formReminderTime && (
+                    <button
+                      type="button"
+                      onClick={() => setFormReminderTime('')}
+                      className="text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+                    >
+                      حذف یادآور
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
+                  <input
+                    type="time"
+                    value={formReminderTime}
+                    onChange={(e) => setFormReminderTime(e.target.value)}
+                    className="w-full sm:w-44 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm font-extrabold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
+                  />
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {['15:30', '16:30', '17:30', '19:00', '20:30'].map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setFormReminderTime(t)}
+                        className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg border transition-colors tabular-nums cursor-pointer ${
+                          formReminderTime === t
+                            ? 'border-indigo-600 bg-indigo-600 text-white'
+                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
+                        }`}
+                      >
+                        ساعت {toPersianDigits(t)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  در ساعت تعیین‌شده، برنامه به‌صورت خودکار با زنگ هشدار و اعلان هوشمند زمان مطالعه را به شما یادآوری می‌کند.
+                </p>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  {isFormStudyActivity ? '۷. توضیحات تکمیلی (اختیاری)' : '۴. توضیحات تکمیلی (اختیاری)'}
+                  {isFormStudyActivity ? '۸. توضیحات تکمیلی (اختیاری)' : '۵. توضیحات تکمیلی (اختیاری)'}
                 </label>
                 <textarea
                   rows={2}

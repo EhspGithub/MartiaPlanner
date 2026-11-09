@@ -27,3 +27,19 @@
     radial-gradient(at 15% 25%, rgba(16, 185, 129, 0.12) 0px, transparent 45%),
     radial-gradient(at 50% 90%, rgba(139, 92, 246, 0.10) 0px, transparent 50%);
 }
+
+/*
+ * Android Tauri 2 Edge-to-Edge & Mobile System Bar Safe Offsets
+ * Ensures the 4 bottom navigation tabs sit completely ABOVE Android's 48dp–54dp
+ * system navigation bar (Back / Home / Recents) even when WebView reports env() as 0px.
+ */
+@media (max-width: 767px) {
+  .mobile-safe-header {
+    padding-top: max(env(safe-area-inset-top, 0px), 24px);
+    height: calc(4rem + max(env(safe-area-inset-top, 0px), 24px));
+  }
+
+  .mobile-bottom-nav-shell {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 54px);
+  }
+}

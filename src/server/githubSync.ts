@@ -1,10 +1,12 @@
 /**
- * MartiaPlanner — GitHub Repository Sync Service
+ * MartiaPlanner — GitHub Repository Sync & Semantic Versioning Service
  * Pushes all project files (including Tauri 2 Rust/Android configuration, SQLite backend, and React RTL frontend)
- * directly to the user's `MartiaPlanner` repository on GitHub via the GitHub Git Data Trees API.
+ * directly to the user's `MartiaPlanner` repository on GitHub via the GitHub Git Data Trees API,
+ * while synchronizing version numbers across package.json, tauri.conf.json, Cargo.toml, and src/version.ts.
  */
 import fs from 'fs';
 import path from 'path';
+import { APP_VERSION } from '../version.ts';
 
 const IGNORED_DIRS = new Set([
   'node_modules',
@@ -23,6 +25,58 @@ const IGNORED_FILES = new Set([
   'martia_planner.sqlite-wal',
 ]);
 
+function syncVersionFilesInWorkspace(workspaceRoot: string, rawVersion: string): string {
+  const cleanVersion = rawVersion.replace(/^v/i, '').trim() || APP_VERSION;
+
+  // 1. Update package.json
+  const pkgPath = path.join(workspaceRoot, 'package.json');
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      pkg.version = cleanVersion;
+      fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
+    } catch {}
+  }
+
+  // 2. Update src-tauri/tauri.conf.json
+  const tauriConfPath = path.join(workspaceRoot, 'src-tauri', 'tauri.conf.json');
+  if (fs.existsSync(tauriConfPath)) {
+    try {
+      const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf-8'));
+      tauriConf.version = cleanVersion;
+      fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2) + '\n', 'utf-8');
+    } catch {}
+  }
+
+  // 3. Update src-tauri/Cargo.toml
+  const cargoPath = path.join(workspaceRoot, 'src-tauri', 'Cargo.toml');
+  if (fs.existsSync(cargoPath)) {
+    try {
+      const cargoContent = fs.readFileSync(cargoPath, 'utf-8');
+      const updatedCargo = cargoContent.replace(
+        /^version\s*=\s*"[^"]*"/m,
+        `version = "${cleanVersion}"`
+      );
+      fs.writeFileSync(cargoPath, updatedCargo, 'utf-8');
+    } catch {}
+  }
+
+  // 4. Update src/version.ts
+  const versionTsPath = path.join(workspaceRoot, 'src', 'version.ts');
+  if (fs.existsSync(versionTsPath)) {
+    try {
+      const vContent = fs.readFileSync(versionTsPath, 'utf-8');
+      const updatedV = vContent.replace(
+        /export const APP_VERSION = '[^']*';/,
+        `export const APP_VERSION = '${cleanVersion}';`
+      );
+      fs.writeFileSync(versionTsPath, updatedV, 'utf-8');
+    } catch {}
+  }
+
+  return cleanVersion;
+}
+
 function collectProjectFiles(dirPath: string, baseDir: string): Array<{ relativePath: string; fullPath: string }> {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
   const results: Array<{ relativePath: string; fullPath: string }> = [];
@@ -37,7 +91,6 @@ function collectProjectFiles(dirPath: string, baseDir: string): Array<{ relative
     if (entry.isDirectory()) {
       results.push(...collectProjectFiles(fullPath, baseDir));
     } else if (entry.isFile()) {
-      // Skip large binary files > 2MB
       const stat = fs.statSync(fullPath);
       if (stat.size <= 2 * 1024 * 1024) {
         results.push({ relativePath, fullPath });
@@ -50,6 +103,7 @@ function collectProjectFiles(dirPath: string, baseDir: string): Array<{ relative
 export interface GitHubPushOptions {
   token: string;
   repoName: string; // e.g., "MartiaPlanner" or "username/MartiaPlanner"
+  version?: string; // e.g., "1.1.0"
   commitMessage?: string;
   isPrivate?: boolean;
 }
@@ -60,6 +114,8 @@ export interface GitHubPushResult {
   owner: string;
   repo: string;
   branch: string;
+  version: string;
+  releaseTag: string;
   filesCount: number;
   commitSha: string;
   createdNewRepo: boolean;
@@ -70,7 +126,7 @@ async function githubFetch(url: string, token: string, options: RequestInit = {}
     Accept: 'application/vnd.github+json',
     Authorization: `Bearer ${token}`,
     'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'MartiaPlanner-Builder/1.0',
+    'User-Agent': 'MartiaPlanner-Builder/1.1',
     ...(options.headers as Record<string, string> | undefined),
   };
 
@@ -86,10 +142,20 @@ async function githubFetch(url: string, token: string, options: RequestInit = {}
 }
 
 export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise<GitHubPushResult> {
-  const { token, commitMessage = 'feat: complete MartiaPlanner (Tauri 2 + React + SQLite)' } = options;
+  const { token } = options;
   if (!token || !token.trim()) {
     throw new Error('توکن دسترسی گیت‌هاب (GitHub Token) وارد نشده است.');
   }
+
+  const workspaceRoot = process.cwd();
+  const syncedVersion = syncVersionFilesInWorkspace(workspaceRoot, options.version || APP_VERSION);
+  const releaseTag = `v${syncedVersion}`;
+  const rawMsg =
+    options.commitMessage?.trim() ||
+    'feat: update MartiaPlanner (Tauri 2 + React + SQLite)';
+  const finalCommitMessage = rawMsg.includes(releaseTag)
+    ? rawMsg
+    : `release(${releaseTag}): ${rawMsg}`;
 
   // 1. Verify authenticated user
   const userRes = await githubFetch('https://api.github.com/user', token);
@@ -128,12 +194,11 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
 
     if (!createRes.ok) {
       throw new Error(
-        `توکن گیت‌هاب شما فاقد دسترسی «repo» است (خطای ${createRes.status}). لطفاً در تنظیمات توکن گیت‌هاب، تیک گزینه «repo» (Full control of private repositories) را فعال کنید.`
+        `توکن گیت‌هاب شما فاقد دسترسی «repo» است (خطای ${createRes.status}). لطفاً در تنظیمات توکن گیت‌هاب، تیک گزینه «repo» را فعال کنید.`
       );
     }
     createdNewRepo = true;
     repoRes = createRes;
-    // Wait briefly for GitHub auto_init commit
     await new Promise((r) => setTimeout(r, 1200));
   } else if (!repoRes.ok) {
     throw new Error(`خطا در بررسی مخزن ${owner}/${repo}: ${repoRes.data?.message || repoRes.status}`);
@@ -141,14 +206,13 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
 
   const defaultBranch: string = repoRes.data?.default_branch || 'main';
 
-  // 3. Ensure repository is initialized (if it was created completely empty with 0 commits, initialize README via Contents API)
+  // 3. Ensure repository is initialized
   let refRes = await githubFetch(
     `https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${defaultBranch}`,
     token
   );
 
   if (refRes.status === 404 || refRes.status === 409) {
-    // Empty repository with no commits yet — create initial README via Contents API to bootstrap git database
     const initReadme = Buffer.from(
       '# MartiaPlanner\nسامانه هوشمند مدیریت مطالعه و فعالیت‌های روزانه دانش‌آموز (Tauri 2 + React + SQLite)\n',
       'utf-8'
@@ -190,7 +254,6 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
   const latestCommitSha: string = refRes.data.object.sha;
 
   // 4. Collect all project files and create Git blobs/tree entries
-  const workspaceRoot = process.cwd();
   const files = collectProjectFiles(workspaceRoot, workspaceRoot);
 
   const treeItems: Array<{
@@ -203,7 +266,6 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
 
   for (const file of files) {
     const buffer = fs.readFileSync(file.fullPath);
-    // Check if text or binary
     const isBinary = buffer.includes(0);
     if (isBinary) {
       const blobRes = await githubFetch(
@@ -236,7 +298,7 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
     }
   }
 
-  // 5. Create Tree (if token lacks `workflow` scope, GitHub returns 404/403 when .github/workflows/* is included; retry without .github/workflows)
+  // 5. Create Tree
   let treeRes = await githubFetch(
     `https://api.github.com/repos/${owner}/${repo}/git/trees`,
     token,
@@ -278,7 +340,7 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: commitMessage,
+        message: finalCommitMessage,
         tree: treeRes.data.sha,
         parents: [latestCommitSha],
       }),
@@ -309,12 +371,44 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
     );
   }
 
+  // 8. Create or update Git Tag ref (refs/tags/vX.Y.Z) for clean release tracking
+  const tagRefRes = await githubFetch(
+    `https://api.github.com/repos/${owner}/${repo}/git/refs/tags/${releaseTag}`,
+    token
+  );
+  if (tagRefRes.ok) {
+    await githubFetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/refs/tags/${releaseTag}`,
+      token,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sha: commitRes.data.sha, force: true }),
+      }
+    );
+  } else {
+    await githubFetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/refs`,
+      token,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ref: `refs/tags/${releaseTag}`,
+          sha: commitRes.data.sha,
+        }),
+      }
+    );
+  }
+
   return {
     success: true,
     repoUrl: `https://github.com/${owner}/${repo}`,
     owner,
     repo,
     branch: defaultBranch,
+    version: syncedVersion,
+    releaseTag,
     filesCount: treeItems.length,
     commitSha: commitRes.data.sha,
     createdNewRepo,

@@ -16,6 +16,7 @@ import {
   Database,
   Smartphone,
   Monitor,
+  Tag,
 } from 'lucide-react';
 import type {
   ActivityCategory,
@@ -24,6 +25,7 @@ import type {
 } from '../types.ts';
 import { api } from '../services/api.ts';
 import { toPersianDigits } from '../utils/jalali.ts';
+import { APP_VERSION, APP_RELEASE_TAG, RELEASE_HISTORY } from '../version.ts';
 
 interface SettingsViewProps {
   categories: ActivityCategory[];
@@ -68,8 +70,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   // GitHub Sync State
   const [githubToken, setGithubToken] = useState('');
   const [githubRepoName, setGithubRepoName] = useState('MartiaPlanner');
+  const [githubVersion, setGithubVersion] = useState(APP_VERSION);
   const [githubCommitMsg, setGithubCommitMsg] = useState(
-    'feat: complete MartiaPlanner app (Tauri 2 + React + SQLite)'
+    `release(v${APP_VERSION}): fix mobile bottom nav safe-area & vibrant student UI`
   );
   const [githubIsPrivate, setGithubIsPrivate] = useState(false);
   const [githubStatus, setGithubStatus] = useState<{
@@ -81,6 +84,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [pushLoading, setPushLoading] = useState(false);
   const [pushResult, setPushResult] = useState<{
     repoUrl: string;
+    version: string;
+    releaseTag: string;
     filesCount: number;
     commitSha: string;
     branch: string;
@@ -222,6 +227,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       const res = await api.pushToGitHub({
         token: githubToken.trim() || undefined,
         repoName: githubRepoName.trim() || 'MartiaPlanner',
+        version: githubVersion.trim() || APP_VERSION,
         commitMessage: githubCommitMsg.trim(),
         isPrivate: githubIsPrivate,
       });
@@ -266,8 +272,12 @@ git push -u origin main`;
             تنظیمات سامانه، دیتابیس و اتصال به گیت‌هاب
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            مدیریت اطلاعات پایه، پشتیبان‌گیری دیتابیس SQLite، خروجی ویندوز/اندروید Tauri 2 و پوش مستقیم به مخزن MartiaPlanner
+            مدیریت اطلاعات پایه، پشتیبان‌گیری دیتابیس SQLite، نسخه‌بندی و پوش مستقیم به مخزن MartiaPlanner
           </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
+          <Tag className="w-4 h-4" />
+          <span>نسخه فعلی سامانه: {toPersianDigits(APP_VERSION)} ({APP_RELEASE_TAG})</span>
         </div>
       </div>
 
@@ -364,7 +374,7 @@ git push -u origin main`;
                   </span>
                 </div>
                 <p className="text-xs text-emerald-700 dark:text-emerald-400 tabular-nums">
-                  تعداد فایل‌های ارسالی: {toPersianDigits(pushResult.filesCount)} فایل · شاخه:{' '}
+                  نسخه منتشرشده: {pushResult.releaseTag} · تعداد فایل‌ها: {toPersianDigits(pushResult.filesCount)} فایل · شاخه:{' '}
                   {pushResult.branch} · کد کامیت: {pushResult.commitSha.slice(0, 7)}
                 </p>
                 <a
@@ -403,14 +413,14 @@ git push -u origin main`;
                   <span className="font-mono text-slate-700 dark:text-slate-300">
                     Settings → Developer settings → Personal access tokens → Tokens (classic)
                   </span>{' '}
-                  بروید، یک توکن جدید با تیک دسترسی <strong>repo</strong> بسازید و اینجا قرار دهید. (اگر مخزن MartiaPlanner هنوز در اکانت شما وجود نداشته باشد، سیستم به‌صورت خودکار آن را می‌سازد!)
+                  بروید، یک توکن جدید با تیک دسترسی <strong>repo</strong> و <strong>workflow</strong> بسازید و اینجا قرار دهید.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    ۲. نام مخزن (Repository Name)
+                    ۲. نام مخزن (Repository)
                   </label>
                   <input
                     type="text"
@@ -425,7 +435,22 @@ git push -u origin main`;
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    ۳. نوع مخزن (در صورت ساخت جدید)
+                    ۳. شماره نسخه (Version)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={githubVersion}
+                    onChange={(e) => setGithubVersion(e.target.value)}
+                    placeholder="1.1.0"
+                    className="w-full rounded-xl border border-indigo-300 dark:border-indigo-700 bg-indigo-50/40 dark:bg-indigo-950/30 px-3.5 py-2.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 font-mono"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    ۴. نوع مخزن
                   </label>
                   <select
                     value={githubIsPrivate ? 'private' : 'public'}
@@ -440,7 +465,7 @@ git push -u origin main`;
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  ۴. پیام کامیت (Commit Message)
+                  ۵. پیام کامیت (Commit Message)
                 </label>
                 <input
                   type="text"
@@ -459,11 +484,41 @@ git push -u origin main`;
                 <Github className="w-4 h-4" />
                 <span>
                   {pushLoading
-                    ? 'در حال ارسال فایل‌ها و ثبت کامیت در GitHub...'
-                    : 'اتصال و Push کل پروژه به مخزن MartiaPlanner'}
+                    ? `در حال ارسال و ثبت نسخه v${githubVersion} در GitHub...`
+                    : `ثبت نسخه v${githubVersion} و Push به مخزن MartiaPlanner`}
                 </span>
               </button>
             </form>
+
+            {/* Release History Card */}
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                <span>تاریخچه نسخه‌های برنامه (Release Notes)</span>
+              </div>
+              <div className="space-y-2.5">
+                {RELEASE_HISTORY.map((rel) => (
+                  <div
+                    key={rel.tag}
+                    className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 p-3 text-xs space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 dark:text-white">
+                        {rel.title}
+                      </span>
+                      <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                        {rel.tag}
+                      </span>
+                    </div>
+                    <ul className="list-disc list-inside text-[11px] text-slate-600 dark:text-slate-400 space-y-1 leading-relaxed">
+                      {rel.changes.map((c, idx) => (
+                        <li key={idx}>{c}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Right Column: Terminal Git Commands & Tauri 2 Windows/Android Guide */}

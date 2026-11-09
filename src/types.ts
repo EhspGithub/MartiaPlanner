@@ -85,6 +85,7 @@ export interface DailyPlanItem {
   priority_rank?: number;
   initial_predicted_minutes: number; // Immutable after first performance log!
   predicted_minutes: number; // Current predicted duration in minutes
+  reminder_time?: string | null; // Optional HH:MM reminder time (e.g., "16:30")
   description: string;
   status: PlanStatus; // 'pending' | 'partial' | 'completed'
   custom_sort_order: number;
@@ -130,6 +131,24 @@ export interface DashboardMetrics {
   }>;
 }
 
+export interface CustomNumericGoal {
+  id: string;
+  title: string; // e.g., "حفظ لغت زبان انگلیسی" or "حل معادله ریاضی"
+  unitLabel: string; // e.g., "لغت" or "تست" or "صفحه"
+  targetValue: number;
+  currentValue: number;
+  color: 'indigo' | 'emerald' | 'blue' | 'amber' | 'rose' | 'purple';
+}
+
+export interface DailyStudyGoalConfig {
+  goal_date: string; // YYYY-MM-DD
+  target_study_minutes: number; // e.g., 210 (3.5 hours)
+  target_exercises_count: number; // e.g., 50 exercises/tests
+  target_completed_tasks: number; // e.g., 3 completed study tasks
+  custom_goals: CustomNumericGoal[];
+  updated_at: string;
+}
+
 export interface AppBootstrapData {
   categories: ActivityCategory[];
   studyTypes: StudyActivityType[];
@@ -141,3 +160,4 @@ export interface AppBootstrapData {
     version: string;
   };
 }
+
