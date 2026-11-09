@@ -128,9 +128,7 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
 
     if (!createRes.ok) {
       throw new Error(
-        `مخزن ${owner}/${repo} یافت نشد و امکان ساخت خودکار آن نبود: ${
-          createRes.data?.message || createRes.status
-        }`
+        `توکن گیت‌هاب شما فاقد دسترسی «repo» است (خطای ${createRes.status}). لطفاً در تنظیمات توکن گیت‌هاب، تیک گزینه «repo» (Full control of private repositories) را فعال کنید.`
       );
     }
     createdNewRepo = true;
