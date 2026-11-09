@@ -8,7 +8,7 @@ import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { db, initDatabase, DB_FILE_PATH } from './src/server/db.ts';
-import { pushWorkspaceToGitHub } from './src/server/githubSync.ts';
+import { syncLocalGitAndPushToGitHub } from './src/server/gitLocalRunner.ts';
 import {
   getTodayISO,
   addDaysISO,
@@ -1056,7 +1056,7 @@ app.post('/api/github/push', async (req, res) => {
       });
     }
 
-    const result = await pushWorkspaceToGitHub({
+    const result = await syncLocalGitAndPushToGitHub({
       token: finalToken,
       repoName: String(repoName || 'MartiaPlanner').trim(),
       commitMessage:
