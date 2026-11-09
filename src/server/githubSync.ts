@@ -236,8 +236,8 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
     }
   }
 
-  // 5. Create Tree
-  const treeRes = await githubFetch(
+  // 5. Create Tree (if token lacks `workflow` scope, GitHub returns 404/403 when .github/workflows/* is included; retry without .github/workflows)
+  let treeRes = await githubFetch(
     `https://api.github.com/repos/${owner}/${repo}/git/trees`,
     token,
     {
@@ -249,6 +249,22 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
       }),
     }
   );
+
+  if (!treeRes.ok) {
+    const nonWorkflowItems = treeItems.filter((item) => !item.path.startsWith('.github/workflows/'));
+    treeRes = await githubFetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/trees`,
+      token,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          base_tree: latestCommitSha,
+          tree: nonWorkflowItems,
+        }),
+      }
+    );
+  }
 
   if (!treeRes.ok) {
     throw new Error(`خطا در ساخت درخت فایل‌ها در گیت‌هاب: ${treeRes.data?.message || treeRes.status}`);
