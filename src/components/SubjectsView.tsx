@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   BookOpen,
   Plus,
@@ -17,6 +17,10 @@ import {
   Cpu,
   HeartHandshake,
   Sparkles,
+  Search,
+  SearchX,
+  Settings2,
+  Filter,
 } from 'lucide-react';
 import type { Subject, SubjectUnit } from '../types.ts';
 import { api } from '../services/api.ts';
@@ -29,6 +33,41 @@ interface SubjectsViewProps {
 
 const GRADE_OPTIONS = ['هفتم', 'هشتم', 'نهم'];
 const UNIT_TYPE_OPTIONS = ['درس', 'فصل', 'پودمان', 'بخش'];
+
+function normalizePersianText(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/[\u064B-\u065F\u0670]/g, '') // remove Arabic diacritics
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/ۀ|ة/g, 'ه')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '') // zero-width chars
+    .trim()
+    .toLowerCase();
+}
+
+function HighlightMatch({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <>{text}</>;
+  const normQuery = normalizePersianText(query);
+  const normText = normalizePersianText(text);
+
+  const idx = normText.indexOf(normQuery);
+  if (idx === -1) return <>{text}</>;
+
+  const before = text.slice(0, idx);
+  const match = text.slice(idx, idx + query.trim().length);
+  const after = text.slice(idx + query.trim().length);
+
+  return (
+    <>
+      {before}
+      <mark className="bg-amber-200 dark:bg-amber-900/70 text-amber-950 dark:text-amber-100 rounded px-1 py-0.5 font-black">
+        {match}
+      </mark>
+      {after}
+    </>
+  );
+}
 
 function getTextbookVisual(name: string) {
   if (name.includes('ریاضی')) {
@@ -87,6 +126,85 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
     subjects[0]?.id || ''
   );
 
+  // Quick Search & Filter State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [gradeFilter, setGradeFilter] = useState<'all' | string>('all');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Keyboard shortcut: Ctrl+K or / to quickly focus search input, Esc to clear
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      } else if (
+        e.key === '/' &&
+        document.activeElement?.tagName !== 'INPUT' &&
+        document.activeElement?.tagName !== 'TEXTAREA'
+      ) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      } else if (e.key === 'Escape' && document.activeElement === searchInputRef.current) {
+        setSearchQuery('');
+        searchInputRef.current?.blur();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Filtered Subjects Logic (searches name, grade level, and all internal chapters/units)
+  const filteredSubjects = useMemo(() => {
+    const normQuery = normalizePersianText(searchQuery);
+
+    return subjects.filter((subj) => {
+      // Grade filter check
+      if (gradeFilter !== 'all' && subj.grade_level !== gradeFilter) {
+        return false;
+      }
+
+      // If no search query, match all in this grade
+      if (!normQuery) return true;
+
+      // Match subject name
+      if (normalizePersianText(subj.name).includes(normQuery)) {
+        return true;
+      }
+
+      // Match grade level (e.g. searching "هشتم")
+      if (normalizePersianText(subj.grade_level).includes(normQuery)) {
+        return true;
+      }
+
+      // Match unit type label (e.g. "پودمان" or "فصل")
+      if (normalizePersianText(subj.unit_type_label).includes(normQuery)) {
+        return true;
+      }
+
+      // Match any chapter / unit title inside this subject!
+      const hasMatchingUnit = subj.units.some((u) =>
+        normalizePersianText(u.title).includes(normQuery)
+      );
+
+      return hasMatchingUnit;
+    });
+  }, [subjects, searchQuery, gradeFilter]);
+
+  // Auto-sync selected subject when filtering so active details pane immediately updates
+  useEffect(() => {
+    if (filteredSubjects.length > 0) {
+      const isCurrentInFiltered = filteredSubjects.some(
+        (s) => s.id === selectedSubjectId
+      );
+      if (!isCurrentInFiltered) {
+        setSelectedSubjectId(filteredSubjects[0].id);
+      }
+    }
+  }, [filteredSubjects, selectedSubjectId]);
+
   // New Subject Form State
   const [showAddSubjectModal, setShowAddSubjectModal] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
@@ -115,6 +233,14 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
 
   const activeSubject =
     subjects.find((s) => s.id === selectedSubjectId) || subjects[0] || null;
+
+  const handleStartEditingSubject = (subj: Subject) => {
+    setEditingSubjectId(subj.id);
+    setEditSubjectName(subj.name);
+    setEditSubjectGrade(subj.grade_level);
+    setEditSubjectUnitType(subj.unit_type_label);
+    setSelectedSubjectId(subj.id);
+  };
 
   const handleCreateSubject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -253,7 +379,7 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
           <button
             type="button"
             onClick={() => {
-              setNewSubjectName('');
+              setNewSubjectName(searchQuery.trim());
               setNewSubjectUnitType('درس');
               setNewSubjectInitialUnits('درس اول\nدرس دوم\nدرس سوم\nدرس چهارم');
               setSubjectError(null);
@@ -269,132 +395,294 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
 
       {/* Main 2-Column Split: Subjects List (Right) + Active Subject Units (Left) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Right Column: Subjects List */}
+        {/* Right Column: Subjects List with Quick Search */}
         <div className="lg:col-span-5 rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+          {/* Card Header & Counter */}
           <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
             <h2 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <span>کتاب‌های درسی من ({toPersianDigits(subjects.length)})</span>
+              <span>کتاب‌های درسی من</span>
             </h2>
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 tabular-nums">
+              {toPersianDigits(filteredSubjects.length)} از {toPersianDigits(subjects.length)} کتاب
+            </span>
           </div>
 
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {subjects.map((subj) => {
-              const isSelected = activeSubject?.id === subj.id;
-              const isEditing = editingSubjectId === subj.id;
-              const visual = getTextbookVisual(subj.name);
-              const SubjIcon = visual.icon;
+          {/* Quick Search Input Section */}
+          <div className="p-3 bg-slate-50/70 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 space-y-2.5">
+            <div className="relative flex items-center">
+              <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute right-3 pointer-events-none" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="جستجوی سریع درس یا فصل... (Ctrl+K یا /)"
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 pr-9.5 pl-20 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-indigo-600 dark:focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+              />
 
-              return (
-                <div
-                  key={subj.id}
-                  onClick={() => !isEditing && setSelectedSubjectId(subj.id)}
-                  className={`p-4 transition-colors cursor-pointer ${
-                    isSelected
-                      ? 'bg-indigo-50/80 dark:bg-indigo-950/40'
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                  }`}
-                >
-                  {isEditing ? (
-                    <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="text"
-                        value={editSubjectName}
-                        onChange={(e) => setEditSubjectName(e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-900 dark:text-white"
-                        placeholder="نام درس"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          value={editSubjectGrade}
-                          onChange={(e) => setEditSubjectGrade(e.target.value)}
-                          className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-900 dark:text-white"
-                        >
-                          {GRADE_OPTIONS.map((g) => (
-                            <option key={g} value={g}>
-                              پایه {g}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          value={editSubjectUnitType}
-                          onChange={(e) => setEditSubjectUnitType(e.target.value)}
-                          className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-900 dark:text-white"
-                        >
-                          {UNIT_TYPE_OPTIONS.map((ut) => (
-                            <option key={ut} value={ut}>
-                              ساختار: {ut}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setEditingSubjectId(null)}
-                          className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300"
-                        >
-                          انصراف
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSaveSubjectEdit(subj.id)}
-                          className="px-3 py-1.5 rounded-lg bg-indigo-600 text-xs font-semibold text-white"
-                        >
-                          ذخیره
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${visual.iconBg}`}
-                        >
-                          <SubjIcon className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-bold text-slate-900 dark:text-white">
-                            {subj.name}
-                          </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
-                            پایه {subj.grade_level} · ساختار بر اساس «{subj.unit_type_label}» ·{' '}
-                            {toPersianDigits(subj.units.length)} {subj.unit_type_label}
-                          </div>
-                        </div>
-                      </div>
+              <div className="absolute left-2.5 flex items-center gap-1">
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      searchInputRef.current?.focus();
+                    }}
+                    className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    title="پاک کردن جستجو (Esc)"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                    /
+                  </kbd>
+                )}
+              </div>
+            </div>
 
-                      <div
-                        className="flex items-center gap-1"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingSubjectId(subj.id);
-                            setEditSubjectName(subj.name);
-                            setEditSubjectGrade(subj.grade_level);
-                            setEditSubjectUnitType(subj.unit_type_label);
-                          }}
-                          className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
-                          title="ویرایش درس"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeletingSubject(subj)}
-                          className="p-2 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
-                          title="حذف درس"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
+            {/* Grade Quick Filter Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+              <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 flex items-center gap-1 pl-1 shrink-0">
+                <Filter className="w-3 h-3" />
+                <span>پایه:</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setGradeFilter('all')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  gradeFilter === 'all'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                همه ({toPersianDigits(subjects.length)})
+              </button>
+              {GRADE_OPTIONS.map((grade) => {
+                const count = subjects.filter((s) => s.grade_level === grade).length;
+                return (
+                  <button
+                    key={grade}
+                    type="button"
+                    onClick={() => setGradeFilter(grade)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                      gradeFilter === grade
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    پایه {grade} ({toPersianDigits(count)})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Subjects List */}
+          <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[640px] overflow-y-auto">
+            {filteredSubjects.length === 0 ? (
+              <div className="p-8 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center">
+                  <SearchX className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    کتاب یا فصلی با عبارت «{searchQuery}» پیدا نشد
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    می‌توانید جستجو را پاک کنید یا این درس جدید را مستقیماً اضافه کنید.
+                  </p>
+                </div>
+                <div className="flex items-center justify-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setGradeFilter('all');
+                      searchInputRef.current?.focus();
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    پاک کردن فیلترها
+                  </button>
+                  {searchQuery.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewSubjectName(searchQuery.trim());
+                        setNewSubjectGrade(gradeFilter !== 'all' ? gradeFilter : 'هشتم');
+                        setNewSubjectUnitType('درس');
+                        setNewSubjectInitialUnits('درس اول\nدرس دوم\nدرس سوم\nدرس چهارم');
+                        setSubjectError(null);
+                        setShowAddSubjectModal(true);
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-indigo-600 text-xs font-bold text-white hover:bg-indigo-700 transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>افزودن «{searchQuery.trim()}»</span>
+                    </button>
                   )}
                 </div>
-              );
-            })}
+              </div>
+            ) : (
+              filteredSubjects.map((subj) => {
+                const isSelected = activeSubject?.id === subj.id;
+                const isEditing = editingSubjectId === subj.id;
+                const visual = getTextbookVisual(subj.name);
+                const SubjIcon = visual.icon;
+
+                // Check if search matched any internal units
+                const matchingUnits = searchQuery.trim()
+                  ? subj.units.filter((u) =>
+                      normalizePersianText(u.title).includes(
+                        normalizePersianText(searchQuery)
+                      )
+                    )
+                  : [];
+
+                return (
+                  <div
+                    key={subj.id}
+                    onClick={() => !isEditing && setSelectedSubjectId(subj.id)}
+                    className={`p-4 transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-50/90 dark:bg-indigo-950/50 border-r-4 border-indigo-600 dark:border-indigo-400'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                    }`}
+                  >
+                    {isEditing ? (
+                      <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-1">
+                          <Settings2 className="w-3.5 h-3.5" />
+                          <span>ویرایش تنظیمات درس</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={editSubjectName}
+                          onChange={(e) => setEditSubjectName(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-900 dark:text-white"
+                          placeholder="نام درس"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={editSubjectGrade}
+                            onChange={(e) => setEditSubjectGrade(e.target.value)}
+                            className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-900 dark:text-white"
+                          >
+                            {GRADE_OPTIONS.map((g) => (
+                              <option key={g} value={g}>
+                                پایه {g}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={editSubjectUnitType}
+                            onChange={(e) => setEditSubjectUnitType(e.target.value)}
+                            className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-900 dark:text-white"
+                          >
+                            {UNIT_TYPE_OPTIONS.map((ut) => (
+                              <option key={ut} value={ut}>
+                                ساختار: {ut}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditingSubjectId(null)}
+                            className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300"
+                          >
+                            انصراف
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveSubjectEdit(subj.id)}
+                            className="px-3 py-1.5 rounded-lg bg-indigo-600 text-xs font-semibold text-white"
+                          >
+                            ذخیره
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${visual.iconBg}`}
+                            >
+                              <SubjIcon className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                                <HighlightMatch text={subj.name} query={searchQuery} />
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums flex items-center gap-1.5 flex-wrap">
+                                <span className="inline-block px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                                  پایه {subj.grade_level}
+                                </span>
+                                <span>·</span>
+                                <span>{subj.unit_type_label}</span>
+                                <span>·</span>
+                                <span>
+                                  {toPersianDigits(subj.units.length)} {subj.unit_type_label}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div
+                            className="flex items-center gap-1 shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditingSubject(subj)}
+                              className="p-2 rounded-xl text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              title="ویرایش و تنظیمات درس"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingSubject(subj)}
+                              className="p-2 rounded-xl text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                              title="حذف درس"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* If matched by internal unit/chapter, display quick indicator */}
+                        {matchingUnits.length > 0 && (
+                          <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-1.5 flex-wrap text-[11px]">
+                            <span className="text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-1">
+                              <Layers className="w-3 h-3" />
+                              <span>فصل‌های منطبق:</span>
+                            </span>
+                            {matchingUnits.slice(0, 3).map((mu) => (
+                              <span
+                                key={mu.id}
+                                className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/60 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-300 font-medium"
+                              >
+                                <HighlightMatch text={mu.title} query={searchQuery} />
+                              </span>
+                            ))}
+                            {matchingUnits.length > 3 && (
+                              <span className="text-slate-400 text-[10px]">
+                                +{toPersianDigits(matchingUnits.length - 3)} فصل دیگر
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -402,18 +690,32 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
         <div className="lg:col-span-7 rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
           {activeSubject ? (
             <>
-              <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div>
-                  <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2 truncate">
+                    <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                     <span>
-                      ساختار آموزشی کتاب «{activeSubject.name}» ({toPersianDigits(activeSubject.units.length)}{' '}
-                      {activeSubject.unit_type_label})
+                      ساختار آموزشی کتاب «{activeSubject.name}»
+                    </span>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 tabular-nums shrink-0">
+                      پایه {activeSubject.grade_level} · {toPersianDigits(activeSubject.units.length)} {activeSubject.unit_type_label}
                     </span>
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    عناوین این بخش مستقیماً در فیلد «فصل / درس» فرم برنامه‌ریزی نمایش داده می‌شوند.
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    عناوین این بخش مستقیماً در فیلد «فصل / درس» فرم برنامه‌ریزی روزانه نمایش داده می‌شوند.
                   </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleStartEditingSubject(activeSubject)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                    title="تغییر نام، پایه تحصیلی یا واحد تقسیم‌بندی این کتاب"
+                  >
+                    <Settings2 className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>تنظیمات کتاب</span>
+                  </button>
                 </div>
               </div>
 
@@ -448,13 +750,29 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                 <div className="divide-y divide-slate-100 dark:divide-slate-800">
                   {activeSubject.units.map((unit, idx) => {
                     const isEditingUnit = editingUnitId === unit.id;
+                    const isMatchingUnit =
+                      Boolean(searchQuery.trim()) &&
+                      normalizePersianText(unit.title).includes(
+                        normalizePersianText(searchQuery)
+                      );
+
                     return (
                       <div
                         key={unit.id}
-                        className="px-6 py-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
+                        className={`px-6 py-3.5 flex items-center justify-between gap-3 transition-colors ${
+                          isMatchingUnit
+                            ? 'bg-amber-50/80 dark:bg-amber-950/30 border-r-3 border-amber-500'
+                            : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/30'
+                        }`}
                       >
-                        <div className="flex items-center gap-3 flex-1">
-                          <span className="w-7 h-7 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-xs font-black flex items-center justify-center tabular-nums shrink-0">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <span
+                            className={`w-7 h-7 rounded-xl text-xs font-black flex items-center justify-center tabular-nums shrink-0 ${
+                              isMatchingUnit
+                                ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300'
+                                : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
+                            }`}
+                          >
                             {toPersianDigits(idx + 1)}
                           </span>
 
@@ -484,9 +802,16 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                               </button>
                             </div>
                           ) : (
-                            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                              {unit.title}
-                            </span>
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                                <HighlightMatch text={unit.title} query={searchQuery} />
+                              </span>
+                              {isMatchingUnit && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border border-amber-300/60 dark:border-amber-700/60">
+                                  منطبق با جستجو
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
 
