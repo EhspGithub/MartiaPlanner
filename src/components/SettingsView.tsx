@@ -17,6 +17,7 @@ import {
   Smartphone,
   Monitor,
   Tag,
+  Bell,
 } from 'lucide-react';
 import type {
   ActivityCategory,
@@ -27,6 +28,11 @@ import type {
 import { api } from '../services/api.ts';
 import { toPersianDigits } from '../utils/jalali.ts';
 import { APP_VERSION, APP_RELEASE_TAG, RELEASE_HISTORY } from '../version.ts';
+import {
+  getSmartReminderEnabled,
+  setSmartReminderEnabled,
+  SMART_REMINDER_EVENT_NAME,
+} from './StudyReminderManager.tsx';
 
 interface SettingsViewProps {
   categories: ActivityCategory[];
@@ -50,6 +56,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<
     'github' | 'categories' | 'studyTypes' | 'priorities' | 'backup'
   >('github');
+
+  // Smart Study Reminder visibility setting (Section 1)
+  const [smartReminderEnabledState, setSmartReminderEnabledState] = useState<boolean>(() =>
+    getSmartReminderEnabled()
+  );
+
+  useEffect(() => {
+    const syncHandler = () => {
+      setSmartReminderEnabledState(getSmartReminderEnabled());
+    };
+    window.addEventListener(SMART_REMINDER_EVENT_NAME, syncHandler);
+    return () => window.removeEventListener(SMART_REMINDER_EVENT_NAME, syncHandler);
+  }, []);
+
+  const handleToggleSmartReminder = () => {
+    const next = !smartReminderEnabledState;
+    setSmartReminderEnabledState(next);
+    setSmartReminderEnabled(next);
+  };
 
   // Category CRUD state
   const [newCategoryTitle, setNewCategoryTitle] = useState('');
@@ -293,6 +318,44 @@ git push -u origin main`;
           <Tag className="w-4 h-4" />
           <span>نسخه فعلی سامانه: {toPersianDigits(APP_VERSION)} ({APP_RELEASE_TAG})</span>
         </div>
+      </div>
+
+      {/* Section 1: Persistent Toggle for Smart Study Reminder in Planner Menu */}
+      <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/60 bg-gradient-to-l from-indigo-50/70 via-white to-slate-50 dark:from-indigo-950/30 dark:via-slate-900 dark:to-slate-900 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-xs">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-indigo-600/25">
+            <Bell className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-sm font-extrabold text-slate-900 dark:text-white">
+              نمایش بخش «یادآور هوشمند زمان مطالعه» در منوی برنامه‌ریزی
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+              با غیرفعال کردن این گزینه، آکاردئون یادآور هوشمند از صفحه برنامه‌ریزی پنهان می‌شود اما هیچ‌یک از تنظیمات یا ساعت‌های یادآوری ذخیره‌شده حذف نخواهند شد.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          role="switch"
+          aria-checked={smartReminderEnabledState}
+          onClick={handleToggleSmartReminder}
+          className={`inline-flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-xs font-extrabold border transition-all cursor-pointer shrink-0 min-h-[42px] ${
+            smartReminderEnabledState
+              ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300'
+              : 'border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+          }`}
+        >
+          <span
+            className={`w-2.5 h-2.5 rounded-full ${
+              smartReminderEnabledState ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+            }`}
+          />
+          <span>
+            {smartReminderEnabledState ? 'وضعیت: فعال (در حال نمایش)' : 'وضعیت: غیرفعال (پنهان در برنامه‌ریزی)'}
+          </span>
+        </button>
       </div>
 
       {/* Sub-navigation Tabs */}

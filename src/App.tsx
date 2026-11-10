@@ -11,6 +11,7 @@ import {
   Settings,
   Sun,
   Moon,
+  Calculator,
 } from 'lucide-react';
 import type { AppBootstrapData } from './types.ts';
 import { api } from './services/api.ts';
@@ -20,9 +21,10 @@ import { DashboardView } from './components/DashboardView.tsx';
 import { PlannerView } from './components/PlannerView.tsx';
 import { SubjectsView } from './components/SubjectsView.tsx';
 import { SettingsView } from './components/SettingsView.tsx';
+import { MetricsDefinitionsView } from './components/MetricsDefinitionsView.tsx';
 import { PWAInstallButton } from './components/PWAInstallButton.tsx';
 
-type ActiveMenu = 'dashboard' | 'planner' | 'subjects' | 'settings';
+type ActiveMenu = 'dashboard' | 'planner' | 'subjects' | 'definitions' | 'settings';
 
 export default function App() {
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>('planner');
@@ -65,10 +67,10 @@ export default function App() {
       {/* =====================================================================
           STRICT 3-ZONE TOP BAR CONTRACT
           Zone 1: Single text element wordmark
-          Zone 2: 4 concise single-line text navigation links
+          Zone 2: Concise single-line text navigation links
           Zone 3: Primary action / theme control
       ===================================================================== */}
-      <header className="mobile-safe-header sticky top-0 z-30 flex items-center justify-between gap-8 px-4 sm:px-8 h-16 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
+      <header className="mobile-safe-header sticky top-0 z-30 flex items-center justify-between gap-6 px-4 sm:px-8 h-16 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
         {/* Zone 1: Single text element wordmark with visible version badge */}
         <div className="flex items-center gap-2 shrink-0">
           <a
@@ -87,8 +89,8 @@ export default function App() {
           </span>
         </div>
 
-        {/* Zone 2: 4 clean single-line text navigation links */}
-        <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-600 dark:text-slate-300">
+        {/* Zone 2: Clean single-line text navigation links */}
+        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600 dark:text-slate-300">
           <button
             type="button"
             onClick={() => setActiveMenu('dashboard')}
@@ -121,6 +123,17 @@ export default function App() {
             }`}
           >
             تعریف درس‌ها
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveMenu('definitions')}
+            className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              activeMenu === 'definitions'
+                ? 'text-indigo-600 dark:text-indigo-400 font-bold underline underline-offset-8 decoration-2'
+                : 'hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            تعاریف شاخص‌ها
           </button>
           <button
             type="button"
@@ -191,6 +204,7 @@ export default function App() {
                 priorities={bootstrapData.priorities}
                 subjects={bootstrapData.subjects}
                 onDataMutated={loadBootstrap}
+                onNavigateToDefinitions={() => setActiveMenu('definitions')}
               />
             )}
 
@@ -200,6 +214,8 @@ export default function App() {
                 onRefreshBootstrap={loadBootstrap}
               />
             )}
+
+            {activeMenu === 'definitions' && <MetricsDefinitionsView />}
 
             {activeMenu === 'settings' && (
               <SettingsView
@@ -216,13 +232,13 @@ export default function App() {
       {/* =====================================================================
           MOBILE LIFTED BOTTOM TAB DOCK
           Positioned with `.mobile-bottom-nav-shell` (54px + safe-area-inset-bottom)
-          so the 4 tabs always sit completely ABOVE Android's system navigation
+          so the 5 tabs always sit completely ABOVE Android's system navigation
           buttons (Back / Home / Recents) and gesture bar.
       ===================================================================== */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 pointer-events-none mobile-bottom-nav-shell bg-gradient-to-t from-slate-950/20 via-slate-950/5 to-transparent dark:from-black/60 dark:via-black/20 px-3 pt-2">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 pointer-events-none mobile-bottom-nav-shell bg-gradient-to-t from-slate-950/20 via-slate-950/5 to-transparent dark:from-black/60 dark:via-black/20 px-2.5 pt-2">
         <nav
           aria-label="ناوبری پایین صفحه موبایل"
-          className="pointer-events-auto mx-auto max-w-md rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-700/90 shadow-xl shadow-indigo-950/15 grid grid-cols-4 items-center h-16 p-1"
+          className="pointer-events-auto mx-auto max-w-md rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-700/90 shadow-xl shadow-indigo-950/15 grid grid-cols-5 items-center h-16 p-1"
         >
           <button
             type="button"
@@ -233,8 +249,8 @@ export default function App() {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <LayoutDashboard className="w-5 h-5" />
-            <span className="text-[11px] mt-1 whitespace-nowrap">داشبورد</span>
+            <LayoutDashboard className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="text-[10px] mt-1 whitespace-nowrap">داشبورد</span>
           </button>
 
           <button
@@ -246,8 +262,8 @@ export default function App() {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <CalendarCheck2 className="w-5 h-5" />
-            <span className="text-[11px] mt-1 whitespace-nowrap">برنامه‌ریزی</span>
+            <CalendarCheck2 className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="text-[10px] mt-1 whitespace-nowrap">برنامه‌ریزی</span>
           </button>
 
           <button
@@ -259,8 +275,21 @@ export default function App() {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <BookOpen className="w-5 h-5" />
-            <span className="text-[11px] mt-1 whitespace-nowrap">تعریف درس‌ها</span>
+            <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="text-[10px] mt-1 whitespace-nowrap">درس‌ها</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveMenu('definitions')}
+            className={`flex flex-col items-center justify-center h-full rounded-xl transition-all cursor-pointer ${
+              activeMenu === 'definitions'
+                ? 'bg-indigo-600 text-white font-bold shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Calculator className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="text-[10px] mt-1 whitespace-nowrap">تعاریف شاخص‌ها</span>
           </button>
 
           <button
@@ -272,8 +301,8 @@ export default function App() {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Settings className="w-5 h-5" />
-            <span className="text-[11px] mt-1 whitespace-nowrap">تنظیمات</span>
+            <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="text-[10px] mt-1 whitespace-nowrap">تنظیمات</span>
           </button>
         </nav>
       </div>

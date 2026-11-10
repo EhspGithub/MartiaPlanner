@@ -641,24 +641,26 @@ export function calculateRestrictedControlIndexC(
 
 /**
  * Section 8: محاسبه امتیاز نهایی روزانه
- * S = (E × 0.8) + (C × 0.2)
- * - If E is null -> S is null (do not display final score if educational score is not calculable).
+ * D (یا S) = (E × 0.8) + (C × 0.2)
+ * - If both E and C are null -> returns null («داده کافی وجود ندارد»).
  * - If C is null -> S = E (normalized automatically).
+ * - If E is null -> S = C (normalized automatically).
  */
 export function calculateFinalDailyScoreS(
   E: number | null,
   C: number | null,
   weights: AnalyticsWeightsConfig = DEFAULT_ANALYTICS_WEIGHTS
 ): number | null {
-  if (E === null) return null;
-  if (C === null) return Math.round(E);
+  if (E === null && C === null) return null;
+  if (E !== null && C === null) return Math.round(E);
+  if (E === null && C !== null) return Math.round(C);
 
   const wE = weights.educationalCompositeWeight;
   const wC = weights.restrictedControlWeight;
   const totalW = wE + wC;
-  if (totalW <= 0) return Math.round(E);
+  if (totalW <= 0) return Math.round(E!);
 
-  return Math.min(100, Math.max(0, Math.round((E * wE + C * wC) / totalW)));
+  return Math.min(100, Math.max(0, Math.round((E! * wE + C! * wC) / totalW)));
 }
 
 // ============================================================================

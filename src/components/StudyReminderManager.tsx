@@ -10,6 +10,7 @@ import {
   AlarmClock,
   X,
   Sparkles,
+  ChevronDown,
 } from 'lucide-react';
 import type { DailyPlanItem } from '../types.ts';
 import { getTodayISO, toPersianDigits, formatMinutesPersian } from '../utils/jalali.ts';
@@ -22,6 +23,31 @@ interface StudyReminderManagerProps {
 
 const TRIGGERED_STORAGE_KEY = 'martia_planner_triggered_reminders_v1';
 const SOUND_ENABLED_KEY = 'martia_planner_reminder_sound_v1';
+export const SMART_REMINDER_ENABLED_KEY = 'martia_planner_smart_reminder_enabled_v1';
+export const SMART_REMINDER_EVENT_NAME = 'martia-smart-reminder-setting-changed';
+
+export function getSmartReminderEnabled(): boolean {
+  try {
+    const val = localStorage.getItem(SMART_REMINDER_ENABLED_KEY);
+    if (val === null) return true;
+    return val !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+export function setSmartReminderEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem(SMART_REMINDER_ENABLED_KEY, String(enabled));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent(SMART_REMINDER_EVENT_NAME, { detail: { enabled } })
+      );
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
 
 function getCurrentHHMM(): string {
   const now = new Date();
@@ -42,7 +68,9 @@ function addMinutesToHHMM(hhmm: string, addMins: number): string {
 
 function playStudyReminderChime() {
   try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
     const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6 pleasant chime
@@ -73,6 +101,7 @@ export const StudyReminderManager: React.FC<StudyReminderManagerProps> = ({
   onOpenPlan,
 }) => {
   const todayIso = getTodayISO();
+  const [isAccordionOpen, setIsAccordionOpen] = useState<boolean>(false);
   const [currentClock, setCurrentClock] = useState<string>(getCurrentHHMM());
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     try {
@@ -162,7 +191,7 @@ export const StudyReminderManager: React.FC<StudyReminderManagerProps> = ({
     [soundEnabled]
   );
 
-  // Check every 15 seconds if any of today's incomplete plans match the current HH:MM
+  // Check every 12 seconds if any of today's incomplete plans match the current HH:MM
   useEffect(() => {
     const checkReminders = () => {
       const hhmm = getCurrentHHMM();
@@ -301,7 +330,10 @@ export const StudyReminderManager: React.FC<StudyReminderManagerProps> = ({
                         {isStudy && alertPlan.unit_title_snapshot
                           ? `${alertPlan.unit_title_snapshot} · ${alertPlan.study_type_title_snapshot || ''} · `
                           : ''}
-                        هدف زمانی: {formatMinutesPersian(alertPlan.initial_predicted_minutes || alertPlan.predicted_minutes)}
+                        هدف زمانی:{' '}
+                        {formatMinutesPersian(
+                          alertPlan.initial_predicted_minutes || alertPlan.predicted_minutes
+                        )}
                       </p>
                     </div>
                   </div>
@@ -355,32 +387,64 @@ export const StudyReminderManager: React.FC<StudyReminderManagerProps> = ({
       )}
 
       {/* =====================================================================
-          STUDY REMINDER STATUS & CONTROL STRIP IN PLANNER VIEW
+          SECTION 1: COLLAPSIBLE ACCORDION FOR SMART STUDY REMINDER
       ===================================================================== */}
-      <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/60 bg-gradient-to-l from-indigo-50/90 via-white to-amber-50/50 dark:from-indigo-950/35 dark:via-slate-900 dark:to-slate-900 px-4 sm:px-5 py-3.5 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-          {/* Right Side: Summary of Scheduled Reminders */}
-          <div className="flex items-start sm:items-center gap-3">
+      <div className="rounded-3xl border border-indigo-200/80 dark:border-indigo-900/60 bg-gradient-to-l from-indigo-50/90 via-white to-amber-50/50 dark:from-indigo-950/35 dark:via-slate-900 dark:to-slate-900 shadow-xs overflow-hidden transition-all">
+        {/* Accordion Header */}
+        <button
+          type="button"
+          onClick={() => setIsAccordionOpen((prev) => !prev)}
+          aria-expanded={isAccordionOpen}
+          className="w-full flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 text-right hover:bg-indigo-50/50 dark:hover:bg-slate-800/40 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-indigo-600/25">
               <Bell className="w-5 h-5" />
             </div>
-            <div className="space-y-1">
+            <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-extrabold text-slate-900 dark:text-white">
+                <span className="text-sm font-extrabold text-slate-900 dark:text-white">
                   یادآور هوشمند زمان مطالعه
                 </span>
-                <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
-                  · ساعت فعلی سیستم: {toPersianDigits(currentClock)}
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-indigo-100/80 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 tabular-nums">
+                  {pendingRemindersCount > 0
+                    ? `${toPersianDigits(pendingRemindersCount)} یادآور فعال`
+                    : 'بدون یادآور فعال'}
                 </span>
               </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums truncate">
+                ساعت فعلی سیستم: {toPersianDigits(currentClock)} · صدای زنگ:{' '}
+                {soundEnabled ? 'روشن' : 'خاموش'}
+              </p>
+            </div>
+          </div>
 
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="hidden sm:inline-block text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+              {isAccordionOpen ? 'بستن جزئیات' : 'نمایش تنظیمات و یادآورها'}
+            </span>
+            <div
+              className={`w-8 h-8 rounded-xl bg-white/80 dark:bg-slate-800 border border-indigo-200/70 dark:border-slate-700 flex items-center justify-center text-indigo-600 dark:text-indigo-400 transition-transform duration-200 ${
+                isAccordionOpen ? 'rotate-180' : ''
+              }`}
+            >
+              <ChevronDown className="w-4 h-4" />
+            </div>
+          </div>
+        </button>
+
+        {/* Accordion Body */}
+        {isAccordionOpen && (
+          <div className="px-4 sm:px-5 pb-4 pt-2 border-t border-indigo-100/80 dark:border-indigo-900/40 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            {/* Scheduled Reminders List */}
+            <div className="space-y-1.5">
               {scheduledPlansForDay.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                   برای فعالیت‌های این روز هنوز ساعت یادآوری ثبت نشده است. هنگام «ثبت فعالیت جدید» یا «ویرایش»، ساعت یادآوری را تنظیم کن تا سر ساعت بهت خبر داده بشه!
                 </p>
               ) : (
                 <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300 tabular-nums">
-                  <span>
+                  <span className="font-bold">
                     {toPersianDigits(pendingRemindersCount)} یادآور فعال در انتظار اجرا:
                   </span>
                   {scheduledPlansForDay.map((plan) => {
@@ -415,54 +479,54 @@ export const StudyReminderManager: React.FC<StudyReminderManagerProps> = ({
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Left Side: Sound Toggle, Browser Permission & Instant Test Button */}
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={toggleSound}
-              className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition-colors cursor-pointer min-h-[38px] ${
-                soundEnabled
-                  ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
-                  : 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-              }`}
-              title="فعال یا غیرفعال کردن صدای زنگ هشدار"
-            >
-              {soundEnabled ? (
-                <>
-                  <Volume2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>صدای زنگ: روشن</span>
-                </>
-              ) : (
-                <>
-                  <VolumeX className="w-4 h-4" />
-                  <span>صدای زنگ: خاموش</span>
-                </>
-              )}
-            </button>
-
-            {notificationPermission === 'default' && (
+            {/* Sound Toggle, Browser Permission & Instant Test Button */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <button
                 type="button"
-                onClick={requestBrowserNotificationPermission}
-                className="flex items-center gap-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 px-3 py-2 text-xs font-bold transition-colors cursor-pointer min-h-[38px]"
+                onClick={toggleSound}
+                className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition-colors cursor-pointer min-h-[38px] ${
+                  soundEnabled
+                    ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                    : 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                }`}
+                title="فعال یا غیرفعال کردن صدای زنگ هشدار"
               >
-                <Bell className="w-3.5 h-3.5" />
-                <span>فعال‌سازی اعلان سیستم</span>
+                {soundEnabled ? (
+                  <>
+                    <Volume2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>صدای زنگ: روشن</span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="w-4 h-4" />
+                    <span>صدای زنگ: خاموش</span>
+                  </>
+                )}
               </button>
-            )}
 
-            <button
-              type="button"
-              onClick={handleTriggerInstantTest}
-              className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 text-xs font-extrabold shadow-xs transition-colors cursor-pointer min-h-[38px]"
-            >
-              <BellRing className="w-3.5 h-3.5" />
-              <span>تست فوری زنگ و اعلان</span>
-            </button>
+              {notificationPermission === 'default' && (
+                <button
+                  type="button"
+                  onClick={requestBrowserNotificationPermission}
+                  className="flex items-center gap-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 px-3 py-2 text-xs font-bold transition-colors cursor-pointer min-h-[38px]"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>فعال‌سازی اعلان سیستم</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleTriggerInstantTest}
+                className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 text-xs font-extrabold shadow-xs transition-colors cursor-pointer min-h-[38px]"
+              >
+                <BellRing className="w-3.5 h-3.5" />
+                <span>تست فوری زنگ و اعلان</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </>
   );
