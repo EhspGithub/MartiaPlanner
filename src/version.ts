@@ -3,7 +3,7 @@
  * Bump this version whenever preparing a new GitHub Release (.exe / .apk).
  */
 
-export const APP_VERSION = '1.2.1';
+export const APP_VERSION = '1.2.2';
 export const APP_RELEASE_TAG = `v${APP_VERSION}`;
 
 export interface ReleaseNoteItem {
@@ -14,6 +14,17 @@ export interface ReleaseNoteItem {
 }
 
 export const RELEASE_HISTORY: ReleaseNoteItem[] = [
+  {
+    version: '1.2.2',
+    tag: 'v1.2.2',
+    title: 'بهینه‌سازی نمای موبایل، سربرگ تک‌خطی برنامه‌ریزی و بازطراحی فشرده فرم ثبت فعالیت با منوهای کشویی',
+    changes: [
+      'تنظیم استاندارد فاصله منوی پایین در نمای موبایل نسبت به نوار ناوبری سیستمی اندروید و Safe Area',
+      'تک‌خطی‌سازی عبارات سربرگ برنامه‌ریزی («برنامه‌ریزی هوشمند دانش‌آموز» و پیام خوشامدگویی) و نمایش تاریخ به‌صورت روز هفته + روز/ماه/سال (مثلاً سه‌شنبه ۱۹/۰۸/۱۴۰۵)',
+      'بازطراحی پنجره پاپ‌آپ «ثبت فعالیت جدید» به‌صورت متمرکز در وسط صفحه با حاشیه استاندارد و اسکرول داخلی',
+      'تبدیل فیلدهای انتخابی فرم ثبت فعالیت (عنوان فعالیت، نوع فعالیت درسی بدون توضیحات اضافی، اولویت و ساعت یادآوری) به منوی کشویی (Dropdown) با حفظ کامل منطق شرطی فرم',
+    ],
+  },
   {
     version: '1.2.1',
     tag: 'v1.2.1',

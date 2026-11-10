@@ -48,6 +48,7 @@ import {
   addDaysISO,
   formatJalaliFull,
   formatJalaliCompact,
+  formatJalaliWeekdaySlash,
   getPersianWeekDays,
   toPersianDigits,
   formatMinutesPersian,
@@ -69,6 +70,34 @@ const QUALITY_LABELS: Record<string, string> = {
   average: 'متوسط',
   weak: 'نیازمند مرور',
 };
+
+const REMINDER_TIME_OPTIONS: string[] = [
+  '07:00',
+  '08:00',
+  '09:00',
+  '10:00',
+  '11:00',
+  '12:00',
+  '13:00',
+  '14:00',
+  '14:30',
+  '15:00',
+  '15:30',
+  '16:00',
+  '16:30',
+  '17:00',
+  '17:30',
+  '18:00',
+  '18:30',
+  '19:00',
+  '19:30',
+  '20:00',
+  '20:30',
+  '21:00',
+  '21:30',
+  '22:00',
+  '22:30',
+];
 
 function getSubjectVisualTheme(subjectName: string | null, categoryTitle: string, isStudy: boolean) {
   if (!isStudy) {
@@ -492,22 +521,22 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           {/* Right Side: Greeting, Date & Motivational Status */}
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-2 text-indigo-200 text-xs font-semibold">
-              <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
-              <span>ایستگاه برنامه‌ریزی هوشمند دانش‌آموز</span>
-              <span aria-hidden="true">·</span>
-              <span>{formatJalaliFull(selectedDate)}</span>
+          <div className="space-y-2 min-w-0">
+            <div className="flex items-center gap-1.5 text-indigo-200 text-[11px] sm:text-xs font-semibold whitespace-nowrap overflow-hidden">
+              <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+              <span className="whitespace-nowrap">برنامه‌ریزی هوشمند دانش‌آموز</span>
+              <span aria-hidden="true" className="shrink-0">·</span>
+              <span className="whitespace-nowrap tabular-nums">{formatJalaliWeekdaySlash(selectedDate)}</span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+            <h1 className="text-[15px] sm:text-2xl lg:text-3xl font-extrabold tracking-tight text-white whitespace-nowrap truncate">
               {activeTab === 'today' && selectedDate === todayIso
-                ? 'مأموریت‌های مطالعه امروزت رو با قدرت پیش ببر!'
+                ? 'مأموریت‌های مطالعه امروزت را با قدرت پیش ببر'
                 : activeTab === 'tomorrow' && selectedDate === tomorrowIso
                 ? 'برنامه‌ریزی هوشمندانه برای موفقیت فردا'
                 : activeTab === 'weekly'
                 ? 'نمای کلی برنامه هفتگی (شنبه تا جمعه)'
-                : `برنامه و گزارش عملکرد ${formatJalaliFull(selectedDate)}`}
+                : `برنامه و گزارش عملکرد ${formatJalaliWeekdaySlash(selectedDate)}`}
             </h1>
 
             {/* Quick Student Achievement Metrics */}
@@ -1149,182 +1178,153 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       )}
 
       {/* =====================================================================
-          SMART DYNAMIC PLAN FORM MODAL
+          SMART COMPACT PLAN FORM MODAL (CENTERED WITH DROPDOWNS)
       ===================================================================== */}
       {showPlanForm && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
-          <div className="w-full max-w-lg rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl max-h-[92vh] overflow-y-auto">
-            <div className="w-10 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mt-3 sm:hidden" />
-
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
-              <div>
-                <h2 className="text-base font-extrabold text-slate-900 dark:text-white">
-                  {editingPlan ? 'ویرایش مأموریت برنامه‌ریزی‌شده' : 'افزودن مأموریت جدید به برنامه'}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 sm:p-6">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl max-h-[82vh] flex flex-col overflow-hidden">
+            {/* Fixed Modal Header */}
+            <div className="shrink-0 flex items-center justify-between px-5 py-3.5 border-b border-slate-200 dark:border-slate-800">
+              <div className="min-w-0">
+                <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white whitespace-nowrap truncate">
+                  {editingPlan ? 'ویرایش فعالیت برنامه‌ریزی‌شده' : 'ثبت فعالیت جدید'}
                 </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  تاریخ: {formatJalaliFull(editingPlan ? editingPlan.plan_date : selectedDate)}
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 whitespace-nowrap tabular-nums">
+                  تاریخ: {formatJalaliWeekdaySlash(editingPlan ? editingPlan.plan_date : selectedDate)}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowPlanForm(false)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handlePlanFormSubmit} className="p-6 space-y-4">
-              {formError && (
-                <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-3 text-xs text-rose-700 dark:text-rose-300">
-                  {formError}
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  ۱. عنوان فعالیت
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {categories.map((cat) => {
-                    const isSelected = formCategoryId === cat.id;
-                    return (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        onClick={() => setFormCategoryId(cat.id)}
-                        className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer min-h-[42px] ${
-                          isSelected
-                            ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm shadow-indigo-600/25'
-                            : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        {cat.title}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {isFormStudyActivity && (
-                <div className="space-y-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/25 border border-indigo-100 dark:border-indigo-900/50 p-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      ۲. نام درس
-                    </label>
-                    <select
-                      value={formSubjectId}
-                      onChange={(e) => setFormSubjectId(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2.5 text-sm font-semibold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
-                    >
-                      {subjects.map((subj) => (
-                        <option key={subj.id} value={subj.id}>
-                          {subj.name} (پایه {subj.grade_level})
-                        </option>
-                      ))}
-                    </select>
+            {/* Scrollable Form Body + Pinned Footer */}
+            <form onSubmit={handlePlanFormSubmit} className="flex flex-col flex-1 min-h-0">
+              <div className="flex-1 overflow-y-auto p-5 space-y-3.5">
+                {formError && (
+                  <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-3 text-xs text-rose-700 dark:text-rose-300">
+                    {formError}
                   </div>
+                )}
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      ۳. فصل / درس ({selectedSubjectObj?.unit_type_label || 'بخش'} آموزشی کتاب{' '}
-                      {selectedSubjectObj?.name || ''})
-                    </label>
-                    {selectedSubjectObj && selectedSubjectObj.units.length > 0 ? (
+                {/* فیلد اول: عنوان فعالیت (Dropdown) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
+                    ۱. عنوان فعالیت
+                  </label>
+                  <select
+                    value={formCategoryId}
+                    onChange={(e) => setFormCategoryId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
+                  >
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* فیلدهای شرطی مربوط به درس (۲. نام درس، ۳. فصل یا درس، ۴. نوع فعالیت درسی) */}
+                {isFormStudyActivity && (
+                  <div className="space-y-3.5 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/25 border border-indigo-100 dark:border-indigo-900/50 p-3.5">
+                    {/* فیلد دوم: نام درس */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
+                        ۲. نام درس
+                      </label>
                       <select
-                        value={formUnitId}
-                        onChange={(e) => setFormUnitId(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2.5 text-sm font-semibold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
+                        value={formSubjectId}
+                        onChange={(e) => setFormSubjectId(e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
                       >
-                        {selectedSubjectObj.units.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.title}
+                        {subjects.map((subj) => (
+                          <option key={subj.id} value={subj.id}>
+                            {subj.name} (پایه {subj.grade_level})
                           </option>
                         ))}
                       </select>
-                    ) : (
-                      <p className="text-xs text-amber-600 dark:text-amber-400">
-                        برای این درس هنوز فصل یا درسی تعریف نشده است. از منوی «تعریف درس‌ها» فصل‌های آن را اضافه کنید.
-                      </p>
-                    )}
-                  </div>
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      ۴. نوع فعالیت درسی
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {studyTypes.map((st) => {
-                        const isSelected = formStudyTypeId === st.id;
-                        return (
-                          <button
-                            key={st.id}
-                            type="button"
-                            onClick={() => setFormStudyTypeId(st.id)}
-                            className={`text-right p-2.5 rounded-xl border transition-all cursor-pointer ${
-                              isSelected
-                                ? 'border-indigo-600 bg-indigo-600 text-white shadow-xs'
-                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300'
-                            }`}
-                          >
-                            <div className="text-xs font-bold">{st.title}</div>
-                            {st.description && (
-                              <div
-                                className={`text-[10px] mt-0.5 line-clamp-1 ${
-                                  isSelected
-                                    ? 'text-indigo-100'
-                                    : 'text-slate-500 dark:text-slate-400'
-                                }`}
-                              >
-                                {st.description}
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })}
+                    {/* فیلد سوم: فصل یا درس */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap truncate">
+                        ۳. فصل یا درس ({selectedSubjectObj?.unit_type_label || 'بخش'} کتاب{' '}
+                        {selectedSubjectObj?.name || ''})
+                      </label>
+                      {selectedSubjectObj && selectedSubjectObj.units.length > 0 ? (
+                        <select
+                          value={formUnitId}
+                          onChange={(e) => setFormUnitId(e.target.value)}
+                          className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
+                        >
+                          {selectedSubjectObj.units.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.title}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          برای این درس هنوز فصل یا درسی تعریف نشده است. از منوی «تعریف درس‌ها» فصل‌های آن را اضافه کنید.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* فیلد چهارم: نوع فعالیت درسی (Dropdown بدون توضیحات اضافی) */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
+                        ۴. نوع فعالیت درسی
+                      </label>
+                      <select
+                        value={formStudyTypeId}
+                        onChange={(e) => setFormStudyTypeId(e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
+                      >
+                        {studyTypes.map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.title}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  {isFormStudyActivity ? '۵. اولویت انجام فعالیت' : '۲. اولویت انجام فعالیت'} (A1 بالاترین ← C3 پایین‌ترین)
-                </label>
-                <div className="grid grid-cols-3 sm:grid-cols-9 gap-1.5">
-                  {priorities.map((p) => {
-                    const isSelected = formPriorityCode === p.code;
-                    return (
-                      <button
-                        key={p.code}
-                        type="button"
-                        onClick={() => setFormPriorityCode(p.code)}
-                        title={p.label}
-                        className={`py-2 rounded-xl border text-xs font-extrabold tabular-nums transition-all cursor-pointer min-h-[40px] ${
-                          isSelected
-                            ? 'border-indigo-600 bg-indigo-600 text-white shadow-xs'
-                            : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        {p.code}
-                      </button>
-                    );
-                  })}
+                {/* فیلد پنجم: اولویت انجام فعالیت (Dropdown) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
+                    {isFormStudyActivity ? '۵. اولویت انجام فعالیت' : '۲. اولویت انجام فعالیت'}
+                  </label>
+                  <select
+                    value={formPriorityCode}
+                    onChange={(e) => setFormPriorityCode(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
+                  >
+                    {priorities.map((p) => (
+                      <option key={p.code} value={p.code}>
+                        {p.code} — {p.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  {isFormStudyActivity
-                    ? '۶. زمان پیش‌بینی‌شده (دقیقه)'
-                    : '۳. زمان پیش‌بینی‌شده (دقیقه)'}
-                </label>
-                {editingPlan && editingPlan.performance ? (
-                  <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300">
-                    برای این فعالیت قبلاً عملکرد واقعی ثبت شده است؛ بنابراین زمان پیش‌بینی‌شده اولیه ({formatMinutesPersian(editingPlan.initial_predicted_minutes)}) جهت حفظ صحت مقایسه‌ها قفل شده است.
-                  </div>
-                ) : (
-                  <>
+                {/* فیلد ششم: زمان پیش‌بینی‌شده برحسب دقیقه (ورودی عددی و تایپی) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
+                    {isFormStudyActivity
+                      ? '۶. زمان پیش‌بینی‌شده (دقیقه)'
+                      : '۳. زمان پیش‌بینی‌شده (دقیقه)'}
+                  </label>
+                  {editingPlan && editingPlan.performance ? (
+                    <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300">
+                      برای این فعالیت قبلاً عملکرد واقعی ثبت شده است؛ بنابراین زمان پیش‌بینی‌شده اولیه ({formatMinutesPersian(editingPlan.initial_predicted_minutes)}) جهت حفظ صحت مقایسه‌ها قفل شده است.
+                    </div>
+                  ) : (
                     <input
                       type="number"
                       min={1}
@@ -1332,105 +1332,86 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                       required
                       value={formPredictedMinutes}
                       onChange={(e) => setFormPredictedMinutes(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
-                      placeholder="مثلاً 90"
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
+                      placeholder="مثلاً 60"
                     />
-                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                      {[15, 20, 30, 45, 60, 75, 90, 120].map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => setFormPredictedMinutes(String(m))}
-                          className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:text-indigo-600 transition-colors tabular-nums cursor-pointer"
-                        >
-                          {toPersianDigits(m)} دقیقه
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Smart Study Time Reminder Input */}
-              <div className="rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/50 p-4 space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="flex items-center gap-1.5 text-xs font-extrabold text-slate-800 dark:text-slate-200">
-                    <Bell className="w-4 h-4 text-amber-500" />
-                    <span>
-                      {isFormStudyActivity
-                        ? '۷. ساعت یادآوری شروع مطالعه (اعلان خودکار)'
-                        : '۴. ساعت یادآوری فعالیت (اختیاری)'}
-                    </span>
-                  </label>
-                  {formReminderTime && (
-                    <button
-                      type="button"
-                      onClick={() => setFormReminderTime('')}
-                      className="text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
-                    >
-                      حذف یادآور
-                    </button>
                   )}
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
-                  <input
-                    type="time"
+                {/* فیلد هفتم: ساعت یادآوری (تک‌خطی + Dropdown) */}
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      <Bell className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span className="whitespace-nowrap">
+                        {isFormStudyActivity ? '۷. ساعت یادآوری' : '۴. ساعت یادآوری'}
+                      </span>
+                    </label>
+                    {formReminderTime && (
+                      <button
+                        type="button"
+                        onClick={() => setFormReminderTime('')}
+                        className="text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:underline whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        حذف یادآور
+                      </button>
+                    )}
+                  </div>
+
+                  <select
                     value={formReminderTime}
                     onChange={(e) => setFormReminderTime(e.target.value)}
-                    className="w-full sm:w-44 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm font-extrabold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
-                  />
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {['15:30', '16:30', '17:30', '19:00', '20:30'].map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setFormReminderTime(t)}
-                        className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg border transition-colors tabular-nums cursor-pointer ${
-                          formReminderTime === t
-                            ? 'border-indigo-600 bg-indigo-600 text-white'
-                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
-                        }`}
-                      >
-                        ساعت {toPersianDigits(t)}
-                      </button>
-                    ))}
-                  </div>
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
+                  >
+                    <option value="">بدون یادآور</option>
+                    {Array.from(
+                      new Set(
+                        formReminderTime && !REMINDER_TIME_OPTIONS.includes(formReminderTime)
+                          ? [formReminderTime, ...REMINDER_TIME_OPTIONS]
+                          : REMINDER_TIME_OPTIONS
+                      )
+                    )
+                      .sort()
+                      .map((t) => (
+                        <option key={t} value={t}>
+                          ساعت {toPersianDigits(t)}
+                        </option>
+                      ))}
+                  </select>
                 </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  در ساعت تعیین‌شده، برنامه به‌صورت خودکار با زنگ هشدار و اعلان هوشمند زمان مطالعه را به شما یادآوری می‌کند.
-                </p>
+
+                {/* فیلد هشتم: توضیحات تکمیلی */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
+                    {isFormStudyActivity ? '۸. توضیحات تکمیلی (اختیاری)' : '۵. توضیحات تکمیلی (اختیاری)'}
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={formDescription}
+                    onChange={(e) => setFormDescription(e.target.value)}
+                    placeholder={
+                      isFormStudyActivity
+                        ? 'مثلاً: حل تمرین‌های صفحه ۴۵ / مطالعه از کتاب کمک‌آموزشی...'
+                        : 'مثلاً: استراحت عصرگاهی / بررسی پیام‌ها...'
+                    }
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2 text-xs sm:text-sm text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  {isFormStudyActivity ? '۸. توضیحات تکمیلی (اختیاری)' : '۵. توضیحات تکمیلی (اختیاری)'}
-                </label>
-                <textarea
-                  rows={2}
-                  value={formDescription}
-                  onChange={(e) => setFormDescription(e.target.value)}
-                  placeholder={
-                    isFormStudyActivity
-                      ? 'مثلاً: حل تمرین‌های صفحه ۴۵ / مطالعه از کتاب کمک‌آموزشی گاج...'
-                      : 'مثلاً: استراحت عصرگاهی / بررسی پیام‌ها...'
-                  }
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
+              {/* Pinned Modal Footer Buttons */}
+              <div className="shrink-0 flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/90">
                 <button
                   type="button"
                   onClick={() => setShowPlanForm(false)}
-                  className="rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[44px]"
+                  className="rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[40px]"
                 >
                   انصراف
                 </button>
                 <button
                   type="submit"
                   disabled={formSubmitting}
-                  className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition-all cursor-pointer min-h-[44px]"
+                  className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-extrabold text-white hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition-all cursor-pointer min-h-[40px]"
                 >
                   {formSubmitting
                     ? 'در حال ذخیره...'

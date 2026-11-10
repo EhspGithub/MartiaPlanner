@@ -135,6 +135,18 @@ export function formatJalaliNumeric(isoDate: string): string {
 }
 
 /**
+ * Formats an ISO date as single-line weekday + DD/MM/YYYY: e.g. "سه‌شنبه ۱۹/۰۸/۱۴۰۵"
+ */
+export function formatJalaliWeekdaySlash(isoDate: string): string {
+  const { jy, jm, jd } = isoToJalali(isoDate);
+  const weekday = getPersianWeekdayName(isoDate);
+  const dd = toPersianDigits(String(jd).padStart(2, '0'));
+  const mm = toPersianDigits(String(jm).padStart(2, '0'));
+  const yyyy = toPersianDigits(jy);
+  return `${weekday} ${dd}/${mm}/${yyyy}`;
+}
+
+/**
  * Given any reference ISO date, returns the 7 days of that Iranian week (Saturday to Friday)
  */
 export function getPersianWeekDays(referenceIsoDate: string): Array<{

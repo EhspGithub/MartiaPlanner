@@ -154,7 +154,7 @@ export default function App() {
           Extra bottom padding on mobile (pb-40) so page content never hides
           behind the lifted mobile bottom navigation dock.
       ===================================================================== */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-8 py-6 pb-40 md:pb-12">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-8 py-6 pb-28 md:pb-12">
         {loading && (
           <div className="space-y-4 py-8">
             <div className="h-8 w-64 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse" />
