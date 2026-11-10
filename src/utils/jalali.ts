@@ -221,3 +221,37 @@ export function formatMinutesPersian(minutes: number, includeHoursHint = false):
   }
   return `${toPersianDigits(mins)} دقیقه (${toPersianDigits(h)} ساعت و ${toPersianDigits(m)} دقیقه)`;
 }
+
+/**
+ * Formats minutes with hours and minutes unit for compact display (Section 1.3):
+ * e.g. 90 -> "۱ ساعت و ۳۰ دقیقه", 60 -> "۱ ساعت", 45 -> "۴۵ دقیقه"
+ */
+export function formatHoursAndMinutesPersian(minutes: number): string {
+  const mins = Math.max(0, Math.round(minutes || 0));
+  if (mins < 60) {
+    return `${toPersianDigits(mins)} دقیقه`;
+  }
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (m === 0) {
+    return `${toPersianDigits(h)} ساعت (${toPersianDigits(mins)} دقیقه)`;
+  }
+  return `${toPersianDigits(h)} ساعت و ${toPersianDigits(m)} دقیقه`;
+}
+
+/**
+ * Returns an inclusive array of YYYY-MM-DD strings between startIso and endIso (max 366 days safety cap)
+ */
+export function getDateRangeISOList(startIso: string, endIso: string): string[] {
+  if (!startIso || !endIso || startIso > endIso) return [startIso || getTodayISO()];
+  const result: string[] = [];
+  let current = startIso;
+  let guard = 0;
+  while (current <= endIso && guard < 366) {
+    result.push(current);
+    current = addDaysISO(current, 1);
+    guard++;
+  }
+  return result;
+}
+

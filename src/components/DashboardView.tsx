@@ -28,6 +28,7 @@ import {
 import { WeeklyStudyChart } from './WeeklyStudyChart.tsx';
 import { DailyNumericGoalsPanel } from './DailyNumericGoalsPanel.tsx';
 import { WeeklyAnalyticalReport } from './WeeklyAnalyticalReport.tsx';
+import { PerformanceAnalyticsView } from './PerformanceAnalyticsView.tsx';
 
 interface DashboardViewProps {
   onNavigateToPlanner: () => void;
@@ -164,6 +165,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
         </div>
       </div>
 
+      {/* Comprehensive Performance Evaluation & Analytics Section (Section 10) */}
+      <PerformanceAnalyticsView />
+
       {loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {Array.from({ length: 10 }).map((_, idx) => (
@@ -186,7 +190,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
 
       {!loading && metrics && (
         <>
-          {/* 10 Mandatory Core Indicators (Section 10 of Mega Prompt) */}
+          {/* 10 Mandatory Core Indicators */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {/* 1. مجموع زمان پیش‌بینی‌شده مطالعه */}
             <div className="rounded-2xl border border-indigo-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
@@ -246,10 +250,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
               </div>
               <div className="mt-3 text-xl font-black text-slate-900 dark:text-white tabular-nums">
                 {metrics.studyTimeVarianceMinutes === 0
-                  ? '۰ دقیقه (منطبق)'
+                  ? '۰ دقیقه (مطابق پیش‌بینی)'
                   : metrics.studyTimeVarianceMinutes > 0
-                  ? `${toPersianDigits(metrics.studyTimeVarianceMinutes)}+ دقیقه بیشتر`
-                  : `${toPersianDigits(Math.abs(metrics.studyTimeVarianceMinutes))} دقیقه کمتر`}
+                  ? `${toPersianDigits(metrics.studyTimeVarianceMinutes)} دقیقه بیشتر از پیش‌بینی`
+                  : `${toPersianDigits(Math.abs(metrics.studyTimeVarianceMinutes))} دقیقه کمتر از پیش‌بینی`}
               </div>
               <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                 مقایسه واقعی با پیش‌بینی
@@ -274,7 +278,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
               </div>
             </div>
 
-            {/* 5. میانگین کیفیت یادگیری */}
+            {/* 5. میانگین کیفیت یادگیری (۰ تا ۱۰) */}
             <div className="rounded-2xl border border-purple-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
@@ -289,7 +293,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
               </div>
               <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 tabular-nums">
                 {metrics.averageLearningQualityScore !== null
-                  ? `امتیاز ${toPersianDigits(metrics.averageLearningQualityScore)} از ۴`
+                  ? `امتیاز وزنی ${toPersianDigits(metrics.averageLearningQualityScore)} از ۱۰`
                   : 'هنوز کیفیتی ثبت نشده'}
               </div>
             </div>
@@ -410,7 +414,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
                     مقایسه دیداری پیش‌بینی و عملکرد واقعی در هر درس
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    بررسی تعادل مطالعه بین دروس مختلف پایه هشتم و تعداد تمرین‌های حل‌شده
+                    بررسی نسبت زمان واقعی به پیش‌بینی و تعداد تمرین‌های حل‌شده در هر درس
                   </p>
                 </div>
               </div>
@@ -448,7 +452,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
                     <tr>
                       <th className="py-3.5 px-6">نام درس</th>
                       <th className="py-3.5 px-6">زمان پیش‌بینی‌شده</th>
-                      <th className="py-3.5 px-6">زمان واقعی و نمودار تحقق</th>
+                      <th className="py-3.5 px-6">زمان واقعی نسبت به پیش‌بینی</th>
                       <th className="py-3.5 px-6">اختلاف زمان</th>
                       <th className="py-3.5 px-6">تعداد تمرین / تست</th>
                       <th className="py-3.5 px-6">وضعیت تکمیل</th>
@@ -457,10 +461,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                     {metrics.subjectBreakdown.map((item) => {
                       const diff = item.actualMinutes - item.predictedMinutes;
-                      const ratio =
+                      const ratioPct =
                         item.predictedMinutes > 0
-                          ? Math.min(100, Math.round((item.actualMinutes / item.predictedMinutes) * 100))
+                          ? Math.round((item.actualMinutes / item.predictedMinutes) * 100)
                           : 0;
+                      const barWidthPct = Math.min(100, ratioPct);
                       return (
                         <tr
                           key={item.subjectName}
@@ -476,19 +481,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
                             <div className="flex items-center justify-between text-xs font-bold text-slate-900 dark:text-white tabular-nums mb-1.5">
                               <span>{formatMinutesPersian(item.actualMinutes)}</span>
                               <span className="text-indigo-600 dark:text-indigo-400">
-                                {toPersianDigits(ratio)}٪
+                                {toPersianDigits(ratioPct)}٪
                               </span>
                             </div>
                             <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                               <div
                                 className={`h-full rounded-full transition-all ${
-                                  ratio >= 100
+                                  ratioPct >= 100
                                     ? 'bg-emerald-500'
-                                    : ratio >= 60
+                                    : ratioPct >= 60
                                     ? 'bg-indigo-600'
                                     : 'bg-amber-500'
                                 }`}
-                                style={{ width: `${ratio}%` }}
+                                style={{ width: `${barWidthPct}%` }}
                               />
                             </div>
                           </td>

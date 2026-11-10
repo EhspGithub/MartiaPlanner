@@ -11,10 +11,12 @@ import type {
   Subject,
   SubjectUnit,
   ActivityCategory,
+  ActivityGroupType,
   StudyActivityType,
   PriorityLevel,
   DailyStudyGoalConfig,
   CustomNumericGoal,
+  DailyTimeBudgetConfig,
 } from '../types.ts';
 import { localSQLiteFallback } from './localSqliteFallback.ts';
 
@@ -86,6 +88,7 @@ export const api = {
     study_type_id?: string | null;
     priority_code: string;
     predicted_minutes: number;
+    target_exercises?: number | null;
     reminder_time?: string | null;
     description: string;
   }) =>
@@ -107,6 +110,7 @@ export const api = {
       study_type_id?: string | null;
       priority_code?: string;
       predicted_minutes?: number;
+      target_exercises?: number | null;
       reminder_time?: string | null;
       description?: string;
     }
@@ -200,6 +204,35 @@ export const api = {
       () => localSQLiteFallback.saveDailyGoal(payload)
     ),
 
+  // Daily Time Budget (ظرف زمانی روزانه - بخش نهم)
+  getTimeBudget: (date: string) =>
+    requestJSON<DailyTimeBudgetConfig>(
+      `/api/time-budgets?date=${encodeURIComponent(date)}`,
+      undefined,
+      () => localSQLiteFallback.getTimeBudget(date)
+    ),
+
+  getTimeBudgetsByRange: (startDate: string, endDate: string) =>
+    requestJSON<DailyTimeBudgetConfig[]>(
+      `/api/time-budgets?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`,
+      undefined,
+      () => localSQLiteFallback.getTimeBudgetsByRange(startDate, endDate)
+    ),
+
+  saveTimeBudget: (payload: {
+    plan_date: string;
+    budget_minutes: number | null;
+    input_unit: 'hours' | 'minutes';
+  }) =>
+    requestJSON<DailyTimeBudgetConfig>(
+      '/api/time-budgets',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+      () => localSQLiteFallback.saveTimeBudget(payload)
+    ),
+
   // Subjects & Units
   createSubject: (payload: {
     name: string;
@@ -284,7 +317,13 @@ export const api = {
     ),
 
   // Settings
-  createCategory: (payload: { title: string; is_study: number; color?: string }) =>
+  createCategory: (payload: {
+    title: string;
+    is_study: number;
+    activity_group?: ActivityGroupType;
+    impact_weight?: number;
+    color?: string;
+  }) =>
     requestJSON<ActivityCategory>(
       '/api/settings/categories',
       {
@@ -294,7 +333,16 @@ export const api = {
       () => localSQLiteFallback.createCategory(payload)
     ),
 
-  updateCategory: (id: string, payload: { title: string; is_study?: number; color?: string }) =>
+  updateCategory: (
+    id: string,
+    payload: {
+      title: string;
+      is_study?: number;
+      activity_group?: ActivityGroupType;
+      impact_weight?: number;
+      color?: string;
+    }
+  ) =>
     requestJSON<ActivityCategory>(
       `/api/settings/categories/${id}`,
       {

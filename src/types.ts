@@ -6,14 +6,29 @@
 
 export type PriorityGroup = 'A' | 'B' | 'C';
 
-export type LearningQuality = 'excellent' | 'good' | 'average' | 'weak';
+/**
+ * Legacy 4-level quality labels kept for backward compatibility with older backups;
+ * new logs store integer strings "0".."10" (or number 0..10).
+ */
+export type LegacyLearningQuality = 'excellent' | 'good' | 'average' | 'weak';
+export type LearningQuality = string | number;
 
 export type PlanStatus = 'pending' | 'partial' | 'completed';
+
+/**
+ * Section 6: Three-tier activity classification
+ * - 'educational': فعالیت‌های آموزشی (مطالعه، مرور، تست، تکلیف، یادگیری)
+ * - 'restricted': فعالیت‌های تفریحی و محدودشونده (گوشی، شبکه‌های اجتماعی، تلویزیون، بازی)
+ * - 'essential': فعالیت‌های ضروری، بازیابی و سلامت (استراحت، غذا، ورزش، فعالیت‌های شخصی ضروری)
+ */
+export type ActivityGroupType = 'educational' | 'restricted' | 'essential';
 
 export interface ActivityCategory {
   id: string;
   title: string;
   is_study: number; // 1 = درسی (requires subject, unit, study_type), 0 = غیردرسی
+  activity_group?: ActivityGroupType; // 'educational' | 'restricted' | 'essential'
+  impact_weight?: number; // Default 1.0 for weighted restricted control calculation
   icon: string;
   color: string;
   sort_order: number;
@@ -62,7 +77,7 @@ export interface PerformanceLog {
   plan_id: string;
   actual_minutes: number;
   exercises_count: number | null; // Only for study activities (supports 0)
-  learning_quality: LearningQuality | null; // 'excellent' | 'good' | 'average' | 'weak' | null
+  learning_quality: string | null; // "0".."10" (or legacy 'excellent'|'good'|'average'|'weak') | null
   completion_status: 'partial' | 'completed';
   notes: string;
   logged_at: string;
@@ -75,6 +90,7 @@ export interface DailyPlanItem {
   category_id: string;
   category_title_snapshot: string;
   is_study: number; // 1 or 0
+  activity_group_snapshot?: ActivityGroupType | null;
   subject_id: string | null;
   subject_name_snapshot: string | null;
   unit_id: string | null;
@@ -85,6 +101,7 @@ export interface DailyPlanItem {
   priority_rank?: number;
   initial_predicted_minutes: number; // Immutable after first performance log!
   predicted_minutes: number; // Current predicted duration in minutes
+  target_exercises?: number | null; // Optional target exercises/tests count for this study plan
   reminder_time?: string | null; // Optional HH:MM reminder time (e.g., "16:30")
   description: string;
   status: PlanStatus; // 'pending' | 'partial' | 'completed'
@@ -103,6 +120,16 @@ export interface PlanHistoryAudit {
   reason: string;
 }
 
+/**
+ * Section 9: Daily Time Budget (ظرف زمانی روزانه)
+ */
+export interface DailyTimeBudgetConfig {
+  plan_date: string; // YYYY-MM-DD
+  budget_minutes: number | null; // null if not defined for this day
+  input_unit: 'hours' | 'minutes';
+  updated_at: string;
+}
+
 export interface DashboardMetrics {
   range: 'today' | 'week' | 'month';
   startDate: string;
@@ -111,7 +138,7 @@ export interface DashboardMetrics {
   totalActualStudyMinutes: number;
   studyTimeVarianceMinutes: number; // actual - predicted
   totalExercisesSolved: number;
-  averageLearningQualityScore: number | null; // 1..4 scale
+  averageLearningQualityScore: number | null; // 0..10 weighted scale
   averageLearningQualityLabel: string;
   totalPlannedActivities: number;
   completedActivitiesCount: number;
@@ -160,4 +187,3 @@ export interface AppBootstrapData {
     version: string;
   };
 }
-

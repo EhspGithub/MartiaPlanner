@@ -2,17 +2,19 @@ import React, { useState, useEffect } from 'react';
 import {
   CheckCircle2,
   Clock,
-  FileCheck2,
   Award,
   X,
   RotateCcw,
-  Smile,
-  ThumbsUp,
-  Meh,
-  Frown,
 } from 'lucide-react';
 import type { DailyPlanItem, LearningQuality } from '../types.ts';
-import { toPersianDigits, formatMinutesPersian } from '../utils/jalali.ts';
+import {
+  toPersianDigits,
+  formatHoursAndMinutesPersian,
+} from '../utils/jalali.ts';
+import {
+  classifyPlanActivityGroup,
+  parseLearningQuality0To10,
+} from '../utils/analyticsEngine.ts';
 
 interface PerformanceModalProps {
   plan: DailyPlanItem | null;
@@ -30,46 +32,16 @@ interface PerformanceModalProps {
   onResetPerformance: (planId: string) => Promise<void>;
 }
 
-const QUALITY_OPTIONS: Array<{
-  value: LearningQuality;
-  label: string;
-  desc: string;
-  icon: React.FC<{ className?: string }>;
-  activeClass: string;
-}> = [
-  {
-    value: 'excellent',
-    label: 'عالی',
-    desc: 'تسلط کامل بر مبحث',
-    icon: Smile,
-    activeClass:
-      'border-emerald-600 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300',
-  },
-  {
-    value: 'good',
-    label: 'خوب',
-    desc: 'یادگیری مناسب',
-    icon: ThumbsUp,
-    activeClass:
-      'border-blue-600 bg-blue-50/80 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300',
-  },
-  {
-    value: 'average',
-    label: 'متوسط',
-    desc: 'نیاز به مرور مجدد',
-    icon: Meh,
-    activeClass:
-      'border-amber-600 bg-amber-50/80 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300',
-  },
-  {
-    value: 'weak',
-    label: 'ضعیف',
-    desc: 'نیاز به رفع اشکال',
-    icon: Frown,
-    activeClass:
-      'border-rose-600 bg-rose-50/80 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300',
-  },
-];
+const SCORE_NUMBERS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+function getQualityScoreBadgeText(score: number | null): string {
+  if (score === null) return 'عددی بین ۰ تا ۱۰ انتخاب کنید';
+  if (score >= 9) return 'عالی (تسلط کامل)';
+  if (score >= 7) return 'خوب (یادگیری مناسب)';
+  if (score >= 5) return 'متوسط (نیاز به مرور)';
+  if (score >= 3) return 'ضعیف (نیاز به تمرین بیشتر)';
+  return 'بسیار ضعیف (نیاز به مطالعه مجدد)';
+}
 
 export const PerformanceModal: React.FC<PerformanceModalProps> = ({
   plan,
@@ -79,7 +51,7 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
 }) => {
   const [actualMinutes, setActualMinutes] = useState<string>('');
   const [exercisesCount, setExercisesCount] = useState<string>('0');
-  const [learningQuality, setLearningQuality] = useState<LearningQuality>('good');
+  const [learningQualityScore, setLearningQualityScore] = useState<number | null>(null);
   const [completionStatus, setCompletionStatus] = useState<'completed' | 'partial'>('completed');
   const [notes, setNotes] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -90,11 +62,13 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
       if (plan.performance) {
         setActualMinutes(String(plan.performance.actual_minutes));
         setExercisesCount(
-          plan.performance.exercises_count !== null && plan.performance.exercises_count !== undefined
+          plan.performance.exercises_count !== null &&
+            plan.performance.exercises_count !== undefined
             ? String(plan.performance.exercises_count)
             : '0'
         );
-        setLearningQuality((plan.performance.learning_quality as LearningQuality) || 'good');
+        const parsedQ = parseLearningQuality0To10(plan.performance.learning_quality);
+        setLearningQualityScore(parsedQ !== null ? Math.round(parsedQ) : null);
         setCompletionStatus(
           plan.performance.completion_status === 'partial' ? 'partial' : 'completed'
         );
@@ -102,7 +76,8 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
       } else {
         setActualMinutes(String(plan.predicted_minutes));
         setExercisesCount('0');
-        setLearningQuality('good');
+        // No default value on new entry so user consciously selects 0..10
+        setLearningQualityScore(null);
         setCompletionStatus('completed');
         setNotes('');
       }
@@ -112,24 +87,35 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
 
   if (!plan) return null;
 
-  const isStudy = Number(plan.is_study) === 1;
+  const activityGroup = classifyPlanActivityGroup(plan);
+  const isEducational = activityGroup === 'educational' && Number(plan.is_study) === 1;
   const predictedMins = plan.initial_predicted_minutes || plan.predicted_minutes;
-  const currentActualNum = Number(actualMinutes) || 0;
+  const currentActualNum = actualMinutes === '' ? 0 : Number(actualMinutes) || 0;
   const diffMins = currentActualNum - predictedMins;
+
+  const subtitleText = isEducational
+    ? `${plan.subject_name_snapshot || 'درس'}${
+        plan.unit_title_snapshot ? ` · ${plan.unit_title_snapshot}` : ''
+      } · اولویت ${plan.priority_code}`
+    : `${plan.category_title_snapshot} · اولویت ${plan.priority_code}`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const mins = Number(actualMinutes);
-    if (isNaN(mins) || mins < 0 || mins > 720) {
-      setError('مدت زمان واقعی باید بین ۰ تا ۷۲۰ دقیقه باشد.');
+    if (actualMinutes === '' || isNaN(mins) || mins < 0 || mins > 720) {
+      setError('مدت زمان واقعی باید عددی معتبر بین ۰ تا ۷۲۰ دقیقه باشد.');
       return;
     }
 
     let exCount: number | null = null;
-    if (isStudy) {
+    if (isEducational) {
       exCount = exercisesCount === '' ? 0 : Math.max(0, Number(exercisesCount));
       if (isNaN(exCount)) {
         setError('تعداد تمرین یا تست باید عدد معتبر (۰ یا بیشتر) باشد.');
+        return;
+      }
+      if (learningQualityScore === null || learningQualityScore < 0 || learningQualityScore > 10) {
+        setError('لطفاً کیفیت یادگیری این درس را با انتخاب عددی بین ۰ تا ۱۰ مشخص کنید.');
         return;
       }
     }
@@ -139,14 +125,16 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
       setError(null);
       await onSave(plan.id, {
         actual_minutes: mins,
-        exercises_count: isStudy ? exCount : null,
-        learning_quality: isStudy ? learningQuality : null,
+        exercises_count: isEducational ? exCount : null,
+        learning_quality: isEducational && learningQualityScore !== null
+          ? String(learningQualityScore)
+          : null,
         completion_status: completionStatus,
         notes: notes.trim(),
       });
       onClose();
     } catch (err: any) {
-      setError(err.message || 'خطا در ثبت عملکرد واقعی');
+      setError(err.message || 'خطا در ثبت عملکرد');
     } finally {
       setSubmitting(false);
     }
@@ -165,105 +153,108 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/55 backdrop-blur-xs p-0 sm:p-4">
-      <div className="w-full max-w-lg rounded-t-3xl sm:rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl max-h-[92vh] overflow-y-auto">
-        {/* Mobile grab handle */}
-        <div className="w-10 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mt-3 sm:hidden" />
-
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
-          <div>
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              ثبت عملکرد واقعی {isStudy ? 'مطالعه درس' : 'فعالیت'}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 sm:p-6">
+      <div className="w-full max-w-md rounded-3xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl max-h-[82vh] flex flex-col overflow-hidden">
+        {/* 1.2 Compact Header */}
+        <div className="shrink-0 flex items-center justify-between px-5 py-3.5 border-b border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/90">
+          <div className="min-w-0">
+            <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white whitespace-nowrap truncate">
+              ثبت عملکرد
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {isStudy
-                ? `${plan.subject_name_snapshot} · ${plan.unit_title_snapshot} · اولویت ${plan.priority_code}`
-                : `${plan.category_title_snapshot} · اولویت ${plan.priority_code}`}
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 whitespace-nowrap truncate tabular-nums">
+              {subtitleText}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Predicted vs Actual Comparison Banner */}
-          <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 p-4 flex items-center justify-between">
+        {/* Scrollable Form Body + Pinned Footer */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
+            {error && (
+              <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-2.5 text-xs text-rose-700 dark:text-rose-300">
+                {error}
+              </div>
+            )}
+
+            {/* 1.3 Initial Prediction & Comparison (2 Compact Boxes Side-by-Side) */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/80 px-3 py-2.5">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                  پیش‌بینی اولیه
+                </span>
+                <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white tabular-nums mt-0.5 block">
+                  {formatHoursAndMinutesPersian(predictedMins)}
+                </span>
+              </div>
+
+              <div className="rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/80 px-3 py-2.5">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                  مقایسه:
+                </span>
+                <span
+                  className={`text-xs font-extrabold tabular-nums mt-0.5 block ${
+                    diffMins === 0
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : diffMins > 0
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-indigo-600 dark:text-indigo-400'
+                  }`}
+                >
+                  {diffMins === 0
+                    ? 'مطابق پیش‌بینی'
+                    : diffMins > 0
+                    ? `${toPersianDigits(diffMins)} دقیقه بیشتر از پیش‌بینی`
+                    : `${toPersianDigits(Math.abs(diffMins))} دقیقه کمتر از پیش‌بینی`}
+                </span>
+              </div>
+            </div>
+
+            {/* 1.4 Completion Status (Two Compact Cards in One Row, No Helper Text Below) */}
             <div>
-              <span className="text-xs text-slate-500 dark:text-slate-400 block">
-                زمان پیش‌بینی‌شده اولیه (ثابت در تحلیل)
-              </span>
-              <span className="text-sm font-bold text-slate-900 dark:text-white tabular-nums mt-0.5 block">
-                {formatMinutesPersian(predictedMins, true)}
-              </span>
-            </div>
-            <div className="text-left">
-              <span className="text-xs text-slate-500 dark:text-slate-400 block">
-                مقایسه با زمان واردشده
-              </span>
-              <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 tabular-nums mt-0.5 block">
-                {diffMins === 0
-                  ? 'دقیقاً مطابق پیش‌بینی'
-                  : diffMins > 0
-                  ? `${toPersianDigits(diffMins)} دقیقه بیشتر از پیش‌بینی`
-                  : `${toPersianDigits(Math.abs(diffMins))} دقیقه کمتر از پیش‌بینی`}
-              </span>
-            </div>
-          </div>
-
-          {error && (
-            <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-3 text-xs text-rose-700 dark:text-rose-300">
-              {error}
-            </div>
-          )}
-
-          {/* 1. Completion Status (تکمیل‌شده vs ناقص / نیمه‌تمام) */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-              وضعیت انجام فعالیت
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setCompletionStatus('completed')}
-                className={`flex items-center justify-center gap-2 rounded-xl border py-3 px-4 text-xs font-semibold transition-all cursor-pointer min-h-[44px] ${
-                  completionStatus === 'completed'
-                    ? 'border-emerald-600 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300'
-                    : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                }`}
-              >
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>تکمیل‌شده (کامل)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCompletionStatus('partial')}
-                className={`flex items-center justify-center gap-2 rounded-xl border py-3 px-4 text-xs font-semibold transition-all cursor-pointer min-h-[44px] ${
-                  completionStatus === 'partial'
-                    ? 'border-amber-600 bg-amber-50/80 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300'
-                    : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                }`}
-              >
-                <Clock className="w-4 h-4 shrink-0" />
-                <span>ناقص (بخشی باقی‌مانده)</span>
-              </button>
-            </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
-              اگر بخشی از مبحث یا فعالیت باقی مانده است، گزینه «ناقص» را انتخاب کنید تا در گزارش‌ها دقیق لحاظ شود.
-            </p>
-          </div>
-
-          {/* 2. Actual Duration & Exercises (if Study) */}
-          <div className={`grid grid-cols-1 ${isStudy ? 'sm:grid-cols-2' : ''} gap-4`}>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                {isStudy ? 'مدت زمان واقعی مطالعه (دقیقه)' : 'مدت زمان واقعی انجام فعالیت (دقیقه)'}
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                وضعیت انجام فعالیت
               </label>
-              <div className="relative">
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setCompletionStatus('completed')}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 px-3 text-xs font-bold transition-all cursor-pointer min-h-[40px] ${
+                    completionStatus === 'completed'
+                      ? 'border-emerald-600 bg-emerald-50/90 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 shadow-xs'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>تکمیل شده</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCompletionStatus('partial')}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 px-3 text-xs font-bold transition-all cursor-pointer min-h-[40px] ${
+                    completionStatus === 'partial'
+                      ? 'border-amber-600 bg-amber-50/90 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 shadow-xs'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <Clock className="w-4 h-4 shrink-0" />
+                  <span>ناقص</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 1.5 & 1.6 Actual Time & Exercises Solved (Compact Inputs, Preset Chips Removed) */}
+            <div className={`grid grid-cols-1 ${isEducational ? 'sm:grid-cols-2' : ''} gap-3`}>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  زمان واقعی فعالیت (دقیقه)
+                </label>
                 <input
                   type="number"
                   min={0}
@@ -271,136 +262,147 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
                   required
                   value={actualMinutes}
                   onChange={(e) => setActualMinutes(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
-                  placeholder="مثلاً 75"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs sm:text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
+                  placeholder="مثلاً 60"
                 />
               </div>
-              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                {[15, 30, 45, 60, 75, 90, 120].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setActualMinutes(String(preset))}
-                    className="px-2 py-1 text-[11px] rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:text-indigo-600 transition-colors tabular-nums cursor-pointer"
-                  >
-                    {toPersianDigits(preset)} دقیقه
-                  </button>
-                ))}
-              </div>
-            </div>
 
-            {isStudy && (
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  تعداد تمرین یا تست حل‌شده (امکان ثبت ۰)
-                </label>
-                <div className="relative">
+              {isEducational && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    تعداد تمرین یا تست حل‌شده
+                  </label>
                   <input
                     type="number"
                     min={0}
-                    max={1000}
+                    max={2000}
                     required
                     value={exercisesCount}
                     onChange={(e) => setExercisesCount(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs sm:text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
                     placeholder="مثلاً 20 یا 0"
                   />
                 </div>
-                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                  {[0, 5, 10, 15, 20, 30, 50].map((cnt) => (
-                    <button
-                      key={cnt}
-                      type="button"
-                      onClick={() => setExercisesCount(String(cnt))}
-                      className="px-2 py-1 text-[11px] rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:text-indigo-600 transition-colors tabular-nums cursor-pointer"
-                    >
-                      {toPersianDigits(cnt)} تست/تمرین
-                    </button>
-                  ))}
+              )}
+            </div>
+
+            {/* 1.7 Learning Quality Evaluation (0 to 10 Scale, Only for Educational Activities, No Default Value) */}
+            {isEducational && (
+              <div className="rounded-2xl bg-white dark:bg-slate-800/70 border border-slate-200/90 dark:border-slate-700/80 p-3 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                    <Award className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span>ارزیابی کیفیت عملکرد (۰ تا ۱۰)</span>
+                  </label>
+                  <span
+                    className={`text-[11px] font-extrabold px-2 py-0.5 rounded-lg tabular-nums ${
+                      learningQualityScore === null
+                        ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300'
+                        : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+                    }`}
+                  >
+                    {learningQualityScore !== null
+                      ? `نمره ${toPersianDigits(learningQualityScore)} از ۱۰ · ${getQualityScoreBadgeText(
+                          learningQualityScore
+                        )}`
+                      : 'انتخاب نشده'}
+                  </span>
+                </div>
+
+                {/* 0..10 Compact Number Selector Buttons */}
+                <div className="grid grid-cols-11 gap-1" dir="ltr">
+                  {SCORE_NUMBERS.map((num) => {
+                    const isSelected = learningQualityScore === num;
+                    return (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setLearningQualityScore(num)}
+                        className={`h-8 rounded-lg text-xs font-extrabold tabular-nums transition-all cursor-pointer flex items-center justify-center ${
+                          isSelected
+                            ? num >= 8
+                              ? 'bg-emerald-600 text-white shadow-xs scale-105'
+                              : num >= 5
+                              ? 'bg-indigo-600 text-white shadow-xs scale-105'
+                              : 'bg-rose-600 text-white shadow-xs scale-105'
+                            : 'bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-700 border border-slate-200/70 dark:border-slate-700'
+                        }`}
+                      >
+                        {toPersianDigits(num)}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Touch Slider + Endpoint Labels */}
+                <div className="space-y-1 pt-0.5">
+                  <input
+                    type="range"
+                    min={0}
+                    max={10}
+                    step={1}
+                    dir="ltr"
+                    value={learningQualityScore ?? 5}
+                    onChange={(e) => setLearningQualityScore(Number(e.target.value))}
+                    className="w-full accent-indigo-600 cursor-pointer h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg"
+                  />
+                  <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                    <span>۱۰ = عالی</span>
+                    <span>۰ = بسیار ضعیف</span>
+                  </div>
                 </div>
               </div>
             )}
-          </div>
 
-          {/* 3. Learning Quality (Only for Study activities) */}
-          {isStudy && (
+            {/* 1.8 Compact Additional Notes */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                کیفیت یادگیری خود را چگونه ارزیابی می‌کنید؟
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                توضیحات تکمیلی (اختیاری)
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {QUALITY_OPTIONS.map((q) => {
-                  const Icon = q.icon;
-                  const isSelected = learningQuality === q.value;
-                  return (
-                    <button
-                      key={q.value}
-                      type="button"
-                      onClick={() => setLearningQuality(q.value)}
-                      className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition-all cursor-pointer min-h-[68px] ${
-                        isSelected
-                          ? q.activeClass
-                          : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      <Icon className="w-5 h-5 mb-1" />
-                      <span className="text-xs font-bold">{q.label}</span>
-                      <span className="text-[10px] opacity-80 mt-0.5">{q.desc}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <textarea
+                rows={2}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={
+                  isEducational
+                    ? 'نکات مهم مطالعه، مباحث باقی‌مانده یا علت تغییر زمان...'
+                    : 'توضیحات اختیاری درباره نحوه انجام فعالیت...'
+                }
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
+              />
             </div>
-          )}
-
-          {/* 4. Notes */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              توضیحات تکمیلی عملکرد (اختیاری)
-            </label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder={
-                isStudy
-                  ? 'مثلاً: مطالعه از کتاب کمک‌آموزشی گاج انجام شد / بخشی از مبحث باقی ماند...'
-                  : 'توضیحات اختیاری درباره نحوه انجام فعالیت...'
-              }
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none"
-            />
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+          {/* Pinned Footer Actions */}
+          <div className="shrink-0 flex items-center justify-between gap-2 px-5 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/95">
             {plan.performance ? (
               <button
                 type="button"
                 disabled={submitting}
                 onClick={handleReset}
-                className="flex items-center gap-1.5 rounded-xl border border-rose-200 dark:border-rose-900/60 px-3.5 py-2.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer min-h-[44px]"
+                className="flex items-center gap-1 rounded-xl border border-rose-200 dark:border-rose-900/60 px-3 py-2 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer min-h-[38px]"
               >
-                <RotateCcw className="w-4 h-4" />
-                <span>حذف گزارش عملکرد</span>
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>حذف عملکرد</span>
               </button>
             ) : (
               <div />
             )}
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[44px]"
+                className="rounded-xl border border-slate-300 dark:border-slate-700 px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[38px]"
               >
                 انصراف
               </button>
               <button
                 type="submit"
                 disabled={submitting}
-                className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors cursor-pointer min-h-[44px]"
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-extrabold text-white hover:bg-indigo-700 shadow-sm shadow-indigo-600/20 transition-all cursor-pointer min-h-[38px]"
               >
-                {submitting ? 'در حال ذخیره...' : 'ثبت عملکرد واقعی'}
+                {submitting ? 'در حال ذخیره...' : 'ثبت عملکرد'}
               </button>
             </div>
           </div>

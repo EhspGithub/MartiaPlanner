@@ -32,6 +32,8 @@ import {
   Gamepad2,
   Dumbbell,
   Bell,
+  Timer,
+  AlertTriangle,
 } from 'lucide-react';
 import type {
   ActivityCategory,
@@ -40,6 +42,8 @@ import type {
   Subject,
   DailyPlanItem,
   LearningQuality,
+  DailyStudyGoalConfig,
+  DailyTimeBudgetConfig,
 } from '../types.ts';
 import { api } from '../services/api.ts';
 import {
@@ -52,7 +56,15 @@ import {
   getPersianWeekDays,
   toPersianDigits,
   formatMinutesPersian,
+  formatHoursAndMinutesPersian,
 } from '../utils/jalali.ts';
+import {
+  getCardGradientTheme,
+  calculateActualToPredictedRatioPct,
+  parseLearningQuality0To10,
+  evaluateDayPerformance,
+  classifyPlanActivityGroup,
+} from '../utils/analyticsEngine.ts';
 import { PerformanceModal } from './PerformanceModal.tsx';
 import { StudyReminderManager } from './StudyReminderManager.tsx';
 
@@ -63,13 +75,6 @@ interface PlannerViewProps {
   subjects: Subject[];
   onDataMutated: () => void;
 }
-
-const QUALITY_LABELS: Record<string, string> = {
-  excellent: 'تسلط عالی',
-  good: 'یادگیری خوب',
-  average: 'متوسط',
-  weak: 'نیازمند مرور',
-};
 
 const REMINDER_TIME_OPTIONS: string[] = [
   '07:00',
@@ -99,109 +104,27 @@ const REMINDER_TIME_OPTIONS: string[] = [
   '22:30',
 ];
 
-function getSubjectVisualTheme(subjectName: string | null, categoryTitle: string, isStudy: boolean) {
+function getSubjectIconComponent(
+  subjectName: string | null,
+  categoryTitle: string,
+  isStudy: boolean
+) {
   if (!isStudy) {
-    if (categoryTitle.includes('گوشی')) {
-      return {
-        icon: Smartphone,
-        iconBg: 'bg-amber-500 text-white shadow-sm shadow-amber-500/30',
-        tintBg: 'bg-amber-50/50 dark:bg-amber-950/20',
-        accentText: 'text-amber-600 dark:text-amber-400',
-      };
-    }
-    if (categoryTitle.includes('تلویزیون')) {
-      return {
-        icon: Tv,
-        iconBg: 'bg-sky-500 text-white shadow-sm shadow-sky-500/30',
-        tintBg: 'bg-sky-50/50 dark:bg-sky-950/20',
-        accentText: 'text-sky-600 dark:text-sky-400',
-      };
-    }
-    if (categoryTitle.includes('بازی')) {
-      return {
-        icon: Gamepad2,
-        iconBg: 'bg-purple-500 text-white shadow-sm shadow-purple-500/30',
-        tintBg: 'bg-purple-50/50 dark:bg-purple-950/20',
-        accentText: 'text-purple-600 dark:text-purple-400',
-      };
-    }
-    if (categoryTitle.includes('ورزش')) {
-      return {
-        icon: Dumbbell,
-        iconBg: 'bg-teal-500 text-white shadow-sm shadow-teal-500/30',
-        tintBg: 'bg-teal-50/50 dark:bg-teal-950/20',
-        accentText: 'text-teal-600 dark:text-teal-400',
-      };
-    }
-    return {
-      icon: Coffee,
-      iconBg: 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30',
-      tintBg: 'bg-emerald-50/50 dark:bg-emerald-950/20',
-      accentText: 'text-emerald-600 dark:text-emerald-400',
-    };
+    if (categoryTitle.includes('گوشی')) return Smartphone;
+    if (categoryTitle.includes('تلویزیون')) return Tv;
+    if (categoryTitle.includes('بازی')) return Gamepad2;
+    if (categoryTitle.includes('ورزش')) return Dumbbell;
+    return Coffee;
   }
-
   const name = subjectName || '';
-  if (name.includes('ریاضی')) {
-    return {
-      icon: Calculator,
-      iconBg: 'bg-blue-600 text-white shadow-sm shadow-blue-600/30',
-      tintBg: 'bg-blue-50/40 dark:bg-blue-950/20',
-      accentText: 'text-blue-600 dark:text-blue-400',
-    };
-  }
-  if (name.includes('علوم')) {
-    return {
-      icon: Atom,
-      iconBg: 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30',
-      tintBg: 'bg-emerald-50/40 dark:bg-emerald-950/20',
-      accentText: 'text-emerald-600 dark:text-emerald-400',
-    };
-  }
-  if (name.includes('انگلیسی') || name.includes('عربی')) {
-    return {
-      icon: Languages,
-      iconBg: 'bg-purple-600 text-white shadow-sm shadow-purple-600/30',
-      tintBg: 'bg-purple-50/40 dark:bg-purple-950/20',
-      accentText: 'text-purple-600 dark:text-purple-400',
-    };
-  }
-  if (name.includes('اجتماعی')) {
-    return {
-      icon: Globe2,
-      iconBg: 'bg-teal-600 text-white shadow-sm shadow-teal-600/30',
-      tintBg: 'bg-teal-50/40 dark:bg-teal-950/20',
-      accentText: 'text-teal-600 dark:text-teal-400',
-    };
-  }
-  if (name.includes('فناوری')) {
-    return {
-      icon: Cpu,
-      iconBg: 'bg-slate-700 text-white shadow-sm shadow-slate-700/30',
-      tintBg: 'bg-slate-100/60 dark:bg-slate-800/40',
-      accentText: 'text-slate-700 dark:text-slate-300',
-    };
-  }
-  if (name.includes('قرآن') || name.includes('آسمان')) {
-    return {
-      icon: Compass,
-      iconBg: 'bg-sky-600 text-white shadow-sm shadow-sky-600/30',
-      tintBg: 'bg-sky-50/40 dark:bg-sky-950/20',
-      accentText: 'text-sky-600 dark:text-sky-400',
-    };
-  }
-  return {
-    icon: BookOpen,
-    iconBg: 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30',
-    tintBg: 'bg-indigo-50/40 dark:bg-indigo-950/20',
-    accentText: 'text-indigo-600 dark:text-indigo-400',
-  };
-}
-
-function getPriorityColorText(code: string): string {
-  if (code.startsWith('A')) return 'text-rose-600 dark:text-rose-400 font-extrabold';
-  if (code.startsWith('B')) return 'text-amber-600 dark:text-amber-400 font-bold';
-  return 'text-sky-600 dark:text-sky-400 font-semibold';
+  if (name.includes('ریاضی')) return Calculator;
+  if (name.includes('علوم') || name.includes('فیزیک') || name.includes('شیمی') || name.includes('زیست'))
+    return Atom;
+  if (name.includes('انگلیسی') || name.includes('زبان') || name.includes('عربی')) return Languages;
+  if (name.includes('اجتماعی') || name.includes('تاریخ') || name.includes('جغرافیا')) return Globe2;
+  if (name.includes('فناوری')) return Cpu;
+  if (name.includes('قرآن') || name.includes('آسمان') || name.includes('هدی')) return Compass;
+  return BookOpen;
 }
 
 export const PlannerView: React.FC<PlannerViewProps> = ({
@@ -221,6 +144,12 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
 
   const [dailyPlans, setDailyPlans] = useState<DailyPlanItem[]>([]);
   const [weeklyPlans, setWeeklyPlans] = useState<DailyPlanItem[]>([]);
+  const [dailyGoal, setDailyGoal] = useState<DailyStudyGoalConfig | null>(null);
+  const [timeBudget, setTimeBudget] = useState<DailyTimeBudgetConfig | null>(null);
+  const [budgetUnit, setBudgetUnit] = useState<'hours' | 'minutes'>('hours');
+  const [budgetInputValue, setBudgetInputValue] = useState<string>('6');
+  const [savingBudget, setSavingBudget] = useState<boolean>(false);
+
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -234,6 +163,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   const [formStudyTypeId, setFormStudyTypeId] = useState<string>(studyTypes[0]?.id || '');
   const [formPriorityCode, setFormPriorityCode] = useState<string>('A1');
   const [formPredictedMinutes, setFormPredictedMinutes] = useState<string>('60');
+  const [formTargetExercises, setFormTargetExercises] = useState<string>('');
   const [formReminderTime, setFormReminderTime] = useState<string>('');
   const [formDescription, setFormDescription] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -241,6 +171,14 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
 
   const [activePerformancePlan, setActivePerformancePlan] = useState<DailyPlanItem | null>(null);
   const [deletingPlan, setDeletingPlan] = useState<DailyPlanItem | null>(null);
+
+  const categoriesMap = useMemo(() => {
+    const map = new Map<string, ActivityCategory>();
+    for (const c of categories) {
+      map.set(c.id, c);
+    }
+    return map;
+  }, [categories]);
 
   useEffect(() => {
     if (activeTab === 'today') {
@@ -262,12 +200,31 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     }
   }, [formSubjectId, selectedSubjectObj, editingPlan]);
 
-  const loadDailyPlans = async (dateStr: string) => {
+  const loadDailyData = async (dateStr: string) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.getPlansByDate(dateStr);
-      setDailyPlans(data);
+      const [plansData, goalData, budgetData] = await Promise.all([
+        api.getPlansByDate(dateStr),
+        api.getDailyGoal(dateStr),
+        api.getTimeBudget(dateStr),
+      ]);
+      setDailyPlans(plansData);
+      setDailyGoal(goalData);
+      setTimeBudget(budgetData);
+      if (budgetData && budgetData.budget_minutes !== null && budgetData.budget_minutes > 0) {
+        const bm = budgetData.budget_minutes;
+        if (bm % 60 === 0) {
+          setBudgetUnit('hours');
+          setBudgetInputValue(String(bm / 60));
+        } else {
+          setBudgetUnit('minutes');
+          setBudgetInputValue(String(bm));
+        }
+      } else {
+        setBudgetUnit('hours');
+        setBudgetInputValue('');
+      }
     } catch (err: any) {
       setError(err.message || 'خطا در بارگذاری برنامه روزانه');
     } finally {
@@ -296,9 +253,33 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     if (activeTab === 'weekly') {
       loadWeeklyPlans();
     } else {
-      loadDailyPlans(selectedDate);
+      loadDailyData(selectedDate);
     }
   }, [activeTab, selectedDate, weekRefDate]);
+
+  const handleSaveTimeBudget = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const rawNum = Number(budgetInputValue);
+    if (budgetInputValue === '' || isNaN(rawNum) || rawNum < 0) return;
+    const totalMins =
+      budgetUnit === 'hours' ? Math.round(rawNum * 60) : Math.round(rawNum);
+    if (totalMins > 1440) return;
+
+    try {
+      setSavingBudget(true);
+      const saved = await api.saveTimeBudget({
+        plan_date: selectedDate,
+        budget_minutes: totalMins > 0 ? totalMins : null,
+        input_unit: budgetUnit,
+      });
+      setTimeBudget(saved);
+      onDataMutated();
+    } catch (err: any) {
+      setError(err.message || 'خطا در ذخیره ظرف زمانی روز');
+    } finally {
+      setSavingBudget(false);
+    }
+  };
 
   const selectedCategoryObj = useMemo(
     () => categories.find((c) => c.id === formCategoryId) || null,
@@ -319,6 +300,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     setFormStudyTypeId(studyTypes[0]?.id || '');
     setFormPriorityCode('A1');
     setFormPredictedMinutes('60');
+    setFormTargetExercises('');
     setFormReminderTime('17:30');
     setFormDescription('');
     setFormError(null);
@@ -336,6 +318,11 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     }
     setFormPriorityCode(plan.priority_code);
     setFormPredictedMinutes(String(plan.predicted_minutes));
+    setFormTargetExercises(
+      plan.target_exercises !== null && plan.target_exercises !== undefined
+        ? String(plan.target_exercises)
+        : ''
+    );
     setFormReminderTime(plan.reminder_time || '');
     setFormDescription(plan.description || '');
     setFormError(null);
@@ -357,6 +344,11 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       return;
     }
 
+    const parsedTargetEx =
+      isFormStudyActivity && formTargetExercises.trim() !== ''
+        ? Math.max(0, Number(formTargetExercises))
+        : null;
+
     try {
       setFormSubmitting(true);
       if (editingPlan) {
@@ -367,6 +359,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
           study_type_id: isFormStudyActivity ? formStudyTypeId : null,
           priority_code: formPriorityCode,
           predicted_minutes: mins,
+          target_exercises: parsedTargetEx,
           reminder_time: formReminderTime.trim() || null,
           description: formDescription.trim(),
         });
@@ -379,6 +372,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
           study_type_id: isFormStudyActivity ? formStudyTypeId : null,
           priority_code: formPriorityCode,
           predicted_minutes: mins,
+          target_exercises: parsedTargetEx,
           reminder_time: formReminderTime.trim() || null,
           description: formDescription.trim(),
         });
@@ -389,7 +383,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       if (activeTab === 'weekly') {
         await loadWeeklyPlans();
       } else {
-        await loadDailyPlans(selectedDate);
+        await loadDailyData(selectedDate);
       }
       onDataMutated();
     } catch (err: any) {
@@ -407,7 +401,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       if (activeTab === 'weekly') {
         await loadWeeklyPlans();
       } else {
-        await loadDailyPlans(selectedDate);
+        await loadDailyData(selectedDate);
       }
       onDataMutated();
     } catch (err: any) {
@@ -425,11 +419,17 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       notes: string;
     }
   ) => {
-    await api.savePerformance(planId, payload);
+    await api.savePerformance(planId, {
+      ...payload,
+      learning_quality:
+        payload.learning_quality !== null && payload.learning_quality !== undefined
+          ? String(payload.learning_quality)
+          : null,
+    });
     if (activeTab === 'weekly') {
       await loadWeeklyPlans();
     } else {
-      await loadDailyPlans(selectedDate);
+      await loadDailyData(selectedDate);
     }
     onDataMutated();
   };
@@ -439,7 +439,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     if (activeTab === 'weekly') {
       await loadWeeklyPlans();
     } else {
-      await loadDailyPlans(selectedDate);
+      await loadDailyData(selectedDate);
     }
     onDataMutated();
   };
@@ -471,37 +471,43 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     await api.reorderPlans(list.map((item) => item.id));
   };
 
-  // Gamified student progress calculations for the selected day
+  // Modular Day Evaluation (Sections 5, 6, 7, 8, 9)
+  const dayEval = useMemo(
+    () =>
+      evaluateDayPerformance({
+        dateIso: selectedDate,
+        plans: dailyPlans,
+        budgetConfig: timeBudget,
+        goalConfig: dailyGoal,
+        categoriesMap,
+      }),
+    [selectedDate, dailyPlans, timeBudget, dailyGoal, categoriesMap]
+  );
+
+  // Gamified summary for Hero Header
   const daySummary = useMemo(() => {
-    let predTotal = 0;
-    let actualTotal = 0;
-    let completedCount = 0;
-    let partialCount = 0;
-    let totalExercises = 0;
-    for (const p of dailyPlans) {
-      predTotal += Number(p.initial_predicted_minutes || p.predicted_minutes || 0);
-      if (p.performance) {
-        actualTotal += Number(p.performance.actual_minutes || 0);
-        totalExercises += Number(p.performance.exercises_count || 0);
-      }
-      if (p.status === 'completed') completedCount++;
-      else if (p.status === 'partial') partialCount++;
-    }
     const totalCount = dailyPlans.length;
+    const completedCount = dailyPlans.filter((p) => p.status === 'completed').length;
+    const partialCount = dailyPlans.filter((p) => p.status === 'partial').length;
     const progressPercent =
-      totalCount > 0 ? Math.round(((completedCount + partialCount * 0.5) / totalCount) * 100) : 0;
-    const xpEarned = completedCount * 50 + partialCount * 25 + totalExercises * 2;
+      dayEval.finalDailyScoreS !== null
+        ? Math.min(100, Math.round(dayEval.finalDailyScoreS))
+        : totalCount > 0
+        ? Math.round(((completedCount + partialCount * 0.5) / totalCount) * 100)
+        : 0;
+    const xpEarned =
+      completedCount * 50 + partialCount * 25 + dayEval.actualExercisesCount * 2;
     return {
-      predTotal,
-      actualTotal,
+      predTotal: dayEval.totalPlannedAllMinutes,
+      actualTotal: dayEval.totalActualAllMinutes,
       completedCount,
       partialCount,
       totalCount,
-      totalExercises,
+      totalExercises: dayEval.actualExercisesCount,
       progressPercent,
       xpEarned,
     };
-  }, [dailyPlans]);
+  }, [dailyPlans, dayEval]);
 
   // SVG Ring calculation
   const ringRadius = 34;
@@ -515,12 +521,10 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
           ENERGETIC STUDENT MISSION HERO BANNER
       ===================================================================== */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-indigo-900 via-indigo-800 to-violet-900 text-white p-6 sm:p-7 shadow-lg shadow-indigo-950/15">
-        {/* Subtle decorative geometric light circles */}
         <div className="pointer-events-none absolute -top-24 -left-24 w-72 h-72 rounded-full bg-violet-500/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 right-1/3 w-64 h-64 rounded-full bg-emerald-400/15 blur-2xl" />
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          {/* Right Side: Greeting, Date & Motivational Status */}
           <div className="space-y-2 min-w-0">
             <div className="flex items-center gap-1.5 text-indigo-200 text-[11px] sm:text-xs font-semibold whitespace-nowrap overflow-hidden">
               <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
@@ -539,11 +543,13 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                 : `برنامه و گزارش عملکرد ${formatJalaliWeekdaySlash(selectedDate)}`}
             </h1>
 
-            {/* Quick Student Achievement Metrics */}
             <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-indigo-100 tabular-nums">
               <span className="flex items-center gap-1.5 font-semibold">
                 <Trophy className="w-4 h-4 text-amber-300" />
-                امتیاز تلاش این روز: {toPersianDigits(daySummary.xpEarned)} XP
+                امتیاز نهایی روز:{' '}
+                {dayEval.finalDailyScoreS !== null
+                  ? `${toPersianDigits(dayEval.finalDailyScoreS)} از ۱۰۰`
+                  : 'در انتظار ثبت'}
               </span>
               <span aria-hidden="true" className="text-indigo-400">
                 ·
@@ -562,7 +568,6 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
             </div>
           </div>
 
-          {/* Left Side: Progress Ring + Primary Add CTA */}
           <div className="flex flex-wrap items-center gap-5 shrink-0">
             <div className="flex items-center gap-3.5 bg-white/10 backdrop-blur-md rounded-2xl px-4 py-3 border border-white/15">
               <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
@@ -593,9 +598,9 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                 </span>
               </div>
               <div className="space-y-1 text-xs tabular-nums">
-                <div className="font-bold text-white">پیشرفت برنامه روز</div>
+                <div className="font-bold text-white">تحقق و امتیاز روز</div>
                 <div className="text-indigo-200">
-                  هدف: {formatMinutesPersian(daySummary.predTotal)}
+                  پیش‌بینی کل: {formatMinutesPersian(daySummary.predTotal)}
                 </div>
                 <div className="text-emerald-300 font-semibold">
                   انجام‌شده: {formatMinutesPersian(daySummary.actualTotal)}
@@ -680,12 +685,247 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       ===================================================================== */}
       {activeTab !== 'weekly' && (
         <div className="space-y-5">
-          {/* Smart Study Reminder Status & Instant Test Strip */}
+          {/* Smart Study Reminder Status Strip */}
           <StudyReminderManager
             plans={dailyPlans}
             selectedDate={selectedDate}
             onOpenPlan={(plan) => setActivePerformancePlan(plan)}
           />
+
+          {/* =================================================================
+              SECTION 9: DAILY TIME BUDGET (ظرف زمانی روز)
+              SECTION 5, 6, 7, 8: DAILY EVALUATION INDICES (T, Q, L, C, S)
+          ================================================================= */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* Section 9: Daily Time Budget Card */}
+            <div className="lg:col-span-7 rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                    <Timer className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                      ظرف زمانی روز ({formatJalaliCompact(selectedDate)})
+                    </h2>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      کل زمان در دسترس امروز برای برنامه‌ریزی مطالعه، سرگرمی و استراحت
+                    </p>
+                  </div>
+                </div>
+
+                {/* Budget Input (Hours or Minutes) */}
+                <form onSubmit={handleSaveTimeBudget} className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={0}
+                    max={budgetUnit === 'hours' ? 24 : 1440}
+                    step={budgetUnit === 'hours' ? '0.5' : '15'}
+                    value={budgetInputValue}
+                    onChange={(e) => setBudgetInputValue(e.target.value)}
+                    placeholder={budgetUnit === 'hours' ? 'مثلاً 6' : 'مثلاً 360'}
+                    className="w-20 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 text-xs font-extrabold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums text-center"
+                  />
+                  <select
+                    value={budgetUnit}
+                    onChange={(e) => {
+                      const nextUnit = e.target.value as 'hours' | 'minutes';
+                      const num = Number(budgetInputValue) || 0;
+                      if (budgetUnit === 'hours' && nextUnit === 'minutes') {
+                        setBudgetInputValue(num > 0 ? String(Math.round(num * 60)) : '');
+                      } else if (budgetUnit === 'minutes' && nextUnit === 'hours') {
+                        setBudgetInputValue(
+                          num > 0 ? String(Math.round((num / 60) * 10) / 10) : ''
+                        );
+                      }
+                      setBudgetUnit(nextUnit);
+                    }}
+                    className="rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 focus:border-indigo-600 focus:outline-none"
+                  >
+                    <option value="hours">ساعت</option>
+                    <option value="minutes">دقیقه</option>
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={savingBudget}
+                    className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 text-xs font-extrabold transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    {savingBudget ? '...' : 'ثبت ظرفیت'}
+                  </button>
+                </form>
+              </div>
+
+              {dayEval.budgetMinutes !== null && dayEval.budgetMinutes > 0 ? (
+                <div className="space-y-3">
+                  {/* 9.3 & 9.4 Side-by-Side Comparison Boxes */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* 9.3 Planned vs Budget */}
+                    <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/70 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-slate-600 dark:text-slate-300">
+                          برنامه‌ریزی در برابر ظرفیت:
+                        </span>
+                        <span className="font-extrabold text-slate-900 dark:text-white tabular-nums">
+                          {formatHoursAndMinutesPersian(dayEval.totalPlannedAllMinutes)} از{' '}
+                          {formatHoursAndMinutesPersian(dayEval.budgetMinutes)}
+                        </span>
+                      </div>
+                      {dayEval.plannedOverBudgetMinutes !== null &&
+                      dayEval.plannedOverBudgetMinutes > 0 ? (
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-rose-600 dark:text-rose-400 tabular-nums">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span>
+                            هشدار: {toPersianDigits(dayEval.plannedOverBudgetMinutes)} دقیقه بیشتر از ظرف زمانی روز برنامه‌ریزی شده است!
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
+                          ظرفیت آزاد و تخصیص‌نیافته:{' '}
+                          {formatHoursAndMinutesPersian(dayEval.unallocatedPlannedMinutes || 0)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 9.4 Actual vs Budget */}
+                    <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/70 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-slate-600 dark:text-slate-300">
+                          عملکرد واقعی در برابر ظرفیت:
+                        </span>
+                        <span className="font-extrabold text-slate-900 dark:text-white tabular-nums">
+                          {formatHoursAndMinutesPersian(dayEval.totalActualAllMinutes)} مصرف‌شده
+                        </span>
+                      </div>
+                      {dayEval.actualOverBudgetMinutes !== null &&
+                      dayEval.actualOverBudgetMinutes > 0 ? (
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span>
+                            زمان واقعی {toPersianDigits(dayEval.actualOverBudgetMinutes)} دقیقه از ظرف زمانی روز عبور کرده است.
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 tabular-nums">
+                          باقی‌مانده از ظرف زمانی:{' '}
+                          {formatHoursAndMinutesPersian(dayEval.remainingActualBudgetMinutes || 0)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Shares of Time Budget Bar (Study Share, Restricted Share, Essential Share) */}
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold tabular-nums">
+                      <span className="text-indigo-600 dark:text-indigo-400">
+                        سهم مطالعه از ظرف زمانی: {toPersianDigits(dayEval.studyShareOfBudgetPct ?? 0)}٪
+                      </span>
+                      <span className="text-amber-600 dark:text-amber-400">
+                        سهم سرگرمی: {toPersianDigits(dayEval.restrictedShareOfBudgetPct ?? 0)}٪
+                      </span>
+                      <span className="text-emerald-600 dark:text-emerald-400">
+                        سهم استراحت/تغذیه: {toPersianDigits(dayEval.essentialShareOfBudgetPct ?? 0)}٪
+                      </span>
+                    </div>
+                    <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex">
+                      <div
+                        className="bg-indigo-600 h-full transition-all"
+                        style={{ width: `${Math.min(100, dayEval.studyShareOfBudgetPct ?? 0)}%` }}
+                        title="سهم مطالعه"
+                      />
+                      <div
+                        className="bg-amber-500 h-full transition-all"
+                        style={{
+                          width: `${Math.min(100, dayEval.restrictedShareOfBudgetPct ?? 0)}%`,
+                        }}
+                        title="سهم سرگرمی"
+                      />
+                      <div
+                        className="bg-emerald-500 h-full transition-all"
+                        style={{
+                          width: `${Math.min(100, dayEval.essentialShareOfBudgetPct ?? 0)}%`,
+                        }}
+                        title="سهم ضروری و بازیابی"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  برای مشاهده «سهم مطالعه از ظرف زمانی» و هشدارهای سرریز برنامه، زمان در دسترس امروز را به ساعت یا دقیقه وارد کنید.
+                </p>
+              )}
+            </div>
+
+            {/* Sections 5, 6, 7, 8: Independent & Composite Daily Evaluation Scores */}
+            <div className="lg:col-span-5 rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs flex flex-col justify-between space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div>
+                  <h2 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                    شاخص‌های ارزیابی عملکرد روز
+                  </h2>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    محاسبه مستقل آموزشی (E) و کنترل سرگرمی (C)
+                  </p>
+                </div>
+                <div className="text-left">
+                  <span className="text-[10px] font-bold text-slate-400 block">
+                    امتیاز نهایی روز (S)
+                  </span>
+                  <span className="text-base font-black text-indigo-600 dark:text-indigo-400 tabular-nums">
+                    {dayEval.finalDailyScoreS !== null
+                      ? `${toPersianDigits(dayEval.finalDailyScoreS)} / ۱۰۰`
+                      : '—'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-2.5 text-xs tabular-nums">
+                <div className="rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 px-3 py-2">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">
+                    تحقق زمان مطالعه (T)
+                  </span>
+                  <span className="text-sm font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5 block">
+                    {dayEval.studyTimeIndexT !== null
+                      ? `${toPersianDigits(dayEval.studyTimeIndexT)}٪`
+                      : 'بدون برنامه'}
+                  </span>
+                </div>
+
+                <div className="rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50 px-3 py-2">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">
+                    تحقق تست و تمرین (Q)
+                  </span>
+                  <span className="text-sm font-extrabold text-blue-700 dark:text-blue-300 mt-0.5 block">
+                    {dayEval.exercisesIndexQ !== null
+                      ? `${toPersianDigits(dayEval.exercisesIndexQ)}٪`
+                      : 'بدون هدف تست'}
+                  </span>
+                </div>
+
+                <div className="rounded-2xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/50 px-3 py-2">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">
+                    کیفیت یادگیری وزنی (L)
+                  </span>
+                  <span className="text-sm font-extrabold text-purple-700 dark:text-purple-300 mt-0.5 block">
+                    {dayEval.learningQuality0To10 !== null
+                      ? `${toPersianDigits(dayEval.learningQuality0To10)} از ۱۰`
+                      : 'ثبت‌نشده'}
+                  </span>
+                </div>
+
+                <div className="rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50 px-3 py-2">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">
+                    کنترل سرگرمی‌ها (C)
+                  </span>
+                  <span className="text-sm font-extrabold text-amber-700 dark:text-amber-300 mt-0.5 block">
+                    {dayEval.restrictedControlIndexC !== null
+                      ? `${toPersianDigits(dayEval.restrictedControlIndexC)}٪`
+                      : 'بدون سرگرمی'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Sorting & Filter Control Strip */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 px-5 py-3.5 shadow-xs">
@@ -694,7 +934,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                 لیست کارت‌های فعالیت ({toPersianDigits(sortedDailyPlans.length)} مورد)
               </span>
               <span aria-hidden="true">·</span>
-              <span>روی هر کارت کلیک کن تا عملکرد واقعی و تعداد تست‌هات رو ثبت کنی!</span>
+              <span>روی هر کارت کلیک کن تا عملکرد واقعی، تعداد تست و نمره کیفیت ۰ تا ۱۰ را ثبت کنی!</span>
             </div>
 
             <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -768,170 +1008,222 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {sortedDailyPlans.map((plan, index) => {
                 const isStudy = Number(plan.is_study) === 1;
+                const activityGroup = classifyPlanActivityGroup(plan, categoriesMap);
                 const predMins = plan.initial_predicted_minutes || plan.predicted_minutes;
                 const actualMins = plan.performance?.actual_minutes;
                 const hasPerf = Boolean(plan.performance);
                 const diff = hasPerf && actualMins !== undefined ? actualMins - predMins : null;
 
-                const theme = getSubjectVisualTheme(
+                // Section 3: Dedicated Gradient Header Theme per Subject / Activity
+                const gradTheme = getCardGradientTheme(
+                  plan.subject_name_snapshot,
+                  plan.category_title_snapshot,
+                  isStudy,
+                  activityGroup
+                );
+                const ThemeIcon = getSubjectIconComponent(
                   plan.subject_name_snapshot,
                   plan.category_title_snapshot,
                   isStudy
                 );
-                const ThemeIcon = theme.icon;
 
-                const timeProgressRatio =
-                  hasPerf && actualMins !== undefined && predMins > 0
-                    ? Math.min(100, Math.round((actualMins / predMins) * 100))
+                // Section 4: Actual-to-Predicted Time Ratio (can exceed 100%)
+                const actualToPredRatioPct =
+                  hasPerf && actualMins !== undefined
+                    ? calculateActualToPredictedRatioPct(actualMins, predMins) ?? 0
                     : 0;
+
+                const parsedQuality0To10 = hasPerf
+                  ? parseLearningQuality0To10(plan.performance?.learning_quality)
+                  : null;
+
+                // Section 2.1: Single-line Title + Priority + Unit
+                const singleLineTitle = isStudy
+                  ? `${plan.subject_name_snapshot || 'درس'} · ${plan.priority_code}${
+                      plan.unit_title_snapshot ? ` · ${plan.unit_title_snapshot}` : ''
+                    }`
+                  : `${plan.category_title_snapshot} · ${plan.priority_code}`;
+
+                // Section 2.2: Top-left Corner Activity Type Badge
+                const cornerTypeBadgeText = isStudy
+                  ? plan.study_type_title_snapshot || 'مطالعه درسی'
+                  : activityGroup === 'restricted'
+                  ? 'سرگرمی محدودشونده'
+                  : 'ضروری و بازیابی';
 
                 return (
                   <div
                     key={plan.id}
                     onClick={() => setActivePerformancePlan(plan)}
-                    className="group rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 hover:border-indigo-400 dark:hover:border-indigo-600 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between shadow-xs"
+                    className={`group rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden ${gradTheme.borderHover} hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between shadow-xs`}
                   >
                     <div>
-                      {/* Card Top Row: Colorful Subject Icon + Title + Action Controls */}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3.5">
-                          <div
-                            className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${theme.iconBg}`}
+                      {/* =========================================================
+                          SECTION 2.1, 2.2 & 3: GRADIENT HEADER ONLY
+                      ========================================================= */}
+                      <div
+                        className={`px-4 py-3 ${gradTheme.headerGradient} flex items-center justify-between gap-2.5`}
+                      >
+                        {/* Right side: Icon + Single-line Subject + Priority + Unit (truncate) */}
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white shrink-0">
+                            <ThemeIcon className="w-4 h-4" />
+                          </div>
+                          <h3
+                            className="text-xs sm:text-sm font-extrabold text-white truncate whitespace-nowrap"
+                            title={singleLineTitle}
                           >
-                            <ThemeIcon className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-lg font-extrabold text-slate-900 dark:text-white leading-snug">
-                                {isStudy
-                                  ? `${plan.subject_name_snapshot}`
-                                  : plan.category_title_snapshot}
-                              </h3>
-                              <span
-                                className={`text-xs tabular-nums ${getPriorityColorText(
-                                  plan.priority_code
-                                )}`}
-                              >
-                                · {plan.priority_code}
-                              </span>
-                            </div>
-
-                            {/* Clean Unboxed Metadata Line (Section 7.1: فارسی | درس دوم | تکلیف | 90 دقیقه) */}
-                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
-                              {isStudy && plan.unit_title_snapshot && (
-                                <>
-                                  <span className={`font-bold ${theme.accentText}`}>
-                                    {plan.unit_title_snapshot}
-                                  </span>
-                                  <span aria-hidden="true">|</span>
-                                </>
-                              )}
-                              {isStudy && plan.study_type_title_snapshot && (
-                                <>
-                                  <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                    {plan.study_type_title_snapshot}
-                                  </span>
-                                  <span aria-hidden="true">|</span>
-                                </>
-                              )}
-                              <span>پیش‌بینی: {formatMinutesPersian(predMins)}</span>
-                              {plan.reminder_time && (
-                                <>
-                                  <span aria-hidden="true">|</span>
-                                  <span className="inline-flex items-center gap-1 font-extrabold text-indigo-600 dark:text-indigo-400">
-                                    <Bell className="w-3.5 h-3.5 text-amber-500" />
-                                    یادآور: ساعت {toPersianDigits(plan.reminder_time)}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
+                            {singleLineTitle}
+                          </h3>
                         </div>
 
-                        {/* Quick Reorder / Edit / Delete Controls */}
-                        <div
-                          className="flex items-center gap-0.5 shrink-0"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleMoveOrder(index, 'up')}
-                            disabled={index === 0}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-25 cursor-pointer"
-                            title="جابه‌جایی به بالا"
+                        {/* Left side: Corner Activity Type Badge (2.2) + Action Controls */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span
+                            className={`px-2.5 py-1 rounded-xl text-[11px] font-extrabold whitespace-nowrap ${gradTheme.badgeBg}`}
                           >
-                            <ArrowUp className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleMoveOrder(index, 'down')}
-                            disabled={index === sortedDailyPlans.length - 1}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-25 cursor-pointer"
-                            title="جابه‌جایی به پایین"
+                            {cornerTypeBadgeText}
+                          </span>
+
+                          <div
+                            className="flex items-center gap-0.5 bg-black/15 rounded-xl px-1 py-0.5"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <ArrowDown className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openEditForm(plan)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
-                            title="ویرایش برنامه"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeletingPlan(plan)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
-                            title="حذف فعالیت"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveOrder(index, 'up')}
+                              disabled={index === 0}
+                              className="p-1 rounded-lg text-white/80 hover:text-white disabled:opacity-30 cursor-pointer"
+                              title="جابه‌جایی به بالا"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveOrder(index, 'down')}
+                              disabled={index === sortedDailyPlans.length - 1}
+                              className="p-1 rounded-lg text-white/80 hover:text-white disabled:opacity-30 cursor-pointer"
+                              title="جابه‌جایی به پایین"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openEditForm(plan)}
+                              className="p-1 rounded-lg text-white/80 hover:text-white cursor-pointer"
+                              title="ویرایش برنامه"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingPlan(plan)}
+                              className="p-1 rounded-lg text-white/80 hover:text-rose-200 cursor-pointer"
+                              title="حذف فعالیت"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
 
-                      {plan.description && (
-                        <div
-                          className={`mt-3.5 rounded-2xl px-3.5 py-2.5 text-xs text-slate-700 dark:text-slate-300 leading-relaxed ${theme.tintBg}`}
-                        >
-                          {plan.description}
+                      {/* =========================================================
+                          CARD BODY (Neutral Clean Background - Section 3.1)
+                      ========================================================= */}
+                      <div className="p-4 sm:p-5 space-y-3">
+                        {/* Section 2.3: Single-line Initial Prediction + Optional Metadata */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs tabular-nums">
+                          <span className="font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                            پیش‌بینی: {formatMinutesPersian(predMins)}
+                          </span>
+
+                          <div className="flex items-center gap-2">
+                            {isStudy &&
+                              plan.target_exercises !== null &&
+                              plan.target_exercises !== undefined &&
+                              plan.target_exercises > 0 && (
+                                <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                                  هدف تست: {toPersianDigits(plan.target_exercises)}
+                                </span>
+                              )}
+                            {plan.reminder_time && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                                <Bell className="w-3.5 h-3.5 text-amber-500" />
+                                ساعت {toPersianDigits(plan.reminder_time)}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      )}
+
+                        {plan.description && (
+                          <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed truncate">
+                            {plan.description}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Visual Dual Time Comparison Bar & Status Footer */}
-                    <div className="mt-4 pt-3.5 border-t border-slate-100 dark:border-slate-800/80 space-y-2.5">
-                      {/* Visual Progress Bar comparing Actual vs Predicted */}
-                      <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-300 ${
-                            !hasPerf
-                              ? 'w-0'
-                              : plan.status === 'completed'
-                              ? 'bg-emerald-500'
-                              : 'bg-amber-500'
-                          }`}
-                          style={{ width: `${hasPerf ? Math.max(15, timeProgressRatio) : 0}%` }}
-                        />
+                    {/* =========================================================
+                        SECTION 4: TIME RATIO INDICATOR (زمان واقعی نسبت به پیش‌بینی)
+                    ========================================================= */}
+                    <div className="px-4 sm:px-5 pb-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-2.5 bg-slate-50/40 dark:bg-slate-900/50">
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px] font-bold tabular-nums">
+                          <span className="text-slate-500 dark:text-slate-400">
+                            زمان واقعی نسبت به پیش‌بینی
+                          </span>
+                          <span
+                            className={
+                              !hasPerf
+                                ? 'text-slate-400'
+                                : activityGroup === 'restricted' && actualToPredRatioPct > 100
+                                ? 'text-rose-600 dark:text-rose-400 font-extrabold'
+                                : actualToPredRatioPct >= 100
+                                ? 'text-emerald-600 dark:text-emerald-400 font-extrabold'
+                                : 'text-indigo-600 dark:text-indigo-400 font-extrabold'
+                            }
+                          >
+                            {hasPerf ? `${toPersianDigits(actualToPredRatioPct)}٪` : '۰٪'}
+                          </span>
+                        </div>
+
+                        <div className="w-full h-2 rounded-full bg-slate-200/80 dark:bg-slate-800 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              !hasPerf
+                                ? 'w-0'
+                                : activityGroup === 'restricted' && actualToPredRatioPct > 100
+                                ? 'bg-rose-500'
+                                : actualToPredRatioPct >= 100
+                                ? 'bg-emerald-500'
+                                : 'bg-indigo-600'
+                            }`}
+                            style={{
+                              width: `${
+                                hasPerf ? Math.min(100, Math.max(8, actualToPredRatioPct)) : 0
+                              }%`,
+                            }}
+                          />
+                        </div>
                       </div>
 
-                      <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
                         {!hasPerf ? (
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
-                            <Clock className="w-4 h-4 text-amber-500" />
+                            <Clock className="w-3.5 h-3.5 text-amber-500" />
                             <span>آماده انجام (هنوز عملکردی ثبت نشده)</span>
                           </div>
                         ) : (
-                          <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums">
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] tabular-nums">
                             {plan.status === 'completed' ? (
                               <span className="flex items-center gap-1 font-extrabold text-emerald-600 dark:text-emerald-400">
-                                <CheckCircle2 className="w-4 h-4" />
-                                تکمیل شد (+۵۰ XP)
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                تکمیل شده
                               </span>
                             ) : (
                               <span className="flex items-center gap-1 font-extrabold text-amber-600 dark:text-amber-400">
-                                <AlertCircle className="w-4 h-4" />
-                                ناقص / نیمه‌تمام (+۲۵ XP)
+                                <AlertCircle className="w-3.5 h-3.5" />
+                                ناقص
                               </span>
                             )}
                             <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">
@@ -953,15 +1245,17 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                                     diff === 0
                                       ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
                                       : diff > 0
-                                      ? 'text-amber-600 dark:text-amber-400 font-semibold'
+                                      ? activityGroup === 'restricted'
+                                        ? 'text-rose-600 dark:text-rose-400 font-semibold'
+                                        : 'text-amber-600 dark:text-amber-400 font-semibold'
                                       : 'text-indigo-600 dark:text-indigo-400 font-semibold'
                                   }
                                 >
                                   {diff === 0
-                                    ? 'دقیقاً طبق هدف'
+                                    ? 'مطابق پیش‌بینی'
                                     : diff > 0
-                                    ? `${toPersianDigits(diff)}+ دقیقه بیشتر`
-                                    : `${toPersianDigits(Math.abs(diff))}- دقیقه سریع‌تر`}
+                                    ? `${toPersianDigits(diff)} د بیشتر`
+                                    : `${toPersianDigits(Math.abs(diff))} د کمتر`}
                                 </span>
                               </>
                             )}
@@ -974,12 +1268,12 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                                   ·
                                 </span>
                                 <span className="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1">
-                                  <FileCheck2 className="w-3.5 h-3.5 text-blue-500" />
-                                  {toPersianDigits(plan.performance?.exercises_count)} تست/تمرین
+                                  <FileCheck2 className="w-3 h-3 text-blue-500" />
+                                  {toPersianDigits(plan.performance?.exercises_count)} تست
                                 </span>
                               </>
                             )}
-                            {isStudy && plan.performance?.learning_quality && (
+                            {isStudy && parsedQuality0To10 !== null && (
                               <>
                                 <span
                                   aria-hidden="true"
@@ -988,8 +1282,8 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                                   ·
                                 </span>
                                 <span className="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1">
-                                  <Award className="w-3.5 h-3.5 text-purple-500" />
-                                  {QUALITY_LABELS[plan.performance.learning_quality]}
+                                  <Award className="w-3 h-3 text-purple-500" />
+                                  کیفیت: {toPersianDigits(parsedQuality0To10)}/۱۰
                                 </span>
                               </>
                             )}
@@ -997,7 +1291,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                         )}
 
                         <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-[-2px] transition-transform whitespace-nowrap">
-                          {hasPerf ? 'ویرایش گزارش ←' : 'ثبت عملکرد ←'}
+                          {hasPerf ? 'ویرایش عملکرد ←' : 'ثبت عملکرد ←'}
                         </span>
                       </div>
                     </div>
@@ -1106,56 +1400,60 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                       <div className="space-y-2.5">
                         {dayPlans.map((plan) => {
                           const isStudy = Number(plan.is_study) === 1;
+                          const actGroup = classifyPlanActivityGroup(plan, categoriesMap);
                           const pred = plan.initial_predicted_minutes || plan.predicted_minutes;
                           const act = plan.performance?.actual_minutes;
-                          const theme = getSubjectVisualTheme(
+                          const gradTheme = getCardGradientTheme(
+                            plan.subject_name_snapshot,
+                            plan.category_title_snapshot,
+                            isStudy,
+                            actGroup
+                          );
+                          const MiniIcon = getSubjectIconComponent(
                             plan.subject_name_snapshot,
                             plan.category_title_snapshot,
                             isStudy
                           );
-                          const MiniIcon = theme.icon;
 
                           return (
                             <div
                               key={plan.id}
                               onClick={() => setActivePerformancePlan(plan)}
-                              className={`p-3 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-indigo-300 transition-colors cursor-pointer ${theme.tintBg}`}
+                              className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden hover:border-indigo-400 transition-colors cursor-pointer"
                             >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <div
-                                    className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${theme.iconBg}`}
-                                  >
-                                    <MiniIcon className="w-3.5 h-3.5" />
-                                  </div>
-                                  <span className="text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                              <div
+                                className={`px-3 py-1.5 ${gradTheme.headerGradient} flex items-center justify-between gap-2`}
+                              >
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <MiniIcon className="w-3.5 h-3.5 text-white shrink-0" />
+                                  <span className="text-xs font-extrabold text-white truncate">
                                     {isStudy
-                                      ? plan.subject_name_snapshot
-                                      : plan.category_title_snapshot}
+                                      ? `${plan.subject_name_snapshot} · ${plan.priority_code}`
+                                      : `${plan.category_title_snapshot} · ${plan.priority_code}`}
                                   </span>
                                 </div>
-                                <span
-                                  className={`text-[11px] tabular-nums shrink-0 ${getPriorityColorText(
-                                    plan.priority_code
-                                  )}`}
-                                >
-                                  {plan.priority_code}
-                                </span>
+                                {isStudy && plan.study_type_title_snapshot && (
+                                  <span className="text-[10px] font-bold text-white/95 bg-black/20 px-1.5 py-0.5 rounded-md shrink-0">
+                                    {plan.study_type_title_snapshot}
+                                  </span>
+                                )}
                               </div>
-                              {isStudy && plan.unit_title_snapshot && (
-                                <div className="text-[11px] text-slate-600 dark:text-slate-300 truncate mt-1 pr-8">
-                                  {plan.unit_title_snapshot}
+                              <div className="px-3 py-2 text-[11px] space-y-1">
+                                {isStudy && plan.unit_title_snapshot && (
+                                  <div className="text-slate-600 dark:text-slate-300 font-semibold truncate">
+                                    {plan.unit_title_snapshot}
+                                  </div>
+                                )}
+                                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 tabular-nums">
+                                  <span>پیش‌بینی: {toPersianDigits(pred)} د</span>
+                                  <span className="font-bold text-slate-700 dark:text-slate-200">
+                                    {act !== undefined
+                                      ? `واقعی: ${toPersianDigits(act)} د (${toPersianDigits(
+                                          calculateActualToPredictedRatioPct(act, pred) ?? 0
+                                        )}٪)`
+                                      : 'در انتظار'}
+                                  </span>
                                 </div>
-                              )}
-                              <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-2 pt-1.5 border-t border-slate-200/50 dark:border-slate-700/50 tabular-nums">
-                                <span>هدف: {toPersianDigits(pred)} د</span>
-                                <span className="font-semibold">
-                                  {act !== undefined
-                                    ? `واقعی: ${toPersianDigits(act)} د (${
-                                        plan.status === 'completed' ? '✓' : 'ناقص'
-                                      })`
-                                    : 'در انتظار'}
-                                </span>
                               </div>
                             </div>
                           );
@@ -1182,9 +1480,9 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       ===================================================================== */}
       {showPlanForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 sm:p-6">
-          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl max-h-[82vh] flex flex-col overflow-hidden">
+          <div className="w-full max-w-md rounded-3xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl max-h-[82vh] flex flex-col overflow-hidden">
             {/* Fixed Modal Header */}
-            <div className="shrink-0 flex items-center justify-between px-5 py-3.5 border-b border-slate-200 dark:border-slate-800">
+            <div className="shrink-0 flex items-center justify-between px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/90">
               <div className="min-w-0">
                 <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white whitespace-nowrap truncate">
                   {editingPlan ? 'ویرایش فعالیت برنامه‌ریزی‌شده' : 'ثبت فعالیت جدید'}
@@ -1211,7 +1509,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                   </div>
                 )}
 
-                {/* فیلد اول: عنوان فعالیت (Dropdown) */}
+                {/* فیلد اول: عنوان فعالیت */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
                     ۱. عنوان فعالیت
@@ -1229,10 +1527,9 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                   </select>
                 </div>
 
-                {/* فیلدهای شرطی مربوط به درس (۲. نام درس، ۳. فصل یا درس، ۴. نوع فعالیت درسی) */}
+                {/* فیلدهای شرطی مربوط به درس */}
                 {isFormStudyActivity && (
                   <div className="space-y-3.5 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/25 border border-indigo-100 dark:border-indigo-900/50 p-3.5">
-                    {/* فیلد دوم: نام درس */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
                         ۲. نام درس
@@ -1250,7 +1547,6 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                       </select>
                     </div>
 
-                    {/* فیلد سوم: فصل یا درس */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap truncate">
                         ۳. فصل یا درس ({selectedSubjectObj?.unit_type_label || 'بخش'} کتاب{' '}
@@ -1275,7 +1571,6 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                       )}
                     </div>
 
-                    {/* فیلد چهارم: نوع فعالیت درسی (Dropdown بدون توضیحات اضافی) */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
                         ۴. نوع فعالیت درسی
@@ -1295,7 +1590,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                   </div>
                 )}
 
-                {/* فیلد پنجم: اولویت انجام فعالیت (Dropdown) */}
+                {/* اولویت انجام فعالیت */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
                     {isFormStudyActivity ? '۵. اولویت انجام فعالیت' : '۲. اولویت انجام فعالیت'}
@@ -1313,32 +1608,51 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                   </select>
                 </div>
 
-                {/* فیلد ششم: زمان پیش‌بینی‌شده برحسب دقیقه (ورودی عددی و تایپی) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
-                    {isFormStudyActivity
-                      ? '۶. زمان پیش‌بینی‌شده (دقیقه)'
-                      : '۳. زمان پیش‌بینی‌شده (دقیقه)'}
-                  </label>
-                  {editingPlan && editingPlan.performance ? (
-                    <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300">
-                      برای این فعالیت قبلاً عملکرد واقعی ثبت شده است؛ بنابراین زمان پیش‌بینی‌شده اولیه ({formatMinutesPersian(editingPlan.initial_predicted_minutes)}) جهت حفظ صحت مقایسه‌ها قفل شده است.
+                {/* زمان پیش‌بینی‌شده + هدف تست اختیاری */}
+                <div className={`grid grid-cols-1 ${isFormStudyActivity ? 'sm:grid-cols-2' : ''} gap-3`}>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
+                      {isFormStudyActivity
+                        ? '۶. زمان پیش‌بینی‌شده (دقیقه)'
+                        : '۳. زمان پیش‌بینی‌شده (دقیقه)'}
+                    </label>
+                    {editingPlan && editingPlan.performance ? (
+                      <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-2.5 text-[11px] text-amber-800 dark:text-amber-300">
+                        ثابت در تحلیل اولیه: {formatMinutesPersian(editingPlan.initial_predicted_minutes)}
+                      </div>
+                    ) : (
+                      <input
+                        type="number"
+                        min={1}
+                        max={720}
+                        required
+                        value={formPredictedMinutes}
+                        onChange={(e) => setFormPredictedMinutes(e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
+                        placeholder="مثلاً 60"
+                      />
+                    )}
+                  </div>
+
+                  {isFormStudyActivity && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
+                        هدف تمرین / تست (اختیاری)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={1000}
+                        value={formTargetExercises}
+                        onChange={(e) => setFormTargetExercises(e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
+                        placeholder="مثلاً 20"
+                      />
                     </div>
-                  ) : (
-                    <input
-                      type="number"
-                      min={1}
-                      max={720}
-                      required
-                      value={formPredictedMinutes}
-                      onChange={(e) => setFormPredictedMinutes(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none tabular-nums"
-                      placeholder="مثلاً 60"
-                    />
                   )}
                 </div>
 
-                {/* فیلد هفتم: ساعت یادآوری (تک‌خطی + Dropdown) */}
+                {/* ساعت یادآوری */}
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
@@ -1380,7 +1694,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                   </select>
                 </div>
 
-                {/* فیلد هشتم: توضیحات تکمیلی */}
+                {/* توضیحات تکمیلی */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">
                     {isFormStudyActivity ? '۸. توضیحات تکمیلی (اختیاری)' : '۵. توضیحات تکمیلی (اختیاری)'}
@@ -1400,7 +1714,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
               </div>
 
               {/* Pinned Modal Footer Buttons */}
-              <div className="shrink-0 flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/90">
+              <div className="shrink-0 flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90">
                 <button
                   type="button"
                   onClick={() => setShowPlanForm(false)}

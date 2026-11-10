@@ -22,6 +22,7 @@ import type {
   ActivityCategory,
   StudyActivityType,
   PriorityLevel,
+  ActivityGroupType,
 } from '../types.ts';
 import { api } from '../services/api.ts';
 import { toPersianDigits } from '../utils/jalali.ts';
@@ -33,6 +34,12 @@ interface SettingsViewProps {
   priorities: PriorityLevel[];
   onRefreshBootstrap: () => Promise<void>;
 }
+
+const ACTIVITY_GROUP_LABELS: Record<ActivityGroupType, string> = {
+  educational: 'گروه ۱: آموزشی و یادگیری',
+  restricted: 'گروه ۲: تفریحی و محدودشونده (گوشی/بازی/تلویزیون)',
+  essential: 'گروه ۳: ضروری و بازیابی (استراحت/غذا/ورزش)',
+};
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   categories,
@@ -47,8 +54,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   // Category CRUD state
   const [newCategoryTitle, setNewCategoryTitle] = useState('');
   const [newCategoryIsStudy, setNewCategoryIsStudy] = useState<number>(0);
+  const [newCategoryGroup, setNewCategoryGroup] = useState<ActivityGroupType>('essential');
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [editCatTitle, setEditCatTitle] = useState('');
+  const [editCatGroup, setEditCatGroup] = useState<ActivityGroupType>('essential');
   const [deletingCategory, setDeletingCategory] = useState<ActivityCategory | null>(null);
 
   // StudyType CRUD state
@@ -121,15 +130,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     await api.createCategory({
       title: newCategoryTitle.trim(),
       is_study: newCategoryIsStudy,
+      activity_group: newCategoryIsStudy === 1 ? 'educational' : newCategoryGroup,
     });
     setNewCategoryTitle('');
     setNewCategoryIsStudy(0);
+    setNewCategoryGroup('essential');
     await onRefreshBootstrap();
   };
 
   const handleSaveCategory = async (id: string) => {
     if (!editCatTitle.trim()) return;
-    await api.updateCategory(id, { title: editCatTitle.trim() });
+    await api.updateCategory(id, {
+      title: editCatTitle.trim(),
+      activity_group: editCatGroup,
+    });
     setEditingCatId(null);
     await onRefreshBootstrap();
   };
@@ -502,19 +516,19 @@ git push -u origin main`;
                 </span>
               </div>
               <p className="text-xs text-indigo-700/80 dark:text-indigo-300/80 leading-relaxed">
-                این فایل (MartiaPlanner-v1.2.0.html) شامل کل کدهای فرانت‌اند، استایل‌ها و پایگاه داده محلی است و با دوبار کلیک در هر مرورگری بدون نیاز به نصب یا اینترنت اجرا می‌شود.
+                این فایل (MartiaPlanner-v{APP_VERSION}.html) شامل کل کدهای فرانت‌اند، استایل‌ها و پایگاه داده محلی است و با دوبار کلیک در هر مرورگری بدون نیاز به نصب یا اینترنت اجرا می‌شود.
               </p>
               <div className="pt-1 flex items-center gap-2 flex-wrap">
                 <a
-                  href="/MartiaPlanner-v1.2.0.html"
-                  download="MartiaPlanner-v1.2.0.html"
+                  href={`/MartiaPlanner-v${APP_VERSION}.html`}
+                  download={`MartiaPlanner-v${APP_VERSION}.html`}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors shadow-xs"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>دانلود مستقیم MartiaPlanner-v1.2.0.html</span>
+                  <span>دانلود مستقیم MartiaPlanner-v{APP_VERSION}.html</span>
                 </a>
                 <a
-                  href="https://github.com/EhspGithub/MartiaPlanner/blob/main/MartiaPlanner-v1.2.0.html"
+                  href={`https://github.com/EhspGithub/MartiaPlanner/blob/main/MartiaPlanner-v${APP_VERSION}.html`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-colors"
@@ -647,16 +661,31 @@ git push -u origin main`;
                 value={newCategoryTitle}
                 onChange={(e) => setNewCategoryTitle(e.target.value)}
                 placeholder="عنوان فعالیت جدید (مثلاً: مطالعه آزاد، کلاس زبان، ورزش...)"
-                className="flex-1 min-w-[220px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white"
+                className="flex-1 min-w-[200px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white"
               />
               <select
                 value={newCategoryIsStudy}
-                onChange={(e) => setNewCategoryIsStudy(Number(e.target.value))}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setNewCategoryIsStudy(val);
+                  if (val === 1) setNewCategoryGroup('educational');
+                }}
                 className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-xs text-slate-900 dark:text-white"
               >
                 <option value={0}>نوع: فعالیت غیردرسی (فرم ساده)</option>
                 <option value={1}>نوع: فعالیت درسی (نیازمند انتخاب درس و فصل)</option>
               </select>
+              {newCategoryIsStudy === 0 && (
+                <select
+                  value={newCategoryGroup}
+                  onChange={(e) => setNewCategoryGroup(e.target.value as ActivityGroupType)}
+                  className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-xs text-slate-900 dark:text-white"
+                >
+                  <option value="essential">گروه ۳: ضروری و بازیابی (بدون نمره منفی)</option>
+                  <option value="restricted">گروه ۲: تفریحی و محدودشونده (کنترل سقف مجاز)</option>
+                  <option value="educational">گروه ۱: آموزشی و یادگیری</option>
+                </select>
+              )}
               <button
                 type="submit"
                 className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-700 cursor-pointer min-h-[40px]"
@@ -670,19 +699,32 @@ git push -u origin main`;
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {categories.map((cat) => {
               const isEditing = editingCatId === cat.id;
+              const groupKey: ActivityGroupType =
+                cat.activity_group || (Number(cat.is_study) === 1 ? 'educational' : 'essential');
               return (
                 <div
                   key={cat.id}
                   className="px-6 py-4 flex items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/30"
                 >
                   {isEditing ? (
-                    <div className="flex items-center gap-2 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 flex-1">
                       <input
                         type="text"
                         value={editCatTitle}
                         onChange={(e) => setEditCatTitle(e.target.value)}
                         className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-900 dark:text-white"
                       />
+                      {Number(cat.is_study) === 0 && (
+                        <select
+                          value={editCatGroup}
+                          onChange={(e) => setEditCatGroup(e.target.value as ActivityGroupType)}
+                          className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-900 dark:text-white"
+                        >
+                          <option value="essential">ضروری و بازیابی</option>
+                          <option value="restricted">تفریحی و محدودشونده</option>
+                          <option value="educational">آموزشی و یادگیری</option>
+                        </select>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleSaveCategory(cat.id)}
@@ -704,7 +746,10 @@ git push -u origin main`;
                         {cat.title}
                       </span>
                       <span className="text-xs text-slate-500 dark:text-slate-400 mr-2">
-                        · {Number(cat.is_study) === 1 ? 'فعالیت درسی' : 'فعالیت غیردرسی'}
+                        · {Number(cat.is_study) === 1 ? 'فعالیت درسی' : 'فعالیت غیردرسی'} ·{' '}
+                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                          {ACTIVITY_GROUP_LABELS[groupKey]}
+                        </span>
                       </span>
                     </div>
                   )}
@@ -715,6 +760,7 @@ git push -u origin main`;
                       onClick={() => {
                         setEditingCatId(cat.id);
                         setEditCatTitle(cat.title);
+                        setEditCatGroup(groupKey);
                       }}
                       className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 cursor-pointer"
                       title="ویرایش"

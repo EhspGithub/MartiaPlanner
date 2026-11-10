@@ -15,6 +15,11 @@ import {
   getPersianWeekDays,
   getJalaliMonthRange,
 } from './src/utils/jalali.ts';
+import {
+  classifyCategoryActivityGroup,
+  calculateWeightedLearningQualityL,
+  getLearningQualityDescriptor,
+} from './src/utils/analyticsEngine.ts';
 
 dotenv.config();
 initDatabase();
@@ -269,6 +274,7 @@ app.post('/api/plans', (req, res) => {
       study_type_id,
       priority_code = 'A1',
       predicted_minutes,
+      target_exercises = null,
       reminder_time = null,
       description = '',
     } = req.body;
@@ -290,6 +296,7 @@ app.post('/api/plans', (req, res) => {
     }
 
     const isStudy = Number(category.is_study) === 1 ? 1 : 0;
+    const activityGroupSnapshot = classifyCategoryActivityGroup(category);
     let subjectNameSnapshot: string | null = null;
     let unitTitleSnapshot: string | null = null;
     let studyTypeTitleSnapshot: string | null = null;
@@ -309,6 +316,11 @@ app.post('/api/plans', (req, res) => {
       studyTypeTitleSnapshot = stType ? stType.title : '';
     }
 
+    const parsedTargetExercises =
+      isStudy === 1 && target_exercises !== null && target_exercises !== undefined && target_exercises !== ''
+        ? Math.max(0, Number(target_exercises))
+        : null;
+
     const maxOrder = (
       db.prepare('SELECT MAX(custom_sort_order) as m FROM daily_plans WHERE plan_date = ?').get(plan_date) as any
     )?.m || 0;
@@ -318,18 +330,19 @@ app.post('/api/plans', (req, res) => {
 
     db.prepare(`
       INSERT INTO daily_plans (
-        id, plan_date, category_id, category_title_snapshot, is_study,
+        id, plan_date, category_id, category_title_snapshot, is_study, activity_group_snapshot,
         subject_id, subject_name_snapshot, unit_id, unit_title_snapshot,
         study_type_id, study_type_title_snapshot, priority_code,
-        initial_predicted_minutes, predicted_minutes, reminder_time, description, status,
+        initial_predicted_minutes, predicted_minutes, target_exercises, reminder_time, description, status,
         custom_sort_order, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
     `).run(
       id,
       plan_date,
       category_id,
       category.title,
       isStudy,
+      activityGroupSnapshot,
       isStudy ? subject_id : null,
       subjectNameSnapshot,
       isStudy ? unit_id : null,
@@ -339,6 +352,7 @@ app.post('/api/plans', (req, res) => {
       priority_code,
       predMins,
       predMins,
+      parsedTargetExercises,
       reminder_time ? String(reminder_time).trim() : null,
       String(description || '').trim(),
       maxOrder + 1,
@@ -368,6 +382,7 @@ app.put('/api/plans/:id', (req, res) => {
       study_type_id,
       priority_code = existing.priority_code,
       predicted_minutes = existing.predicted_minutes,
+      target_exercises,
       reminder_time,
       description = existing.description,
     } = req.body;
@@ -380,6 +395,9 @@ app.put('/api/plans/:id', (req, res) => {
     const category = db.prepare('SELECT * FROM activity_categories WHERE id = ?').get(category_id) as any;
     const isStudy = category ? (Number(category.is_study) === 1 ? 1 : 0) : existing.is_study;
     const categoryTitleSnapshot = category ? category.title : existing.category_title_snapshot;
+    const activityGroupSnapshot = category
+      ? classifyCategoryActivityGroup(category)
+      : existing.activity_group_snapshot;
 
     let subjectNameSnapshot: string | null = null;
     let unitTitleSnapshot: string | null = null;
@@ -401,15 +419,11 @@ app.put('/api/plans/:id', (req, res) => {
 
     const now = new Date().toISOString();
 
-    // Section 8 Requirement:
-    // "زمان پیش‌بینی‌شده نباید پس از ثبت عملکرد واقعی تغییر کند. حتی اگر دانش‌آموز برنامه را ویرایش کند، سیستم باید سوابق لازم را برای حفظ صحت تحلیل‌ها مدیریت کند."
     const existingPerf = db.prepare('SELECT * FROM performance_logs WHERE plan_id = ?').get(id);
     let newPredictedMinutes = predMins;
     let newInitialPredictedMinutes = existing.initial_predicted_minutes;
 
     if (existingPerf) {
-      // Performance already logged! Keep initial_predicted_minutes AND predicted_minutes locked to preserve analytical truth,
-      // and record an audit log if user attempted to alter time.
       if (predMins !== existing.predicted_minutes) {
         db.prepare(`
           INSERT INTO plan_history_audit (id, plan_id, previous_predicted_minutes, new_predicted_minutes, changed_at, reason)
@@ -428,6 +442,15 @@ app.put('/api/plans/:id', (req, res) => {
       newInitialPredictedMinutes = predMins;
     }
 
+    const finalTargetExercises =
+      isStudy === 0
+        ? null
+        : target_exercises === undefined
+        ? existing.target_exercises
+        : target_exercises === null || target_exercises === ''
+        ? null
+        : Math.max(0, Number(target_exercises));
+
     const finalReminderTime =
       reminder_time === undefined
         ? existing.reminder_time
@@ -440,6 +463,7 @@ app.put('/api/plans/:id', (req, res) => {
       SET category_id = ?,
           category_title_snapshot = ?,
           is_study = ?,
+          activity_group_snapshot = ?,
           subject_id = ?,
           subject_name_snapshot = ?,
           unit_id = ?,
@@ -449,6 +473,7 @@ app.put('/api/plans/:id', (req, res) => {
           priority_code = ?,
           initial_predicted_minutes = ?,
           predicted_minutes = ?,
+          target_exercises = ?,
           reminder_time = ?,
           description = ?,
           updated_at = ?
@@ -457,6 +482,7 @@ app.put('/api/plans/:id', (req, res) => {
       category_id,
       categoryTitleSnapshot,
       isStudy,
+      activityGroupSnapshot,
       isStudy ? (subject_id ?? existing.subject_id) : null,
       subjectNameSnapshot,
       isStudy ? (unit_id ?? existing.unit_id) : null,
@@ -466,6 +492,7 @@ app.put('/api/plans/:id', (req, res) => {
       priority_code,
       newInitialPredictedMinutes,
       newPredictedMinutes,
+      finalTargetExercises,
       finalReminderTime,
       String(description || '').trim(),
       now,
@@ -537,7 +564,10 @@ app.post('/api/plans/:id/performance', (req, res) => {
       exercisesVal = exercises_count !== undefined && exercises_count !== null && exercises_count !== ''
         ? Math.max(0, Number(exercises_count))
         : 0;
-      qualityVal = learning_quality || 'good';
+      qualityVal =
+        learning_quality !== undefined && learning_quality !== null && String(learning_quality).trim() !== ''
+          ? String(learning_quality).trim()
+          : null;
     }
 
     const validStatus = completion_status === 'partial' ? 'partial' : 'completed';
@@ -606,21 +636,6 @@ app.delete('/api/plans/:id/performance', (req, res) => {
 // ============================================================================
 // 5. DASHBOARD ANALYTICS API (داشبورد و شاخص‌های ۱۰گانه عملکرد)
 // ============================================================================
-const QUALITY_SCORES: Record<string, number> = {
-  excellent: 4,
-  good: 3,
-  average: 2,
-  weak: 1,
-};
-
-function scoreToPersianQualityLabel(score: number | null): string {
-  if (score === null) return 'ثبت‌نشده';
-  if (score >= 3.5) return 'عالی';
-  if (score >= 2.5) return 'خوب';
-  if (score >= 1.5) return 'متوسط';
-  return 'نیازمند تلاش بیشتر';
-}
-
 app.get('/api/dashboard', (req, res) => {
   try {
     const range = (req.query.range as 'today' | 'week' | 'month') || 'today';
@@ -644,12 +659,11 @@ app.get('/api/dashboard', (req, res) => {
       .all(startDate, endDate) as any[];
 
     const plans = hydratePlansWithPerformance(rawPlans);
+    const studyPlans = plans.filter((p) => Number(p.is_study) === 1);
 
     let totalPredictedStudyMinutes = 0;
     let totalActualStudyMinutes = 0;
     let totalExercisesSolved = 0;
-    let qualitySum = 0;
-    let qualityCount = 0;
 
     const totalPlannedActivities = plans.length;
     let completedActivitiesCount = 0;
@@ -681,13 +695,6 @@ app.get('/api/dashboard', (req, res) => {
         if (p.performance) {
           totalActualStudyMinutes += Number(p.performance.actual_minutes || 0);
           totalExercisesSolved += Number(p.performance.exercises_count || 0);
-          const qScore = p.performance.learning_quality
-            ? QUALITY_SCORES[p.performance.learning_quality]
-            : undefined;
-          if (qScore) {
-            qualitySum += qScore;
-            qualityCount++;
-          }
         }
 
         const subjKey = p.subject_name_snapshot || 'سایر دروس';
@@ -714,8 +721,8 @@ app.get('/api/dashboard', (req, res) => {
     }
 
     const studyTimeVarianceMinutes = totalActualStudyMinutes - totalPredictedStudyMinutes;
-    const averageLearningQualityScore =
-      qualityCount > 0 ? Number((qualitySum / qualityCount).toFixed(2)) : null;
+    const qualityEval = calculateWeightedLearningQualityL(studyPlans as any[]);
+    const averageLearningQualityScore = qualityEval.weightedAverage0To10;
 
     // Adherence calculation: Completed counts 100%, Partial counts 50%
     const adherencePercentage =
@@ -734,7 +741,7 @@ app.get('/api/dashboard', (req, res) => {
       studyTimeVarianceMinutes,
       totalExercisesSolved,
       averageLearningQualityScore,
-      averageLearningQualityLabel: scoreToPersianQualityLabel(averageLearningQualityScore),
+      averageLearningQualityLabel: getLearningQualityDescriptor(averageLearningQualityScore),
       totalPlannedActivities,
       completedActivitiesCount,
       partialActivitiesCount,
@@ -846,20 +853,106 @@ app.post('/api/goals', (req, res) => {
 });
 
 // ============================================================================
+// 5.6 DAILY TIME BUDGET API (ظرف زمانی روزانه - بخش نهم)
+// ============================================================================
+app.get('/api/time-budgets', (req, res) => {
+  try {
+    const { date, startDate, endDate } = req.query;
+    if (startDate && endDate) {
+      const rows = db
+        .prepare('SELECT * FROM daily_time_budgets WHERE plan_date >= ? AND plan_date <= ? ORDER BY plan_date ASC')
+        .all(String(startDate), String(endDate)) as any[];
+      return res.json(rows);
+    }
+
+    const planDate = String(date || getTodayISO());
+    const row = db
+      .prepare('SELECT * FROM daily_time_budgets WHERE plan_date = ?')
+      .get(planDate) as any;
+
+    if (!row) {
+      return res.json({
+        plan_date: planDate,
+        budget_minutes: null,
+        input_unit: 'hours',
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    res.json({
+      plan_date: row.plan_date,
+      budget_minutes: row.budget_minutes !== null ? Number(row.budget_minutes) : null,
+      input_unit: row.input_unit || 'hours',
+      updated_at: row.updated_at,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/time-budgets', (req, res) => {
+  try {
+    const {
+      plan_date = getTodayISO(),
+      budget_minutes = null,
+      input_unit = 'hours',
+    } = req.body;
+
+    const now = new Date().toISOString();
+    const parsedMinutes =
+      budget_minutes === null || budget_minutes === '' || Number(budget_minutes) <= 0
+        ? null
+        : Math.min(1440, Math.max(15, Math.round(Number(budget_minutes))));
+    const validUnit = input_unit === 'minutes' ? 'minutes' : 'hours';
+
+    db.prepare(`
+      INSERT INTO daily_time_budgets (plan_date, budget_minutes, input_unit, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(plan_date) DO UPDATE SET
+        budget_minutes = excluded.budget_minutes,
+        input_unit = excluded.input_unit,
+        updated_at = excluded.updated_at
+    `).run(String(plan_date), parsedMinutes, validUnit, now);
+
+    res.json({
+      plan_date: String(plan_date),
+      budget_minutes: parsedMinutes,
+      input_unit: validUnit,
+      updated_at: now,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================================
 // 6. SETTINGS MANAGEMENT API (مدیریت عنوان فعالیت‌ها، انواع فعالیت درسی، اولویت‌ها، پشتیبان‌گیری)
 // ============================================================================
 app.post('/api/settings/categories', (req, res) => {
   try {
-    const { title, is_study = 0, icon = 'Sparkles', color = 'slate' } = req.body;
+    const {
+      title,
+      is_study = 0,
+      activity_group,
+      impact_weight = 1.0,
+      icon = 'Sparkles',
+      color = 'slate',
+    } = req.body;
     if (!title || !String(title).trim()) {
       return res.status(400).json({ error: 'عنوان فعالیت الزامی است.' });
     }
     const id = `cat-${crypto.randomUUID().slice(0, 8)}`;
+    const isStudyNum = is_study ? 1 : 0;
+    const groupVal = isStudyNum === 1
+      ? 'educational'
+      : activity_group === 'restricted' || activity_group === 'essential'
+      ? activity_group
+      : classifyCategoryActivityGroup({ id, title: String(title).trim(), is_study: isStudyNum });
     const maxSort = (db.prepare('SELECT MAX(sort_order) as m FROM activity_categories').get() as any)?.m || 0;
     db.prepare(`
-      INSERT INTO activity_categories (id, title, is_study, icon, color, sort_order, is_active)
-      VALUES (?, ?, ?, ?, ?, ?, 1)
-    `).run(id, String(title).trim(), is_study ? 1 : 0, icon, color, maxSort + 1);
+      INSERT INTO activity_categories (id, title, is_study, activity_group, impact_weight, icon, color, sort_order, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+    `).run(id, String(title).trim(), isStudyNum, groupVal, Number(impact_weight || 1.0), icon, color, maxSort + 1);
     res.json(db.prepare('SELECT * FROM activity_categories WHERE id = ?').get(id));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -869,15 +962,32 @@ app.post('/api/settings/categories', (req, res) => {
 app.put('/api/settings/categories/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { title, is_study, color } = req.body;
+    const { title, is_study, activity_group, impact_weight, color } = req.body;
     if (!title || !String(title).trim()) {
       return res.status(400).json({ error: 'عنوان فعالیت نمی‌تواند خالی باشد.' });
     }
+    const finalGroup =
+      is_study === 1
+        ? 'educational'
+        : activity_group === 'educational' || activity_group === 'restricted' || activity_group === 'essential'
+        ? activity_group
+        : null;
     db.prepare(`
       UPDATE activity_categories
-      SET title = ?, is_study = COALESCE(?, is_study), color = COALESCE(?, color)
+      SET title = ?,
+          is_study = COALESCE(?, is_study),
+          activity_group = COALESCE(?, activity_group),
+          impact_weight = COALESCE(?, impact_weight),
+          color = COALESCE(?, color)
       WHERE id = ?
-    `).run(String(title).trim(), is_study !== undefined ? (is_study ? 1 : 0) : null, color, id);
+    `).run(
+      String(title).trim(),
+      is_study !== undefined ? (is_study ? 1 : 0) : null,
+      finalGroup,
+      impact_weight !== undefined ? Number(impact_weight) : null,
+      color,
+      id
+    );
     res.json(db.prepare('SELECT * FROM activity_categories WHERE id = ?').get(id));
   } catch (err: any) {
     res.status(500).json({ error: err.message });

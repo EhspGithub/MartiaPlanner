@@ -13,6 +13,7 @@
 import type {
   AppBootstrapData,
   ActivityCategory,
+  ActivityGroupType,
   StudyActivityType,
   PriorityLevel,
   Subject,
@@ -20,6 +21,7 @@ import type {
   DailyPlanItem,
   PerformanceLog,
   DashboardMetrics,
+  DailyTimeBudgetConfig,
 } from '../types.ts';
 import {
   getTodayISO,
@@ -27,6 +29,11 @@ import {
   getPersianWeekDays,
   getJalaliMonthRange,
 } from '../utils/jalali.ts';
+import {
+  classifyCategoryActivityGroup,
+  calculateWeightedLearningQualityL,
+  getLearningQualityDescriptor,
+} from '../utils/analyticsEngine.ts';
 
 interface LocalSQLiteDatabaseDump {
   version: number;
@@ -37,6 +44,7 @@ interface LocalSQLiteDatabaseDump {
   units: SubjectUnit[];
   plans: Omit<DailyPlanItem, 'performance' | 'priority_rank'>[];
   performances: PerformanceLog[];
+  timeBudgets?: Record<string, DailyTimeBudgetConfig>;
 }
 
 const STORAGE_KEY = 'martia_planner_sqlite_v1';
@@ -53,13 +61,14 @@ function createInitialDatabaseSeed(): LocalSQLiteDatabaseDump {
   const now = new Date().toISOString();
 
   const categories: ActivityCategory[] = [
-    { id: 'cat-study', title: 'درس', is_study: 1, icon: 'BookOpen', color: 'indigo', sort_order: 1, is_active: 1 },
-    { id: 'cat-rest', title: 'استراحت', is_study: 0, icon: 'Coffee', color: 'emerald', sort_order: 2, is_active: 1 },
-    { id: 'cat-phone', title: 'استفاده از گوشی', is_study: 0, icon: 'Smartphone', color: 'amber', sort_order: 3, is_active: 1 },
-    { id: 'cat-tv', title: 'تماشای تلویزیون', is_study: 0, icon: 'Tv', color: 'sky', sort_order: 4, is_active: 1 },
-    { id: 'cat-game', title: 'بازی', is_study: 0, icon: 'Gamepad2', color: 'purple', sort_order: 5, is_active: 1 },
-    { id: 'cat-sport', title: 'ورزش و تحرک', is_study: 0, icon: 'Dumbbell', color: 'teal', sort_order: 6, is_active: 1 },
-    { id: 'cat-other', title: 'سایر فعالیت‌ها', is_study: 0, icon: 'Sparkles', color: 'slate', sort_order: 7, is_active: 1 },
+    { id: 'cat-study', title: 'درس', is_study: 1, activity_group: 'educational', impact_weight: 1.0, icon: 'BookOpen', color: 'indigo', sort_order: 1, is_active: 1 },
+    { id: 'cat-rest', title: 'استراحت', is_study: 0, activity_group: 'essential', impact_weight: 1.0, icon: 'Coffee', color: 'emerald', sort_order: 2, is_active: 1 },
+    { id: 'cat-food', title: 'غذا خوردن و تغذیه', is_study: 0, activity_group: 'essential', impact_weight: 1.0, icon: 'Coffee', color: 'emerald', sort_order: 3, is_active: 1 },
+    { id: 'cat-phone', title: 'استفاده از گوشی', is_study: 0, activity_group: 'restricted', impact_weight: 1.0, icon: 'Smartphone', color: 'amber', sort_order: 4, is_active: 1 },
+    { id: 'cat-tv', title: 'تماشای تلویزیون', is_study: 0, activity_group: 'restricted', impact_weight: 1.0, icon: 'Tv', color: 'sky', sort_order: 5, is_active: 1 },
+    { id: 'cat-game', title: 'بازی', is_study: 0, activity_group: 'restricted', impact_weight: 1.0, icon: 'Gamepad2', color: 'purple', sort_order: 6, is_active: 1 },
+    { id: 'cat-sport', title: 'ورزش و تحرک', is_study: 0, activity_group: 'essential', impact_weight: 1.0, icon: 'Dumbbell', color: 'teal', sort_order: 7, is_active: 1 },
+    { id: 'cat-other', title: 'سایر فعالیت‌ها', is_study: 0, activity_group: 'essential', impact_weight: 1.0, icon: 'Sparkles', color: 'slate', sort_order: 8, is_active: 1 },
   ];
 
   const studyTypes: StudyActivityType[] = [
@@ -403,8 +412,19 @@ function createInitialDatabaseSeed(): LocalSQLiteDatabaseDump {
     });
   });
 
+  const timeBudgets: Record<string, DailyTimeBudgetConfig> = {};
+  for (let offset = -6; offset <= 0; offset++) {
+    const dIso = addDaysISO(todayIso, offset);
+    timeBudgets[dIso] = {
+      plan_date: dIso,
+      budget_minutes: 360,
+      input_unit: 'hours',
+      updated_at: now,
+    };
+  }
+
   return {
-    version: 1,
+    version: 2,
     categories,
     studyTypes,
     priorities,
@@ -412,6 +432,7 @@ function createInitialDatabaseSeed(): LocalSQLiteDatabaseDump {
     units,
     plans,
     performances,
+    timeBudgets,
   };
 }
 
@@ -419,7 +440,43 @@ function loadDB(): LocalSQLiteDatabaseDump {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return JSON.parse(raw) as LocalSQLiteDatabaseDump;
+      const parsed = JSON.parse(raw) as LocalSQLiteDatabaseDump;
+      // Ensure categories have activity_group and cat-food exists
+      if (Array.isArray(parsed.categories)) {
+        parsed.categories = parsed.categories.map((c) => ({
+          ...c,
+          activity_group: classifyCategoryActivityGroup(c),
+          impact_weight: c.impact_weight ?? 1.0,
+        }));
+        if (!parsed.categories.some((c) => c.id === 'cat-food')) {
+          parsed.categories.push({
+            id: 'cat-food',
+            title: 'غذا خوردن و تغذیه',
+            is_study: 0,
+            activity_group: 'essential',
+            impact_weight: 1.0,
+            icon: 'Coffee',
+            color: 'emerald',
+            sort_order: 3,
+            is_active: 1,
+          });
+        }
+      }
+      if (!parsed.timeBudgets) {
+        parsed.timeBudgets = {};
+        const todayIso = getTodayISO();
+        const now = new Date().toISOString();
+        for (let offset = -6; offset <= 0; offset++) {
+          const dIso = addDaysISO(todayIso, offset);
+          parsed.timeBudgets[dIso] = {
+            plan_date: dIso,
+            budget_minutes: 360,
+            input_unit: 'hours',
+            updated_at: now,
+          };
+        }
+      }
+      return parsed;
     }
   } catch {
     // ignore
@@ -498,6 +555,7 @@ export const localSQLiteFallback = {
     study_type_id?: string | null;
     priority_code: string;
     predicted_minutes: number;
+    target_exercises?: number | null;
     reminder_time?: string | null;
     description: string;
   }): DailyPlanItem {
@@ -506,6 +564,7 @@ export const localSQLiteFallback = {
     if (!cat) throw new Error('عنوان فعالیت انتخاب‌شده معتبر نیست.');
 
     const isStudy = Number(cat.is_study) === 1 ? 1 : 0;
+    const activityGroupSnapshot = classifyCategoryActivityGroup(cat);
     let subjName: string | null = null;
     let unitTitle: string | null = null;
     let stTitle: string | null = null;
@@ -529,6 +588,7 @@ export const localSQLiteFallback = {
       category_id: payload.category_id,
       category_title_snapshot: cat.title,
       is_study: isStudy,
+      activity_group_snapshot: activityGroupSnapshot,
       subject_id: isStudy ? payload.subject_id || null : null,
       subject_name_snapshot: subjName,
       unit_id: isStudy ? payload.unit_id || null : null,
@@ -538,6 +598,10 @@ export const localSQLiteFallback = {
       priority_code: payload.priority_code,
       initial_predicted_minutes: Number(payload.predicted_minutes),
       predicted_minutes: Number(payload.predicted_minutes),
+      target_exercises:
+        isStudy && payload.target_exercises !== undefined && payload.target_exercises !== null
+          ? Number(payload.target_exercises)
+          : null,
       reminder_time: payload.reminder_time || null,
       description: payload.description || '',
       status: 'pending',
@@ -560,6 +624,7 @@ export const localSQLiteFallback = {
       study_type_id?: string | null;
       priority_code?: string;
       predicted_minutes?: number;
+      target_exercises?: number | null;
       reminder_time?: string | null;
       description?: string;
     }
@@ -572,6 +637,9 @@ export const localSQLiteFallback = {
     const hasPerf = db.performances.some((pf) => pf.plan_id === id);
     const cat = db.categories.find((c) => c.id === (payload.category_id ?? existing.category_id));
     const isStudy = cat ? (Number(cat.is_study) === 1 ? 1 : 0) : existing.is_study;
+    const activityGroupSnapshot = cat
+      ? classifyCategoryActivityGroup(cat)
+      : existing.activity_group_snapshot;
 
     let subjName = existing.subject_name_snapshot;
     let unitTitle = existing.unit_title_snapshot;
@@ -591,6 +659,7 @@ export const localSQLiteFallback = {
       category_id: payload.category_id ?? existing.category_id,
       category_title_snapshot: cat ? cat.title : existing.category_title_snapshot,
       is_study: isStudy,
+      activity_group_snapshot: activityGroupSnapshot,
       subject_id: isStudy ? (payload.subject_id ?? existing.subject_id) : null,
       subject_name_snapshot: isStudy ? subjName : null,
       unit_id: isStudy ? (payload.unit_id ?? existing.unit_id) : null,
@@ -604,6 +673,12 @@ export const localSQLiteFallback = {
       predicted_minutes: hasPerf
         ? existing.predicted_minutes
         : Number(payload.predicted_minutes ?? existing.predicted_minutes),
+      target_exercises:
+        isStudy === 0
+          ? null
+          : payload.target_exercises === undefined
+          ? existing.target_exercises
+          : payload.target_exercises,
       reminder_time:
         payload.reminder_time === undefined ? existing.reminder_time : payload.reminder_time,
       description: payload.description ?? existing.description,
@@ -684,7 +759,6 @@ export const localSQLiteFallback = {
   },
 
   getDashboardMetrics(range: 'today' | 'week' | 'month', refDate: string): DashboardMetrics {
-    const db = loadDB();
     let startDate = refDate;
     let endDate = refDate;
 
@@ -699,18 +773,16 @@ export const localSQLiteFallback = {
     }
 
     const plans = this.getPlansByRange(startDate, endDate);
+    const studyPlans = plans.filter((p) => Number(p.is_study) === 1);
     let totalPredictedStudyMinutes = 0;
     let totalActualStudyMinutes = 0;
     let totalExercisesSolved = 0;
-    let qualitySum = 0;
-    let qualityCount = 0;
     let completedActivitiesCount = 0;
     let partialActivitiesCount = 0;
     let pendingActivitiesCount = 0;
     let nonStudyActualMinutes = 0;
     let nonStudyPredictedMinutes = 0;
 
-    const qScores: Record<string, number> = { excellent: 4, good: 3, average: 2, weak: 1 };
     const subjectMap = new Map<string, any>();
 
     for (const p of plans) {
@@ -723,11 +795,6 @@ export const localSQLiteFallback = {
         if (p.performance) {
           totalActualStudyMinutes += Number(p.performance.actual_minutes || 0);
           totalExercisesSolved += Number(p.performance.exercises_count || 0);
-          const sc = p.performance.learning_quality ? qScores[p.performance.learning_quality] : undefined;
-          if (sc) {
-            qualitySum += sc;
-            qualityCount++;
-          }
         }
         const key = p.subject_name_snapshot || 'سایر دروس';
         const cur = subjectMap.get(key) || {
@@ -752,17 +819,9 @@ export const localSQLiteFallback = {
       }
     }
 
-    const avgScore = qualityCount > 0 ? Number((qualitySum / qualityCount).toFixed(2)) : null;
-    const avgLabel =
-      avgScore === null
-        ? 'ثبت‌نشده'
-        : avgScore >= 3.5
-        ? 'عالی'
-        : avgScore >= 2.5
-        ? 'خوب'
-        : avgScore >= 1.5
-        ? 'متوسط'
-        : 'نیازمند تلاش بیشتر';
+    const qualityEval = calculateWeightedLearningQualityL(studyPlans);
+    const avgScore = qualityEval.weightedAverage0To10;
+    const avgLabel = getLearningQualityDescriptor(avgScore);
 
     const adherencePercentage =
       plans.length > 0
@@ -899,15 +958,28 @@ export const localSQLiteFallback = {
     return { success: true };
   },
 
-  createCategory(payload: { title: string; is_study: number }): ActivityCategory {
+  createCategory(payload: {
+    title: string;
+    is_study: number;
+    activity_group?: ActivityGroupType;
+    impact_weight?: number;
+  }): ActivityCategory {
     const db = loadDB();
     const maxSort = db.categories.reduce((m, c) => Math.max(m, c.sort_order), 0);
+    const id = uuid('cat');
+    const isStudy = payload.is_study ? 1 : 0;
+    const groupVal: ActivityGroupType =
+      isStudy === 1
+        ? 'educational'
+        : payload.activity_group || classifyCategoryActivityGroup({ id, title: payload.title, is_study: 0 });
     const cat: ActivityCategory = {
-      id: uuid('cat'),
+      id,
       title: payload.title,
-      is_study: payload.is_study ? 1 : 0,
-      icon: payload.is_study ? 'BookOpen' : 'Sparkles',
-      color: payload.is_study ? 'indigo' : 'slate',
+      is_study: isStudy,
+      activity_group: groupVal,
+      impact_weight: payload.impact_weight ?? 1.0,
+      icon: isStudy ? 'BookOpen' : 'Sparkles',
+      color: isStudy ? 'indigo' : groupVal === 'restricted' ? 'amber' : 'emerald',
       sort_order: maxSort + 1,
       is_active: 1,
     };
@@ -916,11 +988,24 @@ export const localSQLiteFallback = {
     return cat;
   },
 
-  updateCategory(id: string, payload: { title: string }): ActivityCategory {
+  updateCategory(
+    id: string,
+    payload: {
+      title: string;
+      is_study?: number;
+      activity_group?: ActivityGroupType;
+      impact_weight?: number;
+    }
+  ): ActivityCategory {
     const db = loadDB();
     const c = db.categories.find((x) => x.id === id);
     if (!c) throw new Error('عنوان یافت نشد.');
     c.title = payload.title;
+    if (payload.is_study !== undefined) c.is_study = payload.is_study ? 1 : 0;
+    if (payload.activity_group !== undefined) {
+      c.activity_group = c.is_study === 1 ? 'educational' : payload.activity_group;
+    }
+    if (payload.impact_weight !== undefined) c.impact_weight = payload.impact_weight;
     saveDB(db);
     return c;
   },
@@ -981,7 +1066,7 @@ export const localSQLiteFallback = {
     return {
       exportedAt: new Date().toISOString(),
       app: 'MartiaPlanner',
-      version: '1.0.0',
+      version: '1.3.0',
       activity_categories: db.categories,
       study_activity_types: db.studyTypes,
       priority_levels: db.priorities,
@@ -989,6 +1074,7 @@ export const localSQLiteFallback = {
       subject_units: db.units,
       daily_plans: db.plans,
       performance_logs: db.performances,
+      daily_time_budgets: db.timeBudgets || {},
     };
   },
 
@@ -997,7 +1083,7 @@ export const localSQLiteFallback = {
       throw new Error('فایل پشتیبان معتبر نیست.');
     }
     const db: LocalSQLiteDatabaseDump = {
-      version: 1,
+      version: 2,
       categories: payload.activity_categories || [],
       studyTypes: payload.study_activity_types || [],
       priorities: payload.priority_levels || [],
@@ -1005,6 +1091,7 @@ export const localSQLiteFallback = {
       units: payload.subject_units || [],
       plans: payload.daily_plans || [],
       performances: payload.performance_logs || [],
+      timeBudgets: payload.daily_time_budgets || {},
     };
     saveDB(db);
     return { success: true };
@@ -1050,6 +1137,50 @@ export const localSQLiteFallback = {
     try {
       localStorage.setItem(key, JSON.stringify(saved));
     } catch {}
+    return saved;
+  },
+
+  getTimeBudget(date: string): DailyTimeBudgetConfig {
+    const db = loadDB();
+    const map = db.timeBudgets || {};
+    if (map[date]) {
+      return map[date];
+    }
+    return {
+      plan_date: date,
+      budget_minutes: null,
+      input_unit: 'hours',
+      updated_at: new Date().toISOString(),
+    };
+  },
+
+  getTimeBudgetsByRange(startDate: string, endDate: string): DailyTimeBudgetConfig[] {
+    const db = loadDB();
+    const map = db.timeBudgets || {};
+    return Object.values(map).filter(
+      (b) => b.plan_date >= startDate && b.plan_date <= endDate
+    );
+  },
+
+  saveTimeBudget(payload: {
+    plan_date: string;
+    budget_minutes: number | null;
+    input_unit: 'hours' | 'minutes';
+  }): DailyTimeBudgetConfig {
+    const db = loadDB();
+    if (!db.timeBudgets) db.timeBudgets = {};
+    const parsedMinutes =
+      payload.budget_minutes === null || Number(payload.budget_minutes) <= 0
+        ? null
+        : Math.min(1440, Math.max(15, Math.round(Number(payload.budget_minutes))));
+    const saved: DailyTimeBudgetConfig = {
+      plan_date: payload.plan_date,
+      budget_minutes: parsedMinutes,
+      input_unit: payload.input_unit === 'minutes' ? 'minutes' : 'hours',
+      updated_at: new Date().toISOString(),
+    };
+    db.timeBudgets[payload.plan_date] = saved;
+    saveDB(db);
     return saved;
   },
 };

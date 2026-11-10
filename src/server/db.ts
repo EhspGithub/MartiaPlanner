@@ -135,16 +135,56 @@ export function initDatabase() {
       custom_goals_json TEXT NOT NULL DEFAULT '[]',
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS daily_time_budgets (
+      plan_date TEXT PRIMARY KEY,
+      budget_minutes INTEGER,
+      input_unit TEXT NOT NULL DEFAULT 'hours',
+      updated_at TEXT NOT NULL
+    );
   `);
 
-  // Safe migration for existing databases to add reminder_time column
-  try {
-    db.exec('ALTER TABLE daily_plans ADD COLUMN reminder_time TEXT');
-  } catch {
-    // Column already exists
+  // Safe migrations for existing databases
+  const safeMigrations = [
+    'ALTER TABLE daily_plans ADD COLUMN reminder_time TEXT',
+    'ALTER TABLE daily_plans ADD COLUMN activity_group_snapshot TEXT',
+    'ALTER TABLE daily_plans ADD COLUMN target_exercises INTEGER',
+    "ALTER TABLE activity_categories ADD COLUMN activity_group TEXT NOT NULL DEFAULT 'essential'",
+    'ALTER TABLE activity_categories ADD COLUMN impact_weight REAL NOT NULL DEFAULT 1.0',
+  ];
+  for (const sql of safeMigrations) {
+    try {
+      db.exec(sql);
+    } catch {
+      // Column already exists
+    }
   }
 
   seedInitialDataIfEmpty();
+
+  // Ensure activity_group is accurately set on existing categories & plans
+  try {
+    db.prepare(
+      "UPDATE activity_categories SET activity_group = 'educational' WHERE is_study = 1"
+    ).run();
+    db.prepare(
+      "UPDATE activity_categories SET activity_group = 'restricted' WHERE is_study = 0 AND (id IN ('cat-phone', 'cat-tv', 'cat-game') OR title LIKE '%گوشی%' OR title LIKE '%تلویزیون%' OR title LIKE '%بازی%' OR title LIKE '%شبکه%' OR title LIKE '%سرگرمی%')"
+    ).run();
+    db.prepare(
+      "INSERT OR IGNORE INTO activity_categories (id, title, is_study, activity_group, impact_weight, icon, color, sort_order, is_active) VALUES ('cat-food', 'غذا خوردن و تغذیه', 0, 'essential', 1.0, 'Coffee', 'emerald', 3, 1)"
+    ).run();
+
+    // Seed initial daily time budgets (360 mins = 6 hours) for today and the past 6 days if empty
+    const todayIso = getTodayISO();
+    const now = new Date().toISOString();
+    const insertBudget = db.prepare(`
+      INSERT OR IGNORE INTO daily_time_budgets (plan_date, budget_minutes, input_unit, updated_at)
+      VALUES (?, ?, 'hours', ?)
+    `);
+    for (let offset = -6; offset <= 0; offset++) {
+      insertBudget.run(addDaysISO(todayIso, offset), 360, now);
+    }
+  } catch {}
 
   // Ensure default sample reminder times exist on today's incomplete study tasks
   try {
@@ -164,22 +204,23 @@ function seedInitialDataIfEmpty() {
 
   if (countCategories.cnt === 0) {
     const insertCategory = db.prepare(`
-      INSERT INTO activity_categories (id, title, is_study, icon, color, sort_order, is_active)
-      VALUES (?, ?, ?, ?, ?, ?, 1)
+      INSERT INTO activity_categories (id, title, is_study, activity_group, impact_weight, icon, color, sort_order, is_active)
+      VALUES (?, ?, ?, ?, 1.0, ?, ?, ?, 1)
     `);
 
     const defaultCategories = [
-      ['cat-study', 'درس', 1, 'BookOpen', 'indigo', 1],
-      ['cat-rest', 'استراحت', 0, 'Coffee', 'emerald', 2],
-      ['cat-phone', 'استفاده از گوشی', 0, 'Smartphone', 'amber', 3],
-      ['cat-tv', 'تماشای تلویزیون', 0, 'Tv', 'sky', 4],
-      ['cat-game', 'بازی', 0, 'Gamepad2', 'purple', 5],
-      ['cat-sport', 'ورزش و تحرک', 0, 'Dumbbell', 'teal', 6],
-      ['cat-other', 'سایر فعالیت‌ها', 0, 'Sparkles', 'slate', 7],
+      ['cat-study', 'درس', 1, 'educational', 'BookOpen', 'indigo', 1],
+      ['cat-rest', 'استراحت', 0, 'essential', 'Coffee', 'emerald', 2],
+      ['cat-food', 'غذا خوردن و تغذیه', 0, 'essential', 'Coffee', 'emerald', 3],
+      ['cat-phone', 'استفاده از گوشی', 0, 'restricted', 'Smartphone', 'amber', 4],
+      ['cat-tv', 'تماشای تلویزیون', 0, 'restricted', 'Tv', 'sky', 5],
+      ['cat-game', 'بازی', 0, 'restricted', 'Gamepad2', 'purple', 6],
+      ['cat-sport', 'ورزش و تحرک', 0, 'essential', 'Dumbbell', 'teal', 7],
+      ['cat-other', 'سایر فعالیت‌ها', 0, 'essential', 'Sparkles', 'slate', 8],
     ];
 
     for (const c of defaultCategories) {
-      insertCategory.run(c[0], c[1], c[2], c[3], c[4], c[5]);
+      insertCategory.run(c[0], c[1], c[2], c[3], c[4], c[5], c[6]);
     }
   }
 
