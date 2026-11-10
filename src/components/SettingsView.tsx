@@ -490,6 +490,41 @@ git push -u origin main`;
               </button>
             </form>
 
+            {/* Standalone HTML File Card */}
+            <div className="rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold text-indigo-900 dark:text-indigo-200">
+                  <Download className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span>دانلود فایل مستقل HTML (بدون نیاز به سرور)</span>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">
+                  v{APP_VERSION}
+                </span>
+              </div>
+              <p className="text-xs text-indigo-700/80 dark:text-indigo-300/80 leading-relaxed">
+                این فایل (MartiaPlanner-v1.2.0.html) شامل کل کدهای فرانت‌اند، استایل‌ها و پایگاه داده محلی است و با دوبار کلیک در هر مرورگری بدون نیاز به نصب یا اینترنت اجرا می‌شود.
+              </p>
+              <div className="pt-1 flex items-center gap-2 flex-wrap">
+                <a
+                  href="/MartiaPlanner-v1.2.0.html"
+                  download="MartiaPlanner-v1.2.0.html"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>دانلود مستقیم MartiaPlanner-v1.2.0.html</span>
+                </a>
+                <a
+                  href="https://github.com/EhspGithub/MartiaPlanner/blob/main/MartiaPlanner-v1.2.0.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-colors"
+                >
+                  <span>مشاهده در مخزن گیت‌هاب</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+
             {/* Release History Card */}
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
               <div className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
