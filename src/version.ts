@@ -3,7 +3,7 @@
  * Bump this version whenever preparing a new GitHub Release (.exe / .apk).
  */
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.2.1';
 export const APP_RELEASE_TAG = `v${APP_VERSION}`;
 
 export interface ReleaseNoteItem {
@@ -14,6 +14,16 @@ export interface ReleaseNoteItem {
 }
 
 export const RELEASE_HISTORY: ReleaseNoteItem[] = [
+  {
+    version: '1.2.1',
+    tag: 'v1.2.1',
+    title: 'تکمیل چرخه انتشار استاندارد، بسته‌بندی تک‌فایل HTML و پایداری کامل ساخت GitHub Actions',
+    changes: [
+      'تولید خودکار نسخه تک‌فایل مستقل مرورگر (MartiaPlanner-v1.2.1.html) بدون نیاز به سرور خارجی با دیتابیس محلی',
+      'تضمین اجرای بدون خطای ساخت خودکار فایل نصبی ویندوز (MartiaPlanner-Windows-v1.2.1) و اندروید (MartiaPlanner-Android-v1.2.1) در GitHub Actions',
+      'به‌روزرسانی همزمان نسخه در تمام فایل‌های پیکربندی (package.json، Cargo.toml، tauri.conf.json، هدر برنامه و CHANGELOG.md)',
+    ],
+  },
   {
     version: '1.2.0',
     tag: 'v1.2.0',

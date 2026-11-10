@@ -88,6 +88,10 @@ function collectProjectFiles(dirPath: string, baseDir: string): Array<{ relative
     const fullPath = path.join(dirPath, entry.name);
     const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
 
+    if (relativePath === 'public/assets' || relativePath.startsWith('public/assets/')) {
+      continue;
+    }
+
     if (entry.isDirectory()) {
       results.push(...collectProjectFiles(fullPath, baseDir));
     } else if (entry.isFile()) {
@@ -103,9 +107,10 @@ function collectProjectFiles(dirPath: string, baseDir: string): Array<{ relative
 export interface GitHubPushOptions {
   token: string;
   repoName: string; // e.g., "MartiaPlanner" or "username/MartiaPlanner"
-  version?: string; // e.g., "1.1.0"
+  version?: string; // e.g., "1.2.1"
   commitMessage?: string;
   isPrivate?: boolean;
+  createTag?: boolean;
 }
 
 export interface GitHubPushResult {
@@ -298,7 +303,7 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
     }
   }
 
-  // 5. Create Tree
+  // 5. Create clean Tree matching current workspace files (removes stale HTML versions and preview files)
   let treeRes = await githubFetch(
     `https://api.github.com/repos/${owner}/${repo}/git/trees`,
     token,
@@ -306,7 +311,6 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        base_tree: latestCommitSha,
         tree: treeItems,
       }),
     }
@@ -351,7 +355,7 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
     throw new Error(`خطا در ثبت کامیت در گیت‌هاب: ${commitRes.data?.message || commitRes.status}`);
   }
 
-  // 7. Update branch reference
+  // 7. Update branch reference (fast-forward only, no force push)
   const updateRefRes = await githubFetch(
     `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${defaultBranch}`,
     token,
@@ -360,7 +364,7 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         sha: commitRes.data.sha,
-        force: true,
+        force: false,
       }),
     }
   );
@@ -371,34 +375,26 @@ export async function pushWorkspaceToGitHub(options: GitHubPushOptions): Promise
     );
   }
 
-  // 8. Create or update Git Tag ref (refs/tags/vX.Y.Z) for clean release tracking
-  const tagRefRes = await githubFetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/refs/tags/${releaseTag}`,
-    token
-  );
-  if (tagRefRes.ok) {
-    await githubFetch(
+  // 8. Only create Git Tag ref if explicitly requested for a Release
+  if (options.createTag) {
+    const tagRefRes = await githubFetch(
       `https://api.github.com/repos/${owner}/${repo}/git/refs/tags/${releaseTag}`,
-      token,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sha: commitRes.data.sha, force: true }),
-      }
+      token
     );
-  } else {
-    await githubFetch(
-      `https://api.github.com/repos/${owner}/${repo}/git/refs`,
-      token,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ref: `refs/tags/${releaseTag}`,
-          sha: commitRes.data.sha,
-        }),
-      }
-    );
+    if (!tagRefRes.ok) {
+      await githubFetch(
+        `https://api.github.com/repos/${owner}/${repo}/git/refs`,
+        token,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ref: `refs/tags/${releaseTag}`,
+            sha: commitRes.data.sha,
+          }),
+        }
+      );
+    }
   }
 
   return {

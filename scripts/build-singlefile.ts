@@ -21,9 +21,16 @@ async function buildSingleFile() {
 
   console.log(`📦 شروع ساخت پکیج تک‌فایل HTML برای MartiaPlanner نسخه ${version}...`);
 
-  // Clean any previous single-file bundle from public to prevent recursive copying
-  const publicOld = path.join(rootDir, 'public', outputFileName);
-  if (fs.existsSync(publicOld)) fs.unlinkSync(publicOld);
+  // Clean any previous single-file HTML bundles from root and public/ to prevent stale version files
+  for (const dir of [rootDir, path.join(rootDir, 'public')]) {
+    if (fs.existsSync(dir)) {
+      for (const f of fs.readdirSync(dir)) {
+        if (/^MartiaPlanner-v[\d.]+\.html$/i.test(f)) {
+          fs.unlinkSync(path.join(dir, f));
+        }
+      }
+    }
+  }
 
   // 1. Run Vite build into dist
   await build({
