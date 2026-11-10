@@ -418,7 +418,7 @@ git push -u origin main`;
                   type="password"
                   value={githubToken}
                   onChange={(e) => setGithubToken(e.target.value)}
-                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                  placeholder="توکن گیت‌هاب را اینجا وارد کنید..."
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none font-mono"
                   dir="ltr"
                 />
