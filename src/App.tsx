@@ -69,18 +69,23 @@ export default function App() {
           Zone 3: Primary action / theme control
       ===================================================================== */}
       <header className="mobile-safe-header sticky top-0 z-30 flex items-center justify-between gap-8 px-4 sm:px-8 h-16 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
-        {/* Zone 1: Single text element wordmark */}
-        <a
-          href="#planner"
-          onClick={(e) => {
-            e.preventDefault();
-            setActiveMenu('planner');
-          }}
-          className="text-lg font-black tracking-tight bg-gradient-to-l from-indigo-600 via-violet-600 to-purple-600 bg-clip-text text-transparent whitespace-nowrap shrink-0"
-          title={`MartiaPlanner v${toPersianDigits(APP_VERSION)}`}
-        >
-          MartiaPlanner
-        </a>
+        {/* Zone 1: Single text element wordmark with visible version badge */}
+        <div className="flex items-center gap-2 shrink-0">
+          <a
+            href="#planner"
+            onClick={(e) => {
+              e.preventDefault();
+              setActiveMenu('planner');
+            }}
+            className="text-lg font-black tracking-tight bg-gradient-to-l from-indigo-600 via-violet-600 to-purple-600 bg-clip-text text-transparent whitespace-nowrap"
+            title={`MartiaPlanner v${toPersianDigits(APP_VERSION)}`}
+          >
+            MartiaPlanner
+          </a>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 tabular-nums">
+            v{toPersianDigits(APP_VERSION)}
+          </span>
+        </div>
 
         {/* Zone 2: 4 clean single-line text navigation links */}
         <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-600 dark:text-slate-300">
