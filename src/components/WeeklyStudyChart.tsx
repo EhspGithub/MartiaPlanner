@@ -3,8 +3,10 @@ import {
   ResponsiveContainer,
   ComposedChart,
   AreaChart,
+  BarChart,
   Bar,
   Area,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -12,10 +14,7 @@ import {
 } from 'recharts';
 import {
   BarChart3,
-  TrendingUp,
   Flame,
-  Clock,
-  Award,
 } from 'lucide-react';
 import type { DailyPlanItem } from '../types.ts';
 import { api } from '../services/api.ts';
@@ -25,13 +24,14 @@ import {
   getPersianWeekdayName,
   formatJalaliCompact,
   toPersianDigits,
-  formatMinutesPersian,
+  formatHoursAndMinutesPersian,
 } from '../utils/jalali.ts';
 
 interface DayStudyChartPoint {
   isoDate: string;
   shortLabel: string;
   fullLabel: string;
+  weekdayName: string;
   isToday: boolean;
   predictedMinutes: number;
   actualMinutes: number;
@@ -58,9 +58,9 @@ const CustomStudyTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
   return (
     <div
       dir="rtl"
-      className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-4 shadow-xl text-right min-w-[210px] space-y-2.5"
+      className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-3.5 shadow-xl text-right min-w-[200px] space-y-2"
     >
-      <div className="flex items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-2">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-1.5">
         <span className="text-xs font-black text-slate-900 dark:text-white">
           {data.fullLabel} {data.isToday ? '(امروز)' : ''}
         </span>
@@ -69,31 +69,31 @@ const CustomStudyTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
         </span>
       </div>
 
-      <div className="space-y-1.5 text-xs">
-        <div className="flex items-center justify-between gap-4">
+      <div className="space-y-1 text-xs">
+        <div className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
             <span>مطالعه واقعی:</span>
           </span>
           <span className="font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
-            {toPersianDigits(data.actualHours.toFixed(1))} ساعت ({toPersianDigits(data.actualMinutes)} دقیقه)
+            {formatHoursAndMinutesPersian(data.actualMinutes)}
           </span>
         </div>
 
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
             <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block" />
             <span>هدف پیش‌بینی:</span>
           </span>
           <span className="font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
-            {toPersianDigits(data.predictedHours.toFixed(1))} ساعت ({toPersianDigits(data.predictedMinutes)} دقیقه)
+            {formatHoursAndMinutesPersian(data.predictedMinutes)}
           </span>
         </div>
 
-        <div className="flex items-center justify-between gap-4 pt-1 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-100 dark:border-slate-800">
           <span className="text-slate-500 dark:text-slate-400">تمرین و تست حل‌شده:</span>
           <span className="font-bold text-blue-600 dark:text-blue-400 tabular-nums">
-            {toPersianDigits(data.exercisesCount)} تمرین
+            {toPersianDigits(data.exercisesCount)} مورد
           </span>
         </div>
       </div>
@@ -104,6 +104,7 @@ const CustomStudyTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
 export const WeeklyStudyChart: React.FC = () => {
   const [plans, setPlans] = useState<DailyPlanItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [displayMode, setDisplayMode] = useState<'aggregate' | 'daily'>('aggregate');
   const [chartType, setChartType] = useState<'composed' | 'area'>('composed');
   const [unitMode, setUnitMode] = useState<'hours' | 'minutes'>('hours');
 
@@ -160,6 +161,7 @@ export const WeeklyStudyChart: React.FC = () => {
         isoDate,
         shortLabel: isoDate === todayIso ? `امروز (${weekdayName})` : `${weekdayName} ${compactDate}`,
         fullLabel: `${weekdayName} ${compactDate}`,
+        weekdayName,
         isToday: isoDate === todayIso,
         predictedMinutes,
         actualMinutes,
@@ -174,82 +176,130 @@ export const WeeklyStudyChart: React.FC = () => {
   const summary = useMemo(() => {
     const totalActualMins = chartData.reduce((acc, d) => acc + d.actualMinutes, 0);
     const totalPredictedMins = chartData.reduce((acc, d) => acc + d.predictedMinutes, 0);
-    const totalExercises = chartData.reduce((acc, d) => acc + d.exercisesCount, 0);
-    const dailyAvgMins = Math.round(totalActualMins / 7);
 
-    let bestDay = chartData[0];
+    let bestDay: DayStudyChartPoint | null = null;
     for (const d of chartData) {
-      if (d.actualMinutes >= (bestDay?.actualMinutes || 0)) {
+      if (!bestDay || d.actualMinutes > bestDay.actualMinutes) {
         bestDay = d;
       }
     }
 
     return {
       totalActualMins,
-      totalActualHours: (totalActualMins / 60).toFixed(1),
       totalPredictedMins,
-      totalExercises,
-      dailyAvgMins,
-      dailyAvgHours: (dailyAvgMins / 60).toFixed(1),
+      totalActualHours: Number((totalActualMins / 60).toFixed(2)),
+      totalPredictedHours: Number((totalPredictedMins / 60).toFixed(2)),
       bestDay,
     };
   }, [chartData]);
 
+  const aggregateData = useMemo(() => {
+    return [
+      {
+        name: 'مجموع مطالعه واقعی (۷ روز)',
+        value: unitMode === 'hours' ? summary.totalActualHours : summary.totalActualMins,
+        minutes: summary.totalActualMins,
+        color: '#10b981',
+      },
+      {
+        name: 'مجموع هدف پیش‌بینی (۷ روز)',
+        value: unitMode === 'hours' ? summary.totalPredictedHours : summary.totalPredictedMins,
+        minutes: summary.totalPredictedMins,
+        color: '#6366f1',
+      },
+    ];
+  }, [summary, unitMode]);
+
   const actualKey = unitMode === 'hours' ? 'actualHours' : 'actualMinutes';
   const predictedKey = unitMode === 'hours' ? 'predictedHours' : 'predictedMinutes';
 
+  const bestDayText =
+    summary.bestDay && summary.bestDay.actualMinutes > 0
+      ? `${summary.bestDay.weekdayName} (${summary.bestDay.fullLabel}) – ${formatHoursAndMinutesPersian(
+          summary.bestDay.actualMinutes
+        )}`
+      : 'هنوز مطالعه‌ای در ۷ روز اخیر ثبت نشده است';
+
   return (
-    <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs space-y-6">
-      {/* Header & Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
-        <div className="flex items-start gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
-            <BarChart3 className="w-5 h-5" />
+    <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
+      {/* Header: Single-line title + Daily/Aggregate selector */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white flex items-center justify-center shadow-xs shrink-0">
+            <BarChart3 className="w-4 h-4" />
           </div>
-          <div>
-            <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-              روند ساعات مطالعه در ۷ روز گذشته
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              مقایسه دیداری ساعت مطالعه واقعی روزانه با هدف پیش‌بینی‌شده در یک هفته اخیر
+          <div className="min-w-0">
+            <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white whitespace-nowrap truncate">
+              ۷. روند مطالعه در هفت روز گذشته
+            </h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+              مقایسه ساعت مطالعه واقعی با هدف پیش‌بینی‌شده در یک هفته اخیر
             </p>
           </div>
         </div>
 
-        {/* Unit & Chart Type Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Unit Switcher */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
-            <button
-              type="button"
-              onClick={() => setUnitMode('hours')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                unitMode === 'hours'
-                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
-                  : 'text-slate-600 dark:text-slate-400'
-              }`}
-            >
-              بر حسب ساعت
-            </button>
-            <button
-              type="button"
-              onClick={() => setUnitMode('minutes')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                unitMode === 'minutes'
-                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
-                  : 'text-slate-600 dark:text-slate-400'
-              }`}
-            >
-              بر حسب دقیقه
-            </button>
-          </div>
+        {/* Daily vs Aggregate Segmented Selector (Default: Aggregate) */}
+        <div className="inline-flex items-center self-center sm:self-auto gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 shrink-0">
+          <button
+            type="button"
+            onClick={() => setDisplayMode('aggregate')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+              displayMode === 'aggregate'
+                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            نمایش تجمیعی
+          </button>
+          <button
+            type="button"
+            onClick={() => setDisplayMode('daily')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+              displayMode === 'daily'
+                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            نمایش روزانه
+          </button>
+        </div>
+      </div>
 
-          {/* Chart Style Switcher */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+      {/* Symmetrical Centered Controls Bar (Unit & Chart Type) */}
+      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+        {/* Unit Switcher */}
+        <div className="inline-flex items-center justify-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
+          <button
+            type="button"
+            onClick={() => setUnitMode('hours')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer whitespace-nowrap ${
+              unitMode === 'hours'
+                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
+                : 'text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            بر حسب ساعت
+          </button>
+          <button
+            type="button"
+            onClick={() => setUnitMode('minutes')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer whitespace-nowrap ${
+              unitMode === 'minutes'
+                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
+                : 'text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            بر حسب دقیقه
+          </button>
+        </div>
+
+        {/* Chart Style Switcher (Active in Daily Mode) */}
+        {displayMode === 'daily' && (
+          <div className="inline-flex items-center justify-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
             <button
               type="button"
               onClick={() => setChartType('composed')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer whitespace-nowrap ${
                 chartType === 'composed'
                   ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-2xs'
                   : 'text-slate-600 dark:text-slate-400'
@@ -260,7 +310,7 @@ export const WeeklyStudyChart: React.FC = () => {
             <button
               type="button"
               onClick={() => setChartType('area')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer whitespace-nowrap ${
                 chartType === 'area'
                   ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-2xs'
                   : 'text-slate-600 dark:text-slate-400'
@@ -269,78 +319,82 @@ export const WeeklyStudyChart: React.FC = () => {
               موجی (روند پیشرفت)
             </button>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* 3 Quick Highlight Summary Strips */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-        <div className="rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-900/50 p-4 flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-            <Clock className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[11px] font-bold text-emerald-800/80 dark:text-emerald-300/80">
-              مجموع مطالعه ۷ روز اخیر
-            </div>
-            <div className="text-base font-black text-emerald-900 dark:text-emerald-300 tabular-nums mt-0.5">
-              {toPersianDigits(summary.totalActualHours)} ساعت ({formatMinutesPersian(summary.totalActualMins)})
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/70 dark:border-indigo-900/50 p-4 flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-            <TrendingUp className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[11px] font-bold text-indigo-800/80 dark:text-indigo-300/80">
-              میانگین مطالعه روزانه
-            </div>
-            <div className="text-base font-black text-indigo-900 dark:text-indigo-300 tabular-nums mt-0.5">
-              {toPersianDigits(summary.dailyAvgHours)} ساعت در روز ({toPersianDigits(summary.dailyAvgMins)} دقیقه)
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/50 p-4 flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-            <Award className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[11px] font-bold text-amber-800/80 dark:text-amber-300/80">
-              پرتلاش‌ترین روز هفته
-            </div>
-            <div className="text-base font-black text-amber-900 dark:text-amber-300 tabular-nums mt-0.5 flex items-center gap-1">
-              <Flame className="w-4 h-4 text-amber-500 shrink-0" />
-              <span>
-                {summary.bestDay ? summary.bestDay.fullLabel : '—'} (
-                {toPersianDigits(summary.bestDay ? summary.bestDay.actualHours.toFixed(1) : 0)} ساعت)
-              </span>
-            </div>
-          </div>
+      {/* Section 8.4 & 8.5: Single Compact One-Line Card for "پرتلاش‌ترین روز هفته" */}
+      <div className="rounded-2xl bg-gradient-to-l from-amber-50/90 via-white to-amber-50/40 dark:from-amber-950/35 dark:via-slate-900 dark:to-amber-950/20 border border-amber-200/80 dark:border-amber-900/50 px-4 py-2.5 flex items-center justify-center gap-2 text-center shadow-2xs">
+        <Flame className="w-4 h-4 text-amber-500 shrink-0" />
+        <div className="text-xs font-extrabold text-amber-950 dark:text-amber-200 tabular-nums truncate">
+          <span>پرتلاش‌ترین روز هفته: </span>
+          <span className="font-black text-amber-700 dark:text-amber-300">{bestDayText}</span>
         </div>
       </div>
 
       {/* Main Recharts Container */}
       {loading ? (
-        <div className="h-72 w-full rounded-2xl bg-slate-100 dark:bg-slate-800/50 animate-pulse" />
+        <div className="h-68 w-full rounded-2xl bg-slate-100 dark:bg-slate-800/50 animate-pulse" />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {/* Custom Legend */}
-          <div className="flex flex-wrap items-center justify-end gap-5 text-xs font-bold px-2">
-            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+          <div className="flex flex-wrap items-center justify-center gap-5 text-xs font-bold px-2">
+            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
               <span className="w-3 h-3 rounded-sm bg-emerald-500 inline-block" />
               <span>زمان مطالعه واقعی ({unitMode === 'hours' ? 'ساعت' : 'دقیقه'})</span>
             </div>
-            <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+            <div className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
               <span className="w-3 h-3 rounded-sm bg-indigo-500 inline-block" />
               <span>هدف پیش‌بینی‌شده ({unitMode === 'hours' ? 'ساعت' : 'دقیقه'})</span>
             </div>
           </div>
 
-          <div dir="ltr" className="h-80 w-full pt-2">
+          <div dir="ltr" className="h-68 w-full pt-1">
             <ResponsiveContainer width="100%" height="100%">
-              {chartType === 'composed' ? (
+              {displayMode === 'aggregate' ? (
+                <BarChart
+                  data={aggregateData}
+                  margin={{ top: 12, right: 16, left: 0, bottom: 10 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                    stroke="#94a3b8"
+                    strokeOpacity={0.2}
+                  />
+                  {/* 2 columns in aggregate mode -> Horizontal XAxis labels */}
+                  <XAxis
+                    dataKey="name"
+                    angle={0}
+                    textAnchor="middle"
+                    height={36}
+                    tick={{ fontSize: 11, fill: '#64748b', fontWeight: 700 }}
+                    axisLine={{ stroke: '#cbd5e1', strokeOpacity: 0.4 }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tickFormatter={(val) =>
+                      unitMode === 'hours'
+                        ? `${toPersianDigits(val)}h`
+                        : `${toPersianDigits(val)}m`
+                    }
+                    tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={45}
+                  />
+                  <Tooltip
+                    formatter={(_val: any, _name: any, item: any) => [
+                      formatHoursAndMinutesPersian(Number(item?.payload?.minutes || 0)),
+                      String(item?.payload?.name || ''),
+                    ]}
+                  />
+                  <Bar dataKey="value" radius={[10, 10, 0, 0]} maxBarSize={64}>
+                    {aggregateData.map((entry, idx) => (
+                      <Cell key={`wk-agg-${idx}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              ) : chartType === 'composed' ? (
                 <ComposedChart
                   data={chartData}
                   margin={{ top: 12, right: 16, left: 0, bottom: 16 }}
@@ -361,6 +415,7 @@ export const WeeklyStudyChart: React.FC = () => {
                     stroke="#94a3b8"
                     strokeOpacity={0.2}
                   />
+                  {/* 7 columns in daily mode -> Rotated vertical XAxis labels */}
                   <XAxis
                     dataKey="shortLabel"
                     angle={-90}

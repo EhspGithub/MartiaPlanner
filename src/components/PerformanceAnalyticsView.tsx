@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ResponsiveContainer,
   BarChart,
@@ -29,6 +29,7 @@ import {
   Calendar as CalendarIcon,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
 } from 'lucide-react';
 import type { DailyTimeBudgetConfig } from '../types.ts';
 import { api } from '../services/api.ts';
@@ -52,9 +53,10 @@ import {
   type PeriodPerformanceSummary,
   type MetricComparisonDelta,
 } from '../utils/analyticsEngine.ts';
+import { WeeklyStudyChart } from './WeeklyStudyChart.tsx';
 
-type AnalyticsFilterMode = 'daily' | 'weekly' | 'monthly' | 'custom';
-type StudyChartDisplayMode = 'daily' | 'aggregate';
+export type AnalyticsFilterMode = 'daily' | 'weekly' | 'monthly' | 'custom';
+export type ChartDisplayMode = 'aggregate' | 'daily';
 
 const SHORT_WEEKDAYS = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
 
@@ -68,17 +70,20 @@ function formatDeltaBadgeText(delta: MetricComparisonDelta): string {
   return `${sign}${toPersianDigits(delta.percentChange)}٪`;
 }
 
-interface CompactJalaliCalendarProps {
+export interface CompactJalaliCalendarProps {
   selectedIso: string;
   onSelectIso: (iso: string) => void;
 }
 
-const CompactJalaliCalendar: React.FC<CompactJalaliCalendarProps> = ({
+export const CompactJalaliCalendar: React.FC<CompactJalaliCalendarProps> = ({
   selectedIso,
   onSelectIso,
 }) => {
   const todayIso = getTodayISO();
-  const initialJalali = useMemo(() => isoToJalali(selectedIso || todayIso), [selectedIso, todayIso]);
+  const initialJalali = useMemo(
+    () => isoToJalali(selectedIso || todayIso),
+    [selectedIso, todayIso]
+  );
   const [viewJy, setViewJy] = useState<number>(initialJalali.jy);
   const [viewJm, setViewJm] = useState<number>(initialJalali.jm);
 
@@ -116,7 +121,7 @@ const CompactJalaliCalendar: React.FC<CompactJalaliCalendarProps> = ({
   };
 
   return (
-    <div className="w-full max-w-xs rounded-2xl border border-indigo-200/80 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 p-3 shadow-2xs space-y-2.5">
+    <div className="w-72 rounded-2xl border border-indigo-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3.5 shadow-xl shadow-indigo-950/15 space-y-2.5">
       {/* Calendar Header: Month/Year & Navigation */}
       <div className="flex items-center justify-between gap-1.5">
         <div className="flex items-center gap-1">
@@ -124,7 +129,7 @@ const CompactJalaliCalendar: React.FC<CompactJalaliCalendarProps> = ({
             type="button"
             onClick={handlePrevMonth}
             title="ماه قبل"
-            className="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800 cursor-pointer"
+            className="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-700 cursor-pointer"
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
@@ -135,7 +140,7 @@ const CompactJalaliCalendar: React.FC<CompactJalaliCalendarProps> = ({
             type="button"
             onClick={handleNextMonth}
             title="ماه بعد"
-            className="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800 cursor-pointer"
+            className="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-700 cursor-pointer"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
@@ -144,7 +149,7 @@ const CompactJalaliCalendar: React.FC<CompactJalaliCalendarProps> = ({
         <button
           type="button"
           onClick={handleGoToday}
-          className="px-2 py-1 rounded-lg bg-indigo-100/80 dark:bg-indigo-950/70 text-[11px] font-extrabold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200/70 transition-colors cursor-pointer"
+          className="px-2.5 py-1 rounded-lg bg-indigo-100/80 dark:bg-indigo-950/70 text-[11px] font-extrabold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200/70 transition-colors cursor-pointer"
         >
           امروز
         </button>
@@ -179,7 +184,7 @@ const CompactJalaliCalendar: React.FC<CompactJalaliCalendarProps> = ({
                   ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-600/30 scale-105'
                   : d.isToday
                   ? 'border border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
-                  : 'bg-white dark:bg-slate-900/80 text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-slate-700/70'
+                  : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-slate-700/70'
               }`}
             >
               {d.persianDay}
@@ -188,7 +193,7 @@ const CompactJalaliCalendar: React.FC<CompactJalaliCalendarProps> = ({
         })}
       </div>
 
-      <div className="flex items-center justify-between pt-1 border-t border-slate-200/70 dark:border-slate-700/70 text-[11px] text-slate-600 dark:text-slate-300">
+      <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/70 dark:border-slate-700/70 text-[11px] text-slate-600 dark:text-slate-300">
         <span className="flex items-center gap-1 font-bold">
           <CalendarIcon className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
           <span>روز انتخابی:</span>
@@ -201,18 +206,84 @@ const CompactJalaliCalendar: React.FC<CompactJalaliCalendarProps> = ({
   );
 };
 
+interface ChartModeToggleProps {
+  mode: ChartDisplayMode;
+  onChange: (mode: ChartDisplayMode) => void;
+}
+
+const ChartModeToggle: React.FC<ChartModeToggleProps> = ({ mode, onChange }) => (
+  <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 shrink-0">
+    <button
+      type="button"
+      onClick={() => onChange('aggregate')}
+      className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+        mode === 'aggregate'
+          ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
+          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+      }`}
+    >
+      نمایش تجمیعی
+    </button>
+    <button
+      type="button"
+      onClick={() => onChange('daily')}
+      className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+        mode === 'daily'
+          ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
+          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+      }`}
+    >
+      نمایش روزانه
+    </button>
+  </div>
+);
+
 export const PerformanceAnalyticsView: React.FC = () => {
   const todayIso = getTodayISO();
   const currentWeekDays = useMemo(() => getPersianWeekDays(todayIso), [todayIso]);
 
+  // Default to daily or weekly; when user clicks 'روزانه', singleDate defaults to todayIso
   const [filterMode, setFilterMode] = useState<AnalyticsFilterMode>('weekly');
   const [singleDate, setSingleDate] = useState<string>(todayIso);
+  const [isDailyCalendarOpen, setIsDailyCalendarOpen] = useState<boolean>(false);
+  const calendarPopoverRef = useRef<HTMLDivElement | null>(null);
+
   const [weekRefDate, setWeekRefDate] = useState<string>(todayIso);
   const [customStart, setCustomStart] = useState<string>(addDaysISO(todayIso, -6));
   const [customEnd, setCustomEnd] = useState<string>(todayIso);
 
-  // Study Time Chart Mode: Daily vs Aggregate (Section 5)
-  const [studyChartMode, setStudyChartMode] = useState<StudyChartDisplayMode>('daily');
+  // Section 4: All 6 charts have Daily/Aggregate mode, defaulting to 'aggregate'
+  const [chart1Mode, setChart1Mode] = useState<ChartDisplayMode>('aggregate');
+  const [chart2Mode, setChart2Mode] = useState<ChartDisplayMode>('aggregate');
+  const [chart3Mode, setChart3Mode] = useState<ChartDisplayMode>('aggregate');
+  const [chart4Mode, setChart4Mode] = useState<ChartDisplayMode>('aggregate');
+  const [chart5Mode, setChart5Mode] = useState<ChartDisplayMode>('aggregate');
+  const [chart6Mode, setChart6Mode] = useState<ChartDisplayMode>('aggregate');
+
+  // Close daily calendar popover on outside click
+  useEffect(() => {
+    if (!isDailyCalendarOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        calendarPopoverRef.current &&
+        !calendarPopoverRef.current.contains(e.target as Node)
+      ) {
+        setIsDailyCalendarOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isDailyCalendarOpen]);
+
+  // Reset all charts to 'aggregate' default whenever timeframe selection changes (Section 4.2)
+  useEffect(() => {
+    setChart1Mode('aggregate');
+    setChart2Mode('aggregate');
+    setChart3Mode('aggregate');
+    setChart4Mode('aggregate');
+    setChart5Mode('aggregate');
+    setChart6Mode('aggregate');
+  }, [filterMode, singleDate, weekRefDate, customStart, customEnd]);
 
   // Period Comparison state (Section 10.9)
   const [showComparison, setShowComparison] = useState<boolean>(false);
@@ -328,7 +399,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
     };
   }, [activeDateRange.start, activeDateRange.end, showComparison, compStartA, compEndA]);
 
-  // Chart data preparation
+  // Daily Chart data preparation
   const chartData = useMemo(() => {
     if (!periodSummary) return [];
     return periodSummary.dailyEvaluations.map((d) => ({
@@ -354,41 +425,154 @@ export const PerformanceAnalyticsView: React.FC = () => {
     }));
   }, [periodSummary]);
 
-  // Aggregate Study Time Chart Data (Section 5: only 2 bars for the whole selected period)
+  // Section 4.5: Smart XAxis orientation based on column count in daily mode
+  const isDailyXAxisRotated = chartData.length > 4;
+  const dailyXAxisProps = isDailyXAxisRotated
+    ? {
+        angle: -90,
+        textAnchor: 'end' as const,
+        height: 62,
+        tickMargin: 6,
+        interval: 0,
+        tick: { fontSize: 10 },
+      }
+    : {
+        angle: 0,
+        textAnchor: 'middle' as const,
+        height: 36,
+        tickMargin: 6,
+        interval: 0,
+        tick: { fontSize: 11, fontWeight: 700 },
+      };
+
+  // Aggregate Data for Chart 1: Study Time (Total Actual vs Total Predicted)
   const aggregateStudyChartData = useMemo(() => {
     if (!periodSummary) return [];
     return [
       {
         name: 'مجموع مطالعه واقعی',
         minutes: periodSummary.totalStudyMinutes,
-        hoursLabel: formatHoursAndMinutesPersian(periodSummary.totalStudyMinutes),
         color: '#4f46e5',
       },
       {
         name: 'مجموع پیش‌بینی‌شده',
         minutes: periodSummary.totalPredictedStudyMinutes,
-        hoursLabel: formatHoursAndMinutesPersian(periodSummary.totalPredictedStudyMinutes),
         color: '#94a3b8',
       },
     ];
   }, [periodSummary]);
 
-  // Budget Pie Distribution data (10.7)
-  const budgetDistributionPie = useMemo(() => {
+  // Aggregate Data for Chart 2: Exercises (Total Solved vs Total Target)
+  const aggregateExercisesChartData = useMemo(() => {
     if (!periodSummary) return [];
     return [
       {
-        name: 'مطالعه و آموزش',
+        name: 'مجموع تست حل‌شده',
+        count: periodSummary.totalExercisesCount,
+        color: '#2563eb',
+      },
+      {
+        name: 'مجموع تست هدف',
+        count: periodSummary.totalTargetExercisesCount,
+        color: '#94a3b8',
+      },
+    ];
+  }, [periodSummary]);
+
+  // Aggregate Data for Chart 3: Learning Quality (Weighted Average 0-10, Max Day, Min Day)
+  const aggregateQualityChartData = useMemo(() => {
+    if (!periodSummary) return [];
+    const validQualityDays = periodSummary.dailyEvaluations
+      .map((d) => d.learningQuality0To10)
+      .filter((q): q is number => q !== null);
+    const maxQ = validQualityDays.length > 0 ? Math.max(...validQualityDays) : 0;
+    const minQ = validQualityDays.length > 0 ? Math.min(...validQualityDays) : 0;
+    return [
+      {
+        name: 'میانگین وزنی کل بازه',
+        score: periodSummary.weightedLearningQuality0To10 ?? 0,
+        color: '#9333ea',
+      },
+      {
+        name: 'بیشترین کیفیت روزانه',
+        score: maxQ,
+        color: '#10b981',
+      },
+      {
+        name: 'کمترین کیفیت روزانه',
+        score: minQ,
+        color: '#f59e0b',
+      },
+    ];
+  }, [periodSummary]);
+
+  // Aggregate Data for Chart 4: Final Score S, Educational E, Restricted Control C (0-100 averages)
+  const aggregateScoreChartData = useMemo(() => {
+    if (!periodSummary) return [];
+    const validEDays = periodSummary.dailyEvaluations
+      .map((d) => d.educationalCompositeE)
+      .filter((e): e is number => e !== null);
+    const avgE =
+      validEDays.length > 0
+        ? Math.round((validEDays.reduce((a, b) => a + b, 0) / validEDays.length) * 10) / 10
+        : 0;
+    return [
+      {
+        name: 'میانگین امتیاز نهایی (S)',
+        score: periodSummary.averageFinalScoreS ?? 0,
+        color: '#10b981',
+      },
+      {
+        name: 'میانگین عملکرد آموزشی (E)',
+        score: avgE,
+        color: '#4f46e5',
+      },
+      {
+        name: 'میانگین کنترل سرگرمی (C)',
+        score: periodSummary.averageRestrictedControlIndexC ?? 0,
+        color: '#0284c7',
+      },
+    ];
+  }, [periodSummary]);
+
+  // Aggregate Data for Chart 5: Restricted Activities (Total Allowed, Actual, Overuse)
+  const aggregateRestrictedChartData = useMemo(() => {
+    if (!periodSummary) return [];
+    return [
+      {
+        name: 'مجموع سقف مجاز',
+        minutes: periodSummary.totalRestrictedAllowedMinutes,
+        color: '#38bdf8',
+      },
+      {
+        name: 'مجموع مصرف واقعی',
+        minutes: periodSummary.totalRestrictedActualMinutes,
+        color: '#f59e0b',
+      },
+      {
+        name: 'مجموع تخطی از سقف',
+        minutes: periodSummary.totalRestrictedOveruseMinutes,
+        color: '#f43f5e',
+      },
+    ];
+  }, [periodSummary]);
+
+  // Aggregate & Pie Data for Chart 6: Time Budget Distribution (Section 5)
+  const budgetCategoriesData = useMemo(() => {
+    if (!periodSummary) return [];
+    return [
+      {
+        name: 'آموزشی و مطالعه',
         value: periodSummary.totalStudyMinutes,
         color: '#4f46e5',
       },
       {
-        name: 'سرگرمی محدودشونده',
+        name: 'تفریحی محدودشونده',
         value: periodSummary.totalRestrictedActualMinutes,
         color: '#f59e0b',
       },
       {
-        name: 'استراحت و ضروری',
+        name: 'ضروری و استراحت',
         value: periodSummary.totalEssentialActualMinutes,
         color: '#10b981',
       },
@@ -397,8 +581,13 @@ export const PerformanceAnalyticsView: React.FC = () => {
         value: periodSummary.totalUnallocatedMinutesOnBudgetedDays,
         color: '#94a3b8',
       },
-    ].filter((item) => item.value > 0);
+    ];
   }, [periodSummary]);
+
+  const budgetDistributionPie = useMemo(
+    () => budgetCategoriesData.filter((item) => item.value > 0),
+    [budgetCategoriesData]
+  );
 
   // Period Comparison Metrics (10.9)
   const comparisonRows = useMemo(() => {
@@ -463,27 +652,26 @@ export const PerformanceAnalyticsView: React.FC = () => {
     return list.reverse();
   }, [todayIso]);
 
-  const isMultiDayPeriod = filterMode !== 'daily' && (periodSummary?.daysCount ?? 0) > 1;
-
   return (
     <div className="space-y-5">
       {/* =====================================================================
-          SECTION 2 & 3: ANALYTICAL REPORTS HEADER, TIMEFRAME SELECTOR & SHAMSI CALENDAR
+          SECTION 1: ANALYTICAL REPORTS HEADER & POPOVER DAILY SHAMSI CALENDAR
       ===================================================================== */}
       <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-6 shadow-xs space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="space-y-1">
-            <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+          <div className="space-y-1 min-w-0">
+            <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2 whitespace-nowrap">
               <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <span>سیستم جامع گزارش و تحلیل عملکرد</span>
             </h2>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 leading-relaxed">
-              تحلیل چندبعدی مطالعه، کیفیت یادگیری، ظرف زمانی و کنترل سرگرمی‌ها
+            {/* Section 1.1: Strictly single-line subtitle on mobile & desktop */}
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
+              تحلیل شاخص‌های مطالعه، کیفیت، ظرف زمانی و سرگرمی‌ها
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-            {/* 3-1: Balanced 4 Timeframe Mode Buttons */}
+            {/* 4 Timeframe Mode Buttons */}
             <div className="grid grid-cols-4 sm:inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60">
               {(
                 [
@@ -496,7 +684,12 @@ export const PerformanceAnalyticsView: React.FC = () => {
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setFilterMode(tab.id)}
+                  onClick={() => {
+                    setFilterMode(tab.id);
+                    if (tab.id === 'daily') {
+                      setIsDailyCalendarOpen(false);
+                    }
+                  }}
                   className={`px-2.5 sm:px-3.5 py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer whitespace-nowrap text-center ${
                     filterMode === tab.id
                       ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-600/20'
@@ -526,9 +719,43 @@ export const PerformanceAnalyticsView: React.FC = () => {
 
         {/* Sub-controls for Selected Filter Mode */}
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* 3-3: Compact Custom Shamsi Calendar in Daily Mode */}
+          {/* Section 1.2: Daily Mode -> Field "انتخاب روز" that opens CompactJalaliCalendar as Popover on click */}
           {filterMode === 'daily' && (
-            <CompactJalaliCalendar selectedIso={singleDate} onSelectIso={setSingleDate} />
+            <div className="relative" ref={calendarPopoverRef}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                  انتخاب روز:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsDailyCalendarOpen((prev) => !prev)}
+                  className="inline-flex items-center gap-2.5 rounded-xl border border-indigo-200 dark:border-slate-700 bg-slate-50/90 dark:bg-slate-800 px-3.5 py-2 text-xs font-extrabold text-slate-900 dark:text-white hover:border-indigo-400 dark:hover:border-indigo-500 transition-all cursor-pointer shadow-2xs"
+                >
+                  <CalendarIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span className="tabular-nums">
+                    {formatJalaliFull(singleDate)}
+                    {singleDate === todayIso ? ' (امروز)' : ''}
+                  </span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+                      isDailyCalendarOpen ? 'rotate-180 text-indigo-600' : ''
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {isDailyCalendarOpen && (
+                <div className="absolute z-40 top-full mt-2 right-0">
+                  <CompactJalaliCalendar
+                    selectedIso={singleDate}
+                    onSelectIso={(iso) => {
+                      setSingleDate(iso);
+                      setIsDailyCalendarOpen(false);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           )}
 
           {filterMode === 'weekly' && (
@@ -564,7 +791,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
             </div>
           )}
 
-          {/* 3-2: Clean, Structured Custom Date Range Selector */}
+          {/* Custom Date Range Selector */}
           {filterMode === 'custom' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-xl bg-slate-50/80 dark:bg-slate-800/50 p-2.5 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 text-xs">
               <div className="flex items-center gap-2">
@@ -660,7 +887,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
       ) : (
         <>
           {/* =================================================================
-              SECTION 4: 6 COMPACT STATISTICAL SUMMARY CARDS WITH TINTED GRADIENTS
+              6 COMPACT STATISTICAL SUMMARY CARDS WITH TINTED GRADIENTS
           ================================================================= */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {/* Card 1: مجموع ساعت مطالعه در بازه انتخابی */}
@@ -890,7 +1117,9 @@ export const PerformanceAnalyticsView: React.FC = () => {
           )}
 
           {/* =================================================================
-              CHARTS GRID (SECTIONS 5, 6, 7, 8)
+              CHARTS GRID (SECTIONS 4, 5, 8)
+              All charts feature Daily/Aggregate toggle (defaulting to Aggregate)
+              and smart horizontal/vertical XAxis labels.
           ================================================================= */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Chart 1: زمان مطالعه (پیش‌بینی در برابر واقعی) */}
@@ -906,58 +1135,23 @@ export const PerformanceAnalyticsView: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Section 5: Segmented Control for Daily vs Aggregate in Multi-Day Modes */}
-                  {isMultiDayPeriod && (
-                    <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
-                      <button
-                        type="button"
-                        onClick={() => setStudyChartMode('daily')}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer ${
-                          studyChartMode === 'daily'
-                            ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
-                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                        }`}
-                      >
-                        نمایش روزانه
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setStudyChartMode('aggregate')}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer ${
-                          studyChartMode === 'aggregate'
-                            ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
-                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                        }`}
-                      >
-                        نمایش تجمیعی
-                      </button>
-                    </div>
-                  )}
-
-                  {periodSummary.maxStudyDay && (!isMultiDayPeriod || studyChartMode === 'daily') && (
-                    <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                      بیشترین: {periodSummary.maxStudyDay.jalaliCompact} (
-                      {formatMinutesPersian(periodSummary.maxStudyDay.actualStudyMinutes)})
-                    </div>
-                  )}
-                </div>
+                <ChartModeToggle mode={chart1Mode} onChange={setChart1Mode} />
               </div>
 
-              <div className="h-72 w-full" dir="ltr">
+              <div className="h-68 w-full" dir="ltr">
                 <ResponsiveContainer width="100%" height="100%">
-                  {isMultiDayPeriod && studyChartMode === 'aggregate' ? (
+                  {chart1Mode === 'aggregate' ? (
                     <BarChart
                       data={aggregateStudyChartData}
-                      margin={{ top: 12, right: 15, left: -10, bottom: 20 }}
+                      margin={{ top: 12, right: 15, left: -10, bottom: 10 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      {/* 2 columns -> horizontal labels */}
                       <XAxis
                         dataKey="name"
-                        angle={-90}
-                        textAnchor="end"
-                        height={70}
-                        tickMargin={6}
+                        angle={0}
+                        textAnchor="middle"
+                        height={36}
                         tick={{ fontSize: 11, fontWeight: 700 }}
                       />
                       <YAxis tick={{ fontSize: 11 }} />
@@ -969,24 +1163,24 @@ export const PerformanceAnalyticsView: React.FC = () => {
                           'مجموع زمان در بازه',
                         ]}
                       />
-                      <Bar dataKey="minutes" name="مجموع زمان (دقیقه)" radius={[8, 8, 0, 0]} maxBarSize={64}>
+                      <Bar
+                        dataKey="minutes"
+                        name="مجموع زمان (دقیقه)"
+                        radius={[8, 8, 0, 0]}
+                        maxBarSize={64}
+                      >
                         {aggregateStudyChartData.map((entry, index) => (
-                          <Cell key={`agg-cell-${index}`} fill={entry.color} />
+                          <Cell key={`agg-study-${index}`} fill={entry.color} />
                         ))}
                       </Bar>
                     </BarChart>
                   ) : (
-                    <BarChart data={chartData} margin={{ top: 10, right: 10, left: -15, bottom: 15 }}>
+                    <BarChart
+                      data={chartData}
+                      margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                    >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                      <XAxis
-                        dataKey="label"
-                        angle={-90}
-                        textAnchor="end"
-                        height={62}
-                        tickMargin={6}
-                        interval={0}
-                        tick={{ fontSize: 10 }}
-                      />
+                      <XAxis dataKey="label" {...dailyXAxisProps} />
                       <YAxis tick={{ fontSize: 11 }} />
                       <Tooltip
                         formatter={(val: any, name?: any) => [
@@ -1015,7 +1209,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
 
             {/* Chart 2: تعداد تمرین و تست حل‌شده */}
             <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-3.5">
                 <div>
                   <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
                     ۲. تعداد تمرین و تست حل‌شده
@@ -1025,49 +1219,79 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     {toPersianDigits(periodSummary.totalTargetExercisesCount)}
                   </p>
                 </div>
+
+                <ChartModeToggle mode={chart2Mode} onChange={setChart2Mode} />
               </div>
 
-              <div className="h-72 w-full" dir="ltr">
+              <div className="h-68 w-full" dir="ltr">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: -15, bottom: 15 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      angle={-90}
-                      textAnchor="end"
-                      height={62}
-                      tickMargin={6}
-                      interval={0}
-                      tick={{ fontSize: 10 }}
-                    />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip
-                      formatter={(val: any, name?: any) => [
-                        `${toPersianDigits(Number(val))} تست/تمرین`,
-                        String(name ?? ''),
-                      ]}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
-                    <Bar
-                      dataKey="targetExercises"
-                      name="تست هدف"
-                      fill="#cbd5e1"
-                      radius={[6, 6, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="actualExercises"
-                      name="تست حل‌شده واقعی"
-                      fill="#2563eb"
-                      radius={[6, 6, 0, 0]}
-                    />
-                  </BarChart>
+                  {chart2Mode === 'aggregate' ? (
+                    <BarChart
+                      data={aggregateExercisesChartData}
+                      margin={{ top: 12, right: 15, left: -10, bottom: 10 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis
+                        dataKey="name"
+                        angle={0}
+                        textAnchor="middle"
+                        height={36}
+                        tick={{ fontSize: 11, fontWeight: 700 }}
+                      />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        formatter={(val: any) => [
+                          `${toPersianDigits(Number(val))} تست و تمرین`,
+                          'مجموع بازه',
+                        ]}
+                      />
+                      <Bar
+                        dataKey="count"
+                        name="تعداد تست/تمرین"
+                        radius={[8, 8, 0, 0]}
+                        maxBarSize={64}
+                      >
+                        {aggregateExercisesChartData.map((entry, idx) => (
+                          <Cell key={`agg-ex-${idx}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  ) : (
+                    <BarChart
+                      data={chartData}
+                      margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="label" {...dailyXAxisProps} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        formatter={(val: any, name?: any) => [
+                          `${toPersianDigits(Number(val))} تست/تمرین`,
+                          String(name ?? ''),
+                        ]}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
+                      <Bar
+                        dataKey="targetExercises"
+                        name="تست هدف"
+                        fill="#cbd5e1"
+                        radius={[6, 6, 0, 0]}
+                      />
+                      <Bar
+                        dataKey="actualExercises"
+                        name="تست حل‌شده واقعی"
+                        fill="#2563eb"
+                        radius={[6, 6, 0, 0]}
+                      />
+                    </BarChart>
+                  )}
                 </ResponsiveContainer>
               </div>
             </div>
 
             {/* Chart 3: روند کیفیت یادگیری وزنی (مقیاس ۰ تا ۱۰) */}
             <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-3.5">
                 <div>
                   <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
                     ۳. روند کیفیت یادگیری وزنی (مقیاس ۰ تا ۱۰)
@@ -1079,45 +1303,70 @@ export const PerformanceAnalyticsView: React.FC = () => {
                       : 'بدون ثبت کیفیت'}
                   </p>
                 </div>
+
+                <ChartModeToggle mode={chart3Mode} onChange={setChart3Mode} />
               </div>
 
-              <div className="h-72 w-full" dir="ltr">
+              <div className="h-68 w-full" dir="ltr">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 10, right: 15, left: -15, bottom: 15 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      angle={-90}
-                      textAnchor="end"
-                      height={62}
-                      tickMargin={6}
-                      interval={0}
-                      tick={{ fontSize: 10 }}
-                    />
-                    <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} />
-                    <Tooltip
-                      formatter={(val: any) => [
-                        `${toPersianDigits(Number(val))} از ۱۰`,
-                        'کیفیت یادگیری وزنی',
-                      ]}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
-                    <Line
-                      type="monotone"
-                      dataKey="quality0To10"
-                      name="کیفیت یادگیری روزانه (۰ تا ۱۰)"
-                      stroke="#9333ea"
-                      strokeWidth={3}
-                      dot={{ r: 4, fill: '#9333ea' }}
-                    />
-                  </LineChart>
+                  {chart3Mode === 'aggregate' ? (
+                    <BarChart
+                      data={aggregateQualityChartData}
+                      margin={{ top: 12, right: 15, left: -15, bottom: 10 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis
+                        dataKey="name"
+                        angle={0}
+                        textAnchor="middle"
+                        height={36}
+                        tick={{ fontSize: 10, fontWeight: 700 }}
+                      />
+                      <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        formatter={(val: any) => [
+                          `${toPersianDigits(Number(val))} از ۱۰`,
+                          'کیفیت یادگیری',
+                        ]}
+                      />
+                      <Bar dataKey="score" name="کیفیت (از ۱۰)" radius={[8, 8, 0, 0]} maxBarSize={56}>
+                        {aggregateQualityChartData.map((entry, idx) => (
+                          <Cell key={`agg-q-${idx}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  ) : (
+                    <LineChart
+                      data={chartData}
+                      margin={{ top: 10, right: 15, left: -15, bottom: 15 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="label" {...dailyXAxisProps} />
+                      <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        formatter={(val: any) => [
+                          `${toPersianDigits(Number(val))} از ۱۰`,
+                          'کیفیت یادگیری وزنی',
+                        ]}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
+                      <Line
+                        type="monotone"
+                        dataKey="quality0To10"
+                        name="کیفیت یادگیری روزانه (۰ تا ۱۰)"
+                        stroke="#9333ea"
+                        strokeWidth={3}
+                        dot={{ r: 4, fill: '#9333ea' }}
+                      />
+                    </LineChart>
+                  )}
                 </ResponsiveContainer>
               </div>
             </div>
 
             {/* Chart 4: امتیاز نهایی روزانه (S از ۱۰۰) */}
             <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-3.5">
                 <div>
                   <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
                     ۴. امتیاز نهایی روزانه (S از ۱۰۰)
@@ -1126,72 +1375,81 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     ترکیب ۸۰٪ عملکرد آموزشی (E) و ۲۰٪ کنترل سرگرمی‌ها (C)
                   </p>
                 </div>
-                <div className="flex items-center gap-2 text-[11px] font-bold tabular-nums">
-                  {periodSummary.bestScoreDay &&
-                    periodSummary.bestScoreDay.finalDailyScoreS !== null && (
-                      <span className="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300">
-                        بهترین: {periodSummary.bestScoreDay.jalaliCompact} (
-                        {toPersianDigits(periodSummary.bestScoreDay.finalDailyScoreS)})
-                      </span>
-                    )}
-                  {periodSummary.weakestScoreDay &&
-                    periodSummary.weakestScoreDay.finalDailyScoreS !== null &&
-                    periodSummary.weakestScoreDay.dateIso !==
-                      periodSummary.bestScoreDay?.dateIso && (
-                      <span className="px-2 py-0.5 rounded-lg bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300">
-                        ضعیف‌ترین: {periodSummary.weakestScoreDay.jalaliCompact} (
-                        {toPersianDigits(periodSummary.weakestScoreDay.finalDailyScoreS)})
-                      </span>
-                    )}
-                </div>
+
+                <ChartModeToggle mode={chart4Mode} onChange={setChart4Mode} />
               </div>
 
-              <div className="h-72 w-full" dir="ltr">
+              <div className="h-68 w-full" dir="ltr">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart
-                    data={chartData}
-                    margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      angle={-90}
-                      textAnchor="end"
-                      height={62}
-                      tickMargin={6}
-                      interval={0}
-                      tick={{ fontSize: 10 }}
-                    />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
-                    <Tooltip
-                      formatter={(val: any, name?: any) => [
-                        `${toPersianDigits(Number(val))} از ۱۰۰`,
-                        String(name ?? ''),
-                      ]}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
-                    <Bar
-                      dataKey="scoreS"
-                      name="امتیاز نهایی روز (S)"
-                      fill="#10b981"
-                      radius={[6, 6, 0, 0]}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="scoreE"
-                      name="امتیاز آموزشی (E)"
-                      stroke="#4f46e5"
-                      strokeWidth={2.5}
-                      dot={{ r: 3 }}
-                    />
-                  </ComposedChart>
+                  {chart4Mode === 'aggregate' ? (
+                    <BarChart
+                      data={aggregateScoreChartData}
+                      margin={{ top: 12, right: 15, left: -15, bottom: 10 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis
+                        dataKey="name"
+                        angle={0}
+                        textAnchor="middle"
+                        height={36}
+                        tick={{ fontSize: 10, fontWeight: 700 }}
+                      />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        formatter={(val: any) => [
+                          `${toPersianDigits(Number(val))} از ۱۰۰`,
+                          'میانگین در بازه',
+                        ]}
+                      />
+                      <Bar
+                        dataKey="score"
+                        name="میانگین امتیاز (از ۱۰۰)"
+                        radius={[8, 8, 0, 0]}
+                        maxBarSize={56}
+                      >
+                        {aggregateScoreChartData.map((entry, idx) => (
+                          <Cell key={`agg-score-${idx}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  ) : (
+                    <ComposedChart
+                      data={chartData}
+                      margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="label" {...dailyXAxisProps} />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        formatter={(val: any, name?: any) => [
+                          `${toPersianDigits(Number(val))} از ۱۰۰`,
+                          String(name ?? ''),
+                        ]}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
+                      <Bar
+                        dataKey="scoreS"
+                        name="امتیاز نهایی روز (S)"
+                        fill="#10b981"
+                        radius={[6, 6, 0, 0]}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="scoreE"
+                        name="امتیاز آموزشی (E)"
+                        stroke="#4f46e5"
+                        strokeWidth={2.5}
+                        dot={{ r: 3 }}
+                      />
+                    </ComposedChart>
+                  )}
                 </ResponsiveContainer>
               </div>
             </div>
 
             {/* Chart 5: کنترل فعالیت‌های تفریحی و محدودشونده */}
             <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-3.5">
                 <div>
                   <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
                     ۵. کنترل فعالیت‌های تفریحی و محدودشونده
@@ -1200,82 +1458,52 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     مقایسه زمان مجاز با زمان مصرفی واقعی و میزان تخطی از سقف مجاز (گوشی، بازی، تلویزیون)
                   </p>
                 </div>
+
+                <ChartModeToggle mode={chart5Mode} onChange={setChart5Mode} />
               </div>
 
-              <div className="h-72 w-full" dir="ltr">
+              <div className="h-68 w-full" dir="ltr">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: -15, bottom: 15 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      angle={-90}
-                      textAnchor="end"
-                      height={62}
-                      tickMargin={6}
-                      interval={0}
-                      tick={{ fontSize: 10 }}
-                    />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip
-                      formatter={(val: any, name?: any) => [
-                        `${toPersianDigits(Number(val))} دقیقه`,
-                        String(name ?? ''),
-                      ]}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
-                    <Bar
-                      dataKey="allowedRestrictedMins"
-                      name="سقف مجاز (پیش‌بینی)"
-                      fill="#38bdf8"
-                      radius={[6, 6, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="actualRestrictedMins"
-                      name="مصرف واقعی سرگرمی"
-                      fill="#f59e0b"
-                      radius={[6, 6, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="overuseRestrictedMins"
-                      name="تخطی بیش از حد مجاز"
-                      fill="#f43f5e"
-                      radius={[6, 6, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Chart 6: توزیع ظرف زمانی روز */}
-            <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3.5">
-                <div>
-                  <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
-                    ۶. توزیع ظرف زمانی روز (آموزشی، تفریحی، ضروری و باقی‌مانده)
-                  </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
-                    نحوه مصرف ظرفیت زمانی روز بین دسته‌های سه‌گانه فعالیت‌ها
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-                <div className="sm:col-span-7 h-68 w-full" dir="ltr">
-                  <ResponsiveContainer width="100%" height="100%">
+                  {chart5Mode === 'aggregate' ? (
+                    <BarChart
+                      data={aggregateRestrictedChartData}
+                      margin={{ top: 12, right: 15, left: -15, bottom: 10 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis
+                        dataKey="name"
+                        angle={0}
+                        textAnchor="middle"
+                        height={36}
+                        tick={{ fontSize: 10, fontWeight: 700 }}
+                      />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        formatter={(val: any) => [
+                          `${formatHoursAndMinutesPersian(Number(val))} (${toPersianDigits(
+                            Number(val)
+                          )} دقیقه)`,
+                          'مجموع بازه',
+                        ]}
+                      />
+                      <Bar
+                        dataKey="minutes"
+                        name="مجموع زمان (دقیقه)"
+                        radius={[8, 8, 0, 0]}
+                        maxBarSize={56}
+                      >
+                        {aggregateRestrictedChartData.map((entry, idx) => (
+                          <Cell key={`agg-rest-${idx}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  ) : (
                     <BarChart
                       data={chartData}
                       margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                      <XAxis
-                        dataKey="label"
-                        angle={-90}
-                        textAnchor="end"
-                        height={62}
-                        tickMargin={6}
-                        interval={0}
-                        tick={{ fontSize: 10 }}
-                      />
+                      <XAxis dataKey="label" {...dailyXAxisProps} />
                       <YAxis tick={{ fontSize: 11 }} />
                       <Tooltip
                         formatter={(val: any, name?: any) => [
@@ -1283,38 +1511,52 @@ export const PerformanceAnalyticsView: React.FC = () => {
                           String(name ?? ''),
                         ]}
                       />
+                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
                       <Bar
-                        dataKey="actualStudyMins"
-                        stackId="budget"
-                        name="آموزشی و مطالعه"
-                        fill="#4f46e5"
+                        dataKey="allowedRestrictedMins"
+                        name="سقف مجاز (پیش‌بینی)"
+                        fill="#38bdf8"
+                        radius={[6, 6, 0, 0]}
                       />
                       <Bar
                         dataKey="actualRestrictedMins"
-                        stackId="budget"
-                        name="تفریحی محدودشونده"
+                        name="مصرف واقعی سرگرمی"
                         fill="#f59e0b"
+                        radius={[6, 6, 0, 0]}
                       />
                       <Bar
-                        dataKey="essentialActualMins"
-                        stackId="budget"
-                        name="ضروری و استراحت"
-                        fill="#10b981"
-                      />
-                      <Bar
-                        dataKey="unallocatedBudgetMins"
-                        stackId="budget"
-                        name="باقی‌مانده ظرفیت"
-                        fill="#cbd5e1"
+                        dataKey="overuseRestrictedMins"
+                        name="تخطی بیش از حد مجاز"
+                        fill="#f43f5e"
+                        radius={[6, 6, 0, 0]}
                       />
                     </BarChart>
-                  </ResponsiveContainer>
+                  )}
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Chart 6 (Section 5): توزیع ظرف زمانی روز — Pie Chart FIRST, Bar Chart SECOND */}
+            <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                    ۶. توزیع ظرف زمانی روز
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                    تفکیک سهم آموزشی، تفریحی، ضروری و باقی‌مانده از ظرفیت کل بازه
+                  </p>
                 </div>
 
+                <ChartModeToggle mode={chart6Mode} onChange={setChart6Mode} />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                {/* FIRST: Pie Chart (نمودار دایره‌ای) */}
                 <div className="sm:col-span-5 space-y-2">
                   {budgetDistributionPie.length > 0 ? (
                     <>
-                      <div className="h-36 w-full" dir="ltr">
+                      <div className="h-38 w-full" dir="ltr">
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
@@ -1322,7 +1564,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
                               dataKey="value"
                               nameKey="name"
                               innerRadius={32}
-                              outerRadius={56}
+                              outerRadius={58}
                               paddingAngle={3}
                             >
                               {budgetDistributionPie.map((entry, idx) => (
@@ -1361,7 +1603,92 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     </p>
                   )}
                 </div>
+
+                {/* SECOND: Bar Chart (نمودار ستونی) */}
+                <div className="sm:col-span-7 h-68 w-full" dir="ltr">
+                  <ResponsiveContainer width="100%" height="100%">
+                    {chart6Mode === 'aggregate' ? (
+                      <BarChart
+                        data={budgetCategoriesData}
+                        margin={{ top: 10, right: 10, left: -15, bottom: 10 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                        {/* 4 columns -> horizontal labels */}
+                        <XAxis
+                          dataKey="name"
+                          angle={0}
+                          textAnchor="middle"
+                          height={36}
+                          tick={{ fontSize: 10, fontWeight: 700 }}
+                        />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <Tooltip
+                          formatter={(val: any) => [
+                            `${formatHoursAndMinutesPersian(Number(val))} (${toPersianDigits(
+                              Number(val)
+                            )} دقیقه)`,
+                            'مجموع زمان در بازه',
+                          ]}
+                        />
+                        <Bar
+                          dataKey="value"
+                          name="مجموع زمان (دقیقه)"
+                          radius={[8, 8, 0, 0]}
+                          maxBarSize={48}
+                        >
+                          {budgetCategoriesData.map((entry, idx) => (
+                            <Cell key={`agg-b-${idx}`} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    ) : (
+                      <BarChart
+                        data={chartData}
+                        margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                        <XAxis dataKey="label" {...dailyXAxisProps} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <Tooltip
+                          formatter={(val: any, name?: any) => [
+                            `${toPersianDigits(Number(val))} دقیقه`,
+                            String(name ?? ''),
+                          ]}
+                        />
+                        <Bar
+                          dataKey="actualStudyMins"
+                          stackId="budget"
+                          name="آموزشی و مطالعه"
+                          fill="#4f46e5"
+                        />
+                        <Bar
+                          dataKey="actualRestrictedMins"
+                          stackId="budget"
+                          name="تفریحی محدودشونده"
+                          fill="#f59e0b"
+                        />
+                        <Bar
+                          dataKey="essentialActualMins"
+                          stackId="budget"
+                          name="ضروری و استراحت"
+                          fill="#10b981"
+                        />
+                        <Bar
+                          dataKey="unallocatedBudgetMins"
+                          stackId="budget"
+                          name="باقی‌مانده ظرفیت"
+                          fill="#cbd5e1"
+                        />
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
               </div>
+            </div>
+
+            {/* Chart 7 (Section 8): روند مطالعه در هفت روز گذشته (integrated into analytical charts grid) */}
+            <div className="lg:col-span-2">
+              <WeeklyStudyChart />
             </div>
           </div>
         </>

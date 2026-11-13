@@ -40,6 +40,6 @@
   }
 
   .mobile-bottom-nav-shell {
-    padding-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 10px), 14px);
+    padding-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 6px), 8px);
   }
 }

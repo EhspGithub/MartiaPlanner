@@ -16,6 +16,7 @@ import {
   Flame,
   Sparkles,
   Target,
+  Info,
 } from 'lucide-react';
 import type { DashboardMetrics } from '../types.ts';
 import { api } from '../services/api.ts';
@@ -25,8 +26,6 @@ import {
   formatJalaliWeekdaySlash,
   getTodayISO,
 } from '../utils/jalali.ts';
-import { WeeklyStudyChart } from './WeeklyStudyChart.tsx';
-import { DailyNumericGoalsPanel } from './DailyNumericGoalsPanel.tsx';
 import { WeeklyAnalyticalReport } from './WeeklyAnalyticalReport.tsx';
 import { PerformanceAnalyticsView } from './PerformanceAnalyticsView.tsx';
 
@@ -39,6 +38,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTooltipId, setActiveTooltipId] = useState<number | null>(null);
 
   const todayIso = getTodayISO();
 
@@ -103,13 +103,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
       ? 'Weekly consistency turns smart planning into lasting mastery!'
       : 'Monthly momentum — steady daily progress creates extraordinary results!';
 
+  const rangeLabelPersian =
+    range === 'today' ? 'امروز' : range === 'week' ? 'این هفته' : 'این ماه';
+
   const varianceText = !metrics
     ? '—'
     : metrics.studyTimeVarianceMinutes === 0
-    ? '۰ دقیقه (مطابق پیش‌بینی)'
+    ? '۰ دقیقه (منطبق با هدف)'
     : metrics.studyTimeVarianceMinutes > 0
-    ? `${toPersianDigits(metrics.studyTimeVarianceMinutes)} دقیقه بیشتر از پیش‌بینی`
-    : `${toPersianDigits(Math.abs(metrics.studyTimeVarianceMinutes))} دقیقه کمتر از پیش‌بینی`;
+    ? `${toPersianDigits(metrics.studyTimeVarianceMinutes)} دقیقه بیشتر از هدف`
+    : `${toPersianDigits(Math.abs(metrics.studyTimeVarianceMinutes))} دقیقه کمتر از هدف`;
 
   const qualityText = !metrics
     ? '—'
@@ -117,17 +120,154 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
     ? `${metrics.averageLearningQualityLabel} (${toPersianDigits(metrics.averageLearningQualityScore)} از ۱۰)`
     : metrics.averageLearningQualityLabel;
 
+  const detailCards = metrics
+    ? [
+        {
+          id: 1,
+          title: '۱. هدف پیش‌بینی مطالعه',
+          value: formatMinutesPersian(metrics.totalPredictedStudyMinutes),
+          tooltip: `مجموع زمان هدف‌گذاری‌شده برای فعالیت‌های درسی در بازه «${rangeLabelPersian}».`,
+          icon: Clock,
+          cardBorder: 'border-indigo-200/80 dark:border-indigo-900/50',
+          cardBg:
+            'bg-gradient-to-l from-indigo-50/85 via-white to-indigo-50/40 dark:from-indigo-950/35 dark:via-slate-900 dark:to-indigo-950/20',
+          iconWrap: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
+          valueColor: 'text-indigo-950 dark:text-white',
+        },
+        {
+          id: 2,
+          title: '۲. مطالعه واقعی ثبت‌شده',
+          value: formatMinutesPersian(metrics.totalActualStudyMinutes),
+          tooltip: `مجموع زمان واقعی صرف‌شده برای مطالعه دروس در بازه «${rangeLabelPersian}».`,
+          icon: BookOpen,
+          cardBorder: 'border-emerald-200/80 dark:border-emerald-900/50',
+          cardBg:
+            'bg-gradient-to-l from-emerald-50/85 via-white to-emerald-50/40 dark:from-emerald-950/35 dark:via-slate-900 dark:to-emerald-950/20',
+          iconWrap: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+          valueColor: 'text-emerald-700 dark:text-emerald-300',
+        },
+        {
+          id: 3,
+          title: '۳. تراز زمان مطالعه با هدف',
+          value: varianceText,
+          tooltip:
+            'اختلاف بین ساعت مطالعه واقعی و زمان پیش‌بینی‌شده اولیه (بیشتر یا کمتر بودن مطالعه نسبت به هدف).',
+          icon: metrics.studyTimeVarianceMinutes >= 0 ? ArrowUpRight : ArrowDownRight,
+          cardBorder: 'border-amber-200/80 dark:border-amber-900/50',
+          cardBg:
+            'bg-gradient-to-l from-amber-50/85 via-white to-amber-50/40 dark:from-amber-950/35 dark:via-slate-900 dark:to-amber-950/20',
+          iconWrap:
+            metrics.studyTimeVarianceMinutes >= 0
+              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+              : 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+          valueColor: 'text-slate-900 dark:text-white',
+        },
+        {
+          id: 4,
+          title: '۴. تست و تمرین حل‌شده',
+          value: `${toPersianDigits(metrics.totalExercisesSolved)} مورد`,
+          tooltip: `مجموع تمام تست‌ها و تمرین‌های حل‌شده در فعالیت‌های درسی بازه «${rangeLabelPersian}».`,
+          icon: FileCheck2,
+          cardBorder: 'border-blue-200/80 dark:border-blue-900/50',
+          cardBg:
+            'bg-gradient-to-l from-blue-50/85 via-white to-blue-50/40 dark:from-blue-950/35 dark:via-slate-900 dark:to-blue-950/20',
+          iconWrap: 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
+          valueColor: 'text-blue-700 dark:text-blue-300',
+        },
+        {
+          id: 5,
+          title: '۵. سطح کیفی یادگیری دروس',
+          value: qualityText,
+          tooltip:
+            'میانگین وزنی کیفیت یادگیری (از ۰ تا ۱۰) بر اساس مدت زمان واقعی هر نوبت مطالعه.',
+          icon: Award,
+          cardBorder: 'border-purple-200/80 dark:border-purple-900/50',
+          cardBg:
+            'bg-gradient-to-l from-purple-50/85 via-white to-purple-50/40 dark:from-purple-950/35 dark:via-slate-900 dark:to-purple-950/20',
+          iconWrap: 'bg-purple-500/15 text-purple-600 dark:text-purple-400',
+          valueColor: 'text-purple-700 dark:text-purple-300',
+        },
+        {
+          id: 6,
+          title: '۶. کل برنامه‌های تعریف‌شده',
+          value: `${toPersianDigits(metrics.totalPlannedActivities)} برنامه`,
+          tooltip: `تعداد کل فعالیت‌های ثبت‌شده (درسی و غیردرسی) در برنامه بازه «${rangeLabelPersian}».`,
+          icon: Layers,
+          cardBorder: 'border-slate-200/90 dark:border-slate-700/70',
+          cardBg:
+            'bg-gradient-to-l from-slate-100/85 via-white to-slate-50/40 dark:from-slate-800/60 dark:via-slate-900 dark:to-slate-800/30',
+          iconWrap: 'bg-slate-500/15 text-slate-700 dark:text-slate-300',
+          valueColor: 'text-slate-900 dark:text-white',
+        },
+        {
+          id: 7,
+          title: '۷. فعالیت‌های تکمیل‌شده کامل',
+          value: `${toPersianDigits(metrics.completedActivitiesCount)} مورد`,
+          tooltip: 'تعداد فعالیت‌هایی که گزارش اجرای آن‌ها به‌طور کامل (تکمیل‌شده) ثبت شده است.',
+          icon: CheckCircle2,
+          cardBorder: 'border-emerald-200/80 dark:border-emerald-900/50',
+          cardBg:
+            'bg-gradient-to-l from-emerald-50/85 via-white to-emerald-50/40 dark:from-emerald-950/35 dark:via-slate-900 dark:to-emerald-950/20',
+          iconWrap: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+          valueColor: 'text-emerald-700 dark:text-emerald-300',
+        },
+        {
+          id: 8,
+          title: '۸. فعالیت‌های ناقص یا در انتظار',
+          value: `${toPersianDigits(metrics.incompleteOrPendingCount)} مورد (${toPersianDigits(
+            metrics.partialActivitiesCount
+          )} ناقص، ${toPersianDigits(metrics.pendingActivitiesCount)} مانده)`,
+          tooltip:
+            'مجموع فعالیت‌هایی که به‌صورت نیمه‌تمام انجام شده‌اند یا هنوز در انتظار ثبت عملکرد هستند.',
+          icon: AlertCircle,
+          cardBorder: 'border-amber-200/80 dark:border-amber-900/50',
+          cardBg:
+            'bg-gradient-to-l from-amber-50/85 via-white to-amber-50/40 dark:from-amber-950/35 dark:via-slate-900 dark:to-amber-950/20',
+          iconWrap: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+          valueColor: 'text-amber-700 dark:text-amber-300',
+        },
+        {
+          id: 9,
+          title: '۹. نرخ پایبندی به اجرای برنامه',
+          value: `${toPersianDigits(metrics.adherencePercentage)}٪`,
+          tooltip:
+            'درصد تحقق و تکمیل فعالیت‌های برنامه‌ریزی‌شده (کامل = ۱۰۰٪ و ناقص = ۵۰٪ وزن تکمیل).',
+          icon: TrendingUp,
+          cardBorder: 'border-indigo-200/80 dark:border-indigo-900/50',
+          cardBg:
+            'bg-gradient-to-l from-indigo-50/85 via-white to-indigo-50/40 dark:from-indigo-950/35 dark:via-slate-900 dark:to-indigo-950/20',
+          iconWrap: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
+          valueColor: 'text-indigo-600 dark:text-indigo-300',
+        },
+        {
+          id: 10,
+          title: '۱۰. زمان فعالیت‌های غیردرسی',
+          value: `${formatMinutesPersian(metrics.nonStudyActualMinutes)} (هدف: ${formatMinutesPersian(
+            metrics.nonStudyPredictedMinutes
+          )})`,
+          tooltip:
+            'مجموع زمان واقعی صرف‌شده برای استراحت، ورزش و سرگرمی در مقایسه با زمان پیش‌بینی‌شده غیردرسی.',
+          icon: Coffee,
+          cardBorder: 'border-teal-200/80 dark:border-teal-900/50',
+          cardBg:
+            'bg-gradient-to-l from-teal-50/85 via-white to-teal-50/40 dark:from-teal-950/35 dark:via-slate-900 dark:to-teal-950/20',
+          iconWrap: 'bg-teal-500/15 text-teal-600 dark:text-teal-400',
+          valueColor: 'text-teal-800 dark:text-teal-300',
+        },
+      ]
+    : [];
+
   return (
     <div className="space-y-6">
       {/* =====================================================================
-          SECTION 1: REDESIGNED CENTERED DASHBOARD HEADER
+          CENTERED DASHBOARD HEADER
       ===================================================================== */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-indigo-600 via-violet-600 to-purple-700 text-white p-5 sm:p-7 shadow-lg shadow-indigo-500/15">
         <div className="pointer-events-none absolute -top-20 -left-20 h-60 w-60 rounded-full bg-white/10 blur-2xl" />
         <div className="pointer-events-none absolute -bottom-16 right-1/3 h-48 w-48 rounded-full bg-amber-400/15 blur-2xl" />
 
         <div className="relative z-10 flex flex-col items-center text-center space-y-3.5">
-          {/* 1-1: Single-line Title & Numeric Shamsi Date */}
+          {/* Single-line Title & Numeric Shamsi Date */}
           <div className="space-y-1.5 max-w-full overflow-hidden">
             <h1 className="text-sm sm:text-2xl lg:text-3xl font-black tracking-tight whitespace-nowrap truncate flex items-center justify-center gap-1.5">
               <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300 shrink-0" />
@@ -138,7 +278,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
               امروز، {formatJalaliWeekdaySlash(todayIso)}
             </div>
 
-            {/* 1-2: Single-line dynamic motivational sentences (never wrap to 2 lines on mobile) */}
+            {/* Single-line dynamic motivational sentences */}
             <div className="text-xs sm:text-base font-extrabold text-white/95 whitespace-nowrap truncate max-w-full px-1">
               {studentRankTitle}
             </div>
@@ -150,7 +290,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
             </p>
           </div>
 
-          {/* 1-4: Centered Compact XP Performance Card */}
+          {/* Centered Compact XP Performance Card */}
           {metrics && (
             <div className="mx-auto flex flex-col items-center justify-center gap-1 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 px-5 py-2.5 min-w-[190px] shadow-xs">
               <div className="w-8 h-8 rounded-xl bg-amber-400/25 flex items-center justify-center text-amber-300">
@@ -166,7 +306,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
             </div>
           )}
 
-          {/* 1-5: Centered Timeframe Segmented Selector */}
+          {/* Centered Timeframe Segmented Selector */}
           <div className="mx-auto inline-flex items-center justify-center gap-1 p-1.5 bg-slate-950/30 backdrop-blur-md border border-white/15 rounded-2xl">
             <button
               type="button"
@@ -205,7 +345,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
         </div>
       </div>
 
-      {/* Comprehensive Performance Evaluation & Analytics Section (Sections 2 to 8) */}
+      {/* Comprehensive Performance Evaluation & Analytics Section (includes all 7 charts) */}
       <PerformanceAnalyticsView />
 
       {loading && (
@@ -228,179 +368,73 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
       {!loading && metrics && (
         <>
           {/* =================================================================
-              SECTION 9: 10 COMPACT SINGLE-LINE DAILY/RANGE DETAIL CARDS
+              SECTION 6: 10 COMPACT NUMBERED COMPLEMENTARY DETAIL CARDS WITH TOOLTIPS
           ================================================================= */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {/* 1. زمان پیش‌بینی مطالعه */}
-            <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 bg-gradient-to-l from-indigo-50/85 via-white to-indigo-50/40 dark:from-indigo-950/35 dark:via-slate-900 dark:to-indigo-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                  <Clock className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
-                  <span>۱. زمان پیش‌بینی مطالعه: </span>
-                  <span className="font-black text-indigo-950 dark:text-white tabular-nums">
-                    {formatMinutesPersian(metrics.totalPredictedStudyMinutes)}
-                  </span>
-                </div>
+          <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 p-4 sm:p-5 shadow-2xs space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                  جزئیات تکمیلی عملکرد برنامه ({rangeLabelPersian})
+                </span>
               </div>
+              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                برای مشاهده توضیح هر شاخص، روی آیکون راهنما (i) کلیک کنید
+              </span>
             </div>
 
-            {/* 2. زمان واقعی مطالعه */}
-            <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 bg-gradient-to-l from-emerald-50/85 via-white to-emerald-50/40 dark:from-emerald-950/35 dark:via-slate-900 dark:to-emerald-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                  <BookOpen className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
-                  <span>۲. زمان واقعی مطالعه: </span>
-                  <span className="font-black text-emerald-700 dark:text-emerald-300 tabular-nums">
-                    {formatMinutesPersian(metrics.totalActualStudyMinutes)}
-                  </span>
-                </div>
-              </div>
-            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {detailCards.map((card) => {
+                const IconComp = card.icon;
+                const isTooltipOpen = activeTooltipId === card.id;
+                return (
+                  <div
+                    key={card.id}
+                    className={`relative rounded-2xl border ${card.cardBorder} ${card.cardBg} px-3.5 py-2.5 shadow-2xs flex flex-col justify-center gap-1.5 ${
+                      card.id === 10 ? 'sm:col-span-2 lg:col-span-1' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          className={`w-7 h-7 rounded-lg ${card.iconWrap} flex items-center justify-center shrink-0`}
+                        >
+                          <IconComp className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                          <span>{card.title}: </span>
+                          <span className={`font-black ${card.valueColor} tabular-nums`}>
+                            {card.value}
+                          </span>
+                        </div>
+                      </div>
 
-            {/* 3. اختلاف زمان مطالعه */}
-            <div className="rounded-2xl border border-amber-200/80 dark:border-amber-900/50 bg-gradient-to-l from-amber-50/85 via-white to-amber-50/40 dark:from-amber-950/35 dark:via-slate-900 dark:to-amber-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                    metrics.studyTimeVarianceMinutes >= 0
-                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                      : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                  }`}
-                >
-                  {metrics.studyTimeVarianceMinutes >= 0 ? (
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  ) : (
-                    <ArrowDownRight className="w-3.5 h-3.5" />
-                  )}
-                </div>
-                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
-                  <span>۳. اختلاف زمان مطالعه: </span>
-                  <span className="font-black text-slate-900 dark:text-white tabular-nums">
-                    {varianceText}
-                  </span>
-                </div>
-              </div>
-            </div>
+                      <button
+                        type="button"
+                        title={card.tooltip}
+                        onClick={() =>
+                          setActiveTooltipId((prev) => (prev === card.id ? null : card.id))
+                        }
+                        className="w-6 h-6 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/70 dark:hover:bg-slate-800 flex items-center justify-center shrink-0 transition-colors cursor-pointer"
+                        aria-label={`توضیح ${card.title}`}
+                      >
+                        <Info className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
 
-            {/* 4. تمرین و تست حل‌شده */}
-            <div className="rounded-2xl border border-blue-200/80 dark:border-blue-900/50 bg-gradient-to-l from-blue-50/85 via-white to-blue-50/40 dark:from-blue-950/35 dark:via-slate-900 dark:to-blue-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                  <FileCheck2 className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
-                  <span>۴. تمرین و تست حل‌شده: </span>
-                  <span className="font-black text-blue-700 dark:text-blue-300 tabular-nums">
-                    {toPersianDigits(metrics.totalExercisesSolved)} مورد
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 5. میانگین کیفیت یادگیری */}
-            <div className="rounded-2xl border border-purple-200/80 dark:border-purple-900/50 bg-gradient-to-l from-purple-50/85 via-white to-purple-50/40 dark:from-purple-950/35 dark:via-slate-900 dark:to-purple-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-                  <Award className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
-                  <span>۵. میانگین کیفیت یادگیری: </span>
-                  <span className="font-black text-purple-700 dark:text-purple-300 tabular-nums">
-                    {qualityText}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 6. کل فعالیت‌های برنامه */}
-            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-700/70 bg-gradient-to-l from-slate-100/85 via-white to-slate-50/40 dark:from-slate-800/60 dark:via-slate-900 dark:to-slate-800/30 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-slate-500/15 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0">
-                  <Layers className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
-                  <span>۶. کل فعالیت‌های برنامه: </span>
-                  <span className="font-black text-slate-900 dark:text-white tabular-nums">
-                    {toPersianDigits(metrics.totalPlannedActivities)} مورد
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 7. فعالیت‌های تکمیل‌شده */}
-            <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 bg-gradient-to-l from-emerald-50/85 via-white to-emerald-50/40 dark:from-emerald-950/35 dark:via-slate-900 dark:to-emerald-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
-                  <span>۷. فعالیت‌های تکمیل‌شده: </span>
-                  <span className="font-black text-emerald-700 dark:text-emerald-300 tabular-nums">
-                    {toPersianDigits(metrics.completedActivitiesCount)} مورد
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 8. ناقص یا در انتظار */}
-            <div className="rounded-2xl border border-amber-200/80 dark:border-amber-900/50 bg-gradient-to-l from-amber-50/85 via-white to-amber-50/40 dark:from-amber-950/35 dark:via-slate-900 dark:to-amber-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
-                  <span>۸. ناقص یا در انتظار: </span>
-                  <span className="font-black text-amber-700 dark:text-amber-300 tabular-nums">
-                    {toPersianDigits(metrics.incompleteOrPendingCount)} مورد
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 9. میزان پایبندی به برنامه */}
-            <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 bg-gradient-to-l from-indigo-50/85 via-white to-indigo-50/40 dark:from-indigo-950/35 dark:via-slate-900 dark:to-indigo-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
-                  <span>۹. میزان پایبندی به برنامه: </span>
-                  <span className="font-black text-indigo-600 dark:text-indigo-300 tabular-nums">
-                    {toPersianDigits(metrics.adherencePercentage)}٪
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 10. زمان فعالیت غیردرسی */}
-            <div className="rounded-2xl border border-teal-200/80 dark:border-teal-900/50 bg-gradient-to-l from-teal-50/85 via-white to-teal-50/40 dark:from-teal-950/35 dark:via-slate-900 dark:to-teal-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2 sm:col-span-2 lg:col-span-1">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-teal-500/15 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
-                  <Coffee className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
-                  <span>۱۰. زمان فعالیت غیردرسی: </span>
-                  <span className="font-black text-teal-800 dark:text-teal-300 tabular-nums">
-                    {formatMinutesPersian(metrics.nonStudyActualMinutes)}
-                  </span>
-                </div>
-              </div>
+                    {isTooltipOpen && (
+                      <div className="text-[11px] font-medium text-slate-600 dark:text-slate-300 bg-white/90 dark:bg-slate-900/90 rounded-xl px-2.5 py-1.5 border border-slate-200/70 dark:border-slate-700/70 leading-relaxed">
+                        {card.tooltip}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           {/* =================================================================
-              SECTION 10: DAILY NUMERIC STUDY GOALS & PROGRESS BARS (PRESERVED)
+              SECTION 9: WEEKLY ANALYTICAL REPORT (PRESERVED UNCHANGED)
           ================================================================= */}
-          <DailyNumericGoalsPanel />
-
-          {/* 7-Day Daily Study Hours Chart (Recharts) */}
-          <WeeklyStudyChart />
-
-          {/* Weekly Analytical Study Performance & Goal Fulfillment Report */}
           <WeeklyAnalyticalReport />
 
           {/* Subject-by-Subject Visual Progress & Comparison Table */}
