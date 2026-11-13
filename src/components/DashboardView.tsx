@@ -22,7 +22,7 @@ import { api } from '../services/api.ts';
 import {
   toPersianDigits,
   formatMinutesPersian,
-  formatJalaliFull,
+  formatJalaliWeekdaySlash,
   getTodayISO,
 } from '../utils/jalali.ts';
 import { WeeklyStudyChart } from './WeeklyStudyChart.tsx';
@@ -65,13 +65,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
     };
   }, [range, todayIso]);
 
-  const rangeTitle =
-    range === 'today'
-      ? `امروز (${formatJalaliFull(todayIso)})`
-      : range === 'week'
-      ? 'این هفته (شنبه تا جمعه)'
-      : 'این ماه شمسی';
-
   const totalXp = metrics
     ? metrics.completedActivitiesCount * 50 +
       metrics.partialActivitiesCount * 25 +
@@ -80,104 +73,148 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
 
   const studentRankTitle =
     !metrics || metrics.adherencePercentage === 0
-      ? 'آماده شروع مأموریت 🚀'
+      ? range === 'today'
+        ? 'آماده شروع مأموریت امروز 🚀'
+        : range === 'week'
+        ? 'آماده جهش در برنامه این هفته 🚀'
+        : 'آماده ثبت رکورد در این ماه 🚀'
       : metrics.adherencePercentage >= 85
-      ? 'قهرمان برنامه‌ریزی پایه هشتم 🏆'
+      ? range === 'today'
+        ? 'قهرمان برنامه‌ریزی امروز 🏆'
+        : range === 'week'
+        ? 'قهرمان برنامه‌ریزی این هفته 🏆'
+        : 'قهرمان برنامه‌ریزی این ماه 🏆'
       : metrics.adherencePercentage >= 60
-      ? 'پیشگام پرانرژی و باانگیزه ⚡'
-      : 'در مسیر پیشرفت و تلاش مستمر 🌱';
+      ? range === 'today'
+        ? 'پیشگام پرانرژی و باانگیزه در برنامه امروز ⚡'
+        : range === 'week'
+        ? 'پیشگام پرانرژی و باانگیزه در این هفته ⚡'
+        : 'پیشگام پرانرژی و باانگیزه در این ماه ⚡'
+      : range === 'today'
+      ? 'در مسیر پیشرفت و تلاش مستمر امروز 🌱'
+      : range === 'week'
+      ? 'در مسیر پیشرفت و تلاش مستمر هفتگی 🌱'
+      : 'در مسیر پیشرفت و تلاش مستمر ماهانه 🌱';
+
+  const englishRangeMotto =
+    range === 'today'
+      ? 'Focus on today’s goals — every focused minute builds your future!'
+      : range === 'week'
+      ? 'Weekly consistency turns smart planning into lasting mastery!'
+      : 'Monthly momentum — steady daily progress creates extraordinary results!';
+
+  const varianceText = !metrics
+    ? '—'
+    : metrics.studyTimeVarianceMinutes === 0
+    ? '۰ دقیقه (مطابق پیش‌بینی)'
+    : metrics.studyTimeVarianceMinutes > 0
+    ? `${toPersianDigits(metrics.studyTimeVarianceMinutes)} دقیقه بیشتر از پیش‌بینی`
+    : `${toPersianDigits(Math.abs(metrics.studyTimeVarianceMinutes))} دقیقه کمتر از پیش‌بینی`;
+
+  const qualityText = !metrics
+    ? '—'
+    : metrics.averageLearningQualityScore !== null
+    ? `${metrics.averageLearningQualityLabel} (${toPersianDigits(metrics.averageLearningQualityScore)} از ۱۰)`
+    : metrics.averageLearningQualityLabel;
 
   return (
-    <div className="space-y-7">
-      {/* Vibrant Student Achievement & Timeframe Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-indigo-600 via-violet-600 to-purple-700 text-white p-6 sm:p-7 shadow-lg shadow-indigo-500/15">
+    <div className="space-y-6">
+      {/* =====================================================================
+          SECTION 1: REDESIGNED CENTERED DASHBOARD HEADER
+      ===================================================================== */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-indigo-600 via-violet-600 to-purple-700 text-white p-5 sm:p-7 shadow-lg shadow-indigo-500/15">
         <div className="pointer-events-none absolute -top-20 -left-20 h-60 w-60 rounded-full bg-white/10 blur-2xl" />
         <div className="pointer-events-none absolute -bottom-16 right-1/3 h-48 w-48 rounded-full bg-amber-400/15 blur-2xl" />
 
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 text-xs font-bold text-amber-300">
-              <Sparkles className="w-4 h-4" />
-              <span>کارنامه هوشمند و تحلیل پیشرفت تحصیلی · {rangeTitle}</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              {studentRankTitle}
+        <div className="relative z-10 flex flex-col items-center text-center space-y-3.5">
+          {/* 1-1: Single-line Title & Numeric Shamsi Date */}
+          <div className="space-y-1.5 max-w-full overflow-hidden">
+            <h1 className="text-sm sm:text-2xl lg:text-3xl font-black tracking-tight whitespace-nowrap truncate flex items-center justify-center gap-1.5">
+              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300 shrink-0" />
+              <span>کارنامه هوشمند و تحلیل پیشرفت تحصیلی</span>
             </h1>
-            <p className="text-xs sm:text-sm text-indigo-100/90 max-w-2xl leading-relaxed">
-              مقایسه دقیق برنامه پیش‌بینی‌شده با ساعت مطالعه واقعی، تعداد تست‌ها و کیفیت یادگیری در ۱۰ شاخص استاندارد
+
+            <div className="text-xs sm:text-sm font-extrabold text-amber-300 tabular-nums whitespace-nowrap">
+              امروز، {formatJalaliWeekdaySlash(todayIso)}
+            </div>
+
+            {/* 1-2: Single-line dynamic motivational sentences (never wrap to 2 lines on mobile) */}
+            <div className="text-xs sm:text-base font-extrabold text-white/95 whitespace-nowrap truncate max-w-full px-1">
+              {studentRankTitle}
+            </div>
+            <p
+              dir="ltr"
+              className="text-[10px] sm:text-xs font-semibold text-indigo-100/90 whitespace-nowrap truncate max-w-full px-2"
+            >
+              {englishRangeMotto}
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {/* XP & Trophy Summary */}
-            {metrics && (
-              <div className="flex items-center gap-3 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 px-4 py-2.5">
-                <div className="w-10 h-10 rounded-xl bg-amber-400/25 flex items-center justify-center text-amber-300">
-                  <Trophy className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-[11px] text-indigo-100">امتیاز کسب‌شده (XP)</div>
-                  <div className="text-base font-black text-amber-300 tabular-nums flex items-center gap-1">
-                    <Flame className="w-4 h-4 text-amber-300" />
-                    <span>{toPersianDigits(totalXp)} امتیاز</span>
-                  </div>
-                </div>
+          {/* 1-4: Centered Compact XP Performance Card */}
+          {metrics && (
+            <div className="mx-auto flex flex-col items-center justify-center gap-1 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 px-5 py-2.5 min-w-[190px] shadow-xs">
+              <div className="w-8 h-8 rounded-xl bg-amber-400/25 flex items-center justify-center text-amber-300">
+                <Trophy className="w-4 h-4" />
               </div>
-            )}
-
-            {/* Interactive Segmented Control */}
-            <div className="flex items-center gap-1 p-1.5 bg-slate-950/30 backdrop-blur-md border border-white/15 rounded-2xl">
-              <button
-                type="button"
-                onClick={() => setRange('today')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer min-h-[38px] ${
-                  range === 'today'
-                    ? 'bg-white text-indigo-950 shadow-sm'
-                    : 'text-indigo-100 hover:text-white'
-                }`}
-              >
-                امروز
-              </button>
-              <button
-                type="button"
-                onClick={() => setRange('week')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer min-h-[38px] ${
-                  range === 'week'
-                    ? 'bg-white text-indigo-950 shadow-sm'
-                    : 'text-indigo-100 hover:text-white'
-                }`}
-              >
-                این هفته
-              </button>
-              <button
-                type="button"
-                onClick={() => setRange('month')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer min-h-[38px] ${
-                  range === 'month'
-                    ? 'bg-white text-indigo-950 shadow-sm'
-                    : 'text-indigo-100 hover:text-white'
-                }`}
-              >
-                این ماه
-              </button>
+              <div className="text-[11px] font-bold text-indigo-100 whitespace-nowrap">
+                امتیاز عملکرد (XP)
+              </div>
+              <div className="text-sm sm:text-base font-black text-amber-300 tabular-nums flex items-center justify-center gap-1 whitespace-nowrap">
+                <Flame className="w-4 h-4 text-amber-300 shrink-0" />
+                <span>{toPersianDigits(totalXp)} امتیاز</span>
+              </div>
             </div>
+          )}
+
+          {/* 1-5: Centered Timeframe Segmented Selector */}
+          <div className="mx-auto inline-flex items-center justify-center gap-1 p-1.5 bg-slate-950/30 backdrop-blur-md border border-white/15 rounded-2xl">
+            <button
+              type="button"
+              onClick={() => setRange('today')}
+              className={`px-4 py-1.5 text-xs font-extrabold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer min-h-[34px] ${
+                range === 'today'
+                  ? 'bg-white text-indigo-950 shadow-sm'
+                  : 'text-indigo-100 hover:text-white'
+              }`}
+            >
+              امروز
+            </button>
+            <button
+              type="button"
+              onClick={() => setRange('week')}
+              className={`px-4 py-1.5 text-xs font-extrabold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer min-h-[34px] ${
+                range === 'week'
+                  ? 'bg-white text-indigo-950 shadow-sm'
+                  : 'text-indigo-100 hover:text-white'
+              }`}
+            >
+              این هفته
+            </button>
+            <button
+              type="button"
+              onClick={() => setRange('month')}
+              className={`px-4 py-1.5 text-xs font-extrabold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer min-h-[34px] ${
+                range === 'month'
+                  ? 'bg-white text-indigo-950 shadow-sm'
+                  : 'text-indigo-100 hover:text-white'
+              }`}
+            >
+              این ماه
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Comprehensive Performance Evaluation & Analytics Section (Section 10) */}
+      {/* Comprehensive Performance Evaluation & Analytics Section (Sections 2 to 8) */}
       <PerformanceAnalyticsView />
 
       {loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
           {Array.from({ length: 10 }).map((_, idx) => (
             <div
               key={idx}
-              className="h-32 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 animate-pulse"
-            >
-              <div className="h-3 w-24 bg-slate-200 dark:bg-slate-800 rounded mb-4" />
-              <div className="h-6 w-16 bg-slate-200 dark:bg-slate-800 rounded" />
-            </div>
+              className="h-14 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 animate-pulse"
+            />
           ))}
         </div>
       )}
@@ -190,210 +227,174 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
 
       {!loading && metrics && (
         <>
-          {/* 10 Mandatory Core Indicators */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* 1. مجموع زمان پیش‌بینی‌شده مطالعه */}
-            <div className="rounded-2xl border border-indigo-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  ۱. زمان پیش‌بینی مطالعه
-                </span>
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                  <Clock className="w-4 h-4" />
+          {/* =================================================================
+              SECTION 9: 10 COMPACT SINGLE-LINE DAILY/RANGE DETAIL CARDS
+          ================================================================= */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {/* 1. زمان پیش‌بینی مطالعه */}
+            <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 bg-gradient-to-l from-indigo-50/85 via-white to-indigo-50/40 dark:from-indigo-950/35 dark:via-slate-900 dark:to-indigo-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                  <Clock className="w-3.5 h-3.5" />
                 </div>
-              </div>
-              <div className="mt-3 text-xl font-black text-slate-900 dark:text-white tabular-nums">
-                {formatMinutesPersian(metrics.totalPredictedStudyMinutes)}
-              </div>
-              <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                هدف‌گذاری اولیه دروس
+                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                  <span>۱. زمان پیش‌بینی مطالعه: </span>
+                  <span className="font-black text-indigo-950 dark:text-white tabular-nums">
+                    {formatMinutesPersian(metrics.totalPredictedStudyMinutes)}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* 2. مجموع زمان واقعی مطالعه */}
-            <div className="rounded-2xl border border-emerald-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  ۲. زمان واقعی مطالعه
-                </span>
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                  <BookOpen className="w-4 h-4" />
+            {/* 2. زمان واقعی مطالعه */}
+            <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 bg-gradient-to-l from-emerald-50/85 via-white to-emerald-50/40 dark:from-emerald-950/35 dark:via-slate-900 dark:to-emerald-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <BookOpen className="w-3.5 h-3.5" />
                 </div>
-              </div>
-              <div className="mt-3 text-xl font-black text-emerald-700 dark:text-emerald-400 tabular-nums">
-                {formatMinutesPersian(metrics.totalActualStudyMinutes)}
-              </div>
-              <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                ثبت‌شده در گزارش عملکرد
+                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                  <span>۲. زمان واقعی مطالعه: </span>
+                  <span className="font-black text-emerald-700 dark:text-emerald-300 tabular-nums">
+                    {formatMinutesPersian(metrics.totalActualStudyMinutes)}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* 3. اختلاف زمان پیش‌بینی‌شده و واقعی */}
-            <div className="rounded-2xl border border-amber-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  ۳. اختلاف زمان مطالعه
-                </span>
+            {/* 3. اختلاف زمان مطالعه */}
+            <div className="rounded-2xl border border-amber-200/80 dark:border-amber-900/50 bg-gradient-to-l from-amber-50/85 via-white to-amber-50/40 dark:from-amber-950/35 dark:via-slate-900 dark:to-amber-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
                     metrics.studyTimeVarianceMinutes >= 0
-                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600'
-                      : 'bg-amber-50 dark:bg-amber-950/60 text-amber-600'
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                      : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
                   }`}
                 >
                   {metrics.studyTimeVarianceMinutes >= 0 ? (
-                    <ArrowUpRight className="w-4 h-4" />
+                    <ArrowUpRight className="w-3.5 h-3.5" />
                   ) : (
-                    <ArrowDownRight className="w-4 h-4" />
+                    <ArrowDownRight className="w-3.5 h-3.5" />
                   )}
                 </div>
-              </div>
-              <div className="mt-3 text-xl font-black text-slate-900 dark:text-white tabular-nums">
-                {metrics.studyTimeVarianceMinutes === 0
-                  ? '۰ دقیقه (مطابق پیش‌بینی)'
-                  : metrics.studyTimeVarianceMinutes > 0
-                  ? `${toPersianDigits(metrics.studyTimeVarianceMinutes)} دقیقه بیشتر از پیش‌بینی`
-                  : `${toPersianDigits(Math.abs(metrics.studyTimeVarianceMinutes))} دقیقه کمتر از پیش‌بینی`}
-              </div>
-              <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                مقایسه واقعی با پیش‌بینی
+                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                  <span>۳. اختلاف زمان مطالعه: </span>
+                  <span className="font-black text-slate-900 dark:text-white tabular-nums">
+                    {varianceText}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* 4. مجموع تعداد تمرین‌ها و تست‌های حل‌شده */}
-            <div className="rounded-2xl border border-blue-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  ۴. تمرین و تست حل‌شده
-                </span>
-                <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                  <FileCheck2 className="w-4 h-4" />
+            {/* 4. تمرین و تست حل‌شده */}
+            <div className="rounded-2xl border border-blue-200/80 dark:border-blue-900/50 bg-gradient-to-l from-blue-50/85 via-white to-blue-50/40 dark:from-blue-950/35 dark:via-slate-900 dark:to-blue-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                  <FileCheck2 className="w-3.5 h-3.5" />
                 </div>
-              </div>
-              <div className="mt-3 text-xl font-black text-blue-700 dark:text-blue-400 tabular-nums">
-                {toPersianDigits(metrics.totalExercisesSolved)} تمرین/تست
-              </div>
-              <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                مجموع مسائل حل‌شده
+                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                  <span>۴. تمرین و تست حل‌شده: </span>
+                  <span className="font-black text-blue-700 dark:text-blue-300 tabular-nums">
+                    {toPersianDigits(metrics.totalExercisesSolved)} مورد
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* 5. میانگین کیفیت یادگیری (۰ تا ۱۰) */}
-            <div className="rounded-2xl border border-purple-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  ۵. میانگین کیفیت یادگیری
-                </span>
-                <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-                  <Award className="w-4 h-4" />
+            {/* 5. میانگین کیفیت یادگیری */}
+            <div className="rounded-2xl border border-purple-200/80 dark:border-purple-900/50 bg-gradient-to-l from-purple-50/85 via-white to-purple-50/40 dark:from-purple-950/35 dark:via-slate-900 dark:to-purple-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                  <Award className="w-3.5 h-3.5" />
                 </div>
-              </div>
-              <div className="mt-3 text-xl font-black text-purple-700 dark:text-purple-400 tabular-nums">
-                {metrics.averageLearningQualityLabel}
-              </div>
-              <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-                {metrics.averageLearningQualityScore !== null
-                  ? `امتیاز وزنی ${toPersianDigits(metrics.averageLearningQualityScore)} از ۱۰`
-                  : 'هنوز کیفیتی ثبت نشده'}
+                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                  <span>۵. میانگین کیفیت یادگیری: </span>
+                  <span className="font-black text-purple-700 dark:text-purple-300 tabular-nums">
+                    {qualityText}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* 6. تعداد فعالیت‌های برنامه‌ریزی‌شده */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  ۶. کل فعالیت‌های برنامه
-                </span>
-                <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0">
-                  <Layers className="w-4 h-4" />
+            {/* 6. کل فعالیت‌های برنامه */}
+            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-700/70 bg-gradient-to-l from-slate-100/85 via-white to-slate-50/40 dark:from-slate-800/60 dark:via-slate-900 dark:to-slate-800/30 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-slate-500/15 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0">
+                  <Layers className="w-3.5 h-3.5" />
                 </div>
-              </div>
-              <div className="mt-3 text-xl font-black text-slate-900 dark:text-white tabular-nums">
-                {toPersianDigits(metrics.totalPlannedActivities)} فعالیت
-              </div>
-              <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                درسی و غیردرسی
+                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                  <span>۶. کل فعالیت‌های برنامه: </span>
+                  <span className="font-black text-slate-900 dark:text-white tabular-nums">
+                    {toPersianDigits(metrics.totalPlannedActivities)} مورد
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* 7. تعداد فعالیت‌های تکمیل‌شده */}
-            <div className="rounded-2xl border border-emerald-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  ۷. فعالیت‌های تکمیل‌شده
-                </span>
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="w-4 h-4" />
+            {/* 7. فعالیت‌های تکمیل‌شده */}
+            <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 bg-gradient-to-l from-emerald-50/85 via-white to-emerald-50/40 dark:from-emerald-950/35 dark:via-slate-900 dark:to-emerald-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
                 </div>
-              </div>
-              <div className="mt-3 text-xl font-black text-emerald-700 dark:text-emerald-400 tabular-nums">
-                {toPersianDigits(metrics.completedActivitiesCount)} مورد کامل
-              </div>
-              <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                انجام‌شده طبق گزارش
+                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                  <span>۷. فعالیت‌های تکمیل‌شده: </span>
+                  <span className="font-black text-emerald-700 dark:text-emerald-300 tabular-nums">
+                    {toPersianDigits(metrics.completedActivitiesCount)} مورد
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* 8. تعداد فعالیت‌های ناقص یا انجام‌نشده */}
-            <div className="rounded-2xl border border-amber-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  ۸. ناقص یا در انتظار
-                </span>
-                <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                  <AlertCircle className="w-4 h-4" />
+            {/* 8. ناقص یا در انتظار */}
+            <div className="rounded-2xl border border-amber-200/80 dark:border-amber-900/50 bg-gradient-to-l from-amber-50/85 via-white to-amber-50/40 dark:from-amber-950/35 dark:via-slate-900 dark:to-amber-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <AlertCircle className="w-3.5 h-3.5" />
                 </div>
-              </div>
-              <div className="mt-3 text-xl font-black text-amber-700 dark:text-amber-400 tabular-nums">
-                {toPersianDigits(metrics.incompleteOrPendingCount)} مورد
-              </div>
-              <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-                {toPersianDigits(metrics.partialActivitiesCount)} ناقص ·{' '}
-                {toPersianDigits(metrics.pendingActivitiesCount)} در انتظار
+                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                  <span>۸. ناقص یا در انتظار: </span>
+                  <span className="font-black text-amber-700 dark:text-amber-300 tabular-nums">
+                    {toPersianDigits(metrics.incompleteOrPendingCount)} مورد
+                  </span>
+                </div>
               </div>
             </div>
 
             {/* 9. میزان پایبندی به برنامه */}
-            <div className="rounded-2xl border border-indigo-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  ۹. میزان پایبندی به برنامه
-                </span>
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                  <TrendingUp className="w-4 h-4" />
+            <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 bg-gradient-to-l from-indigo-50/85 via-white to-indigo-50/40 dark:from-indigo-950/35 dark:via-slate-900 dark:to-indigo-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                  <TrendingUp className="w-3.5 h-3.5" />
                 </div>
-              </div>
-              <div className="mt-3 text-xl font-black text-indigo-600 dark:text-indigo-400 tabular-nums">
-                {toPersianDigits(metrics.adherencePercentage)}٪
-              </div>
-              <div className="mt-2 w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                <div
-                  className="bg-gradient-to-l from-indigo-600 to-violet-500 h-full rounded-full transition-all"
-                  style={{ width: `${Math.min(100, metrics.adherencePercentage)}%` }}
-                />
+                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                  <span>۹. میزان پایبندی به برنامه: </span>
+                  <span className="font-black text-indigo-600 dark:text-indigo-300 tabular-nums">
+                    {toPersianDigits(metrics.adherencePercentage)}٪
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* 10. میزان زمان صرف‌شده برای فعالیت‌های غیردرسی */}
-            <div className="rounded-2xl border border-teal-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  ۱۰. زمان فعالیت غیردرسی
-                </span>
-                <div className="w-9 h-9 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
-                  <Coffee className="w-4 h-4" />
+            {/* 10. زمان فعالیت غیردرسی */}
+            <div className="rounded-2xl border border-teal-200/80 dark:border-teal-900/50 bg-gradient-to-l from-teal-50/85 via-white to-teal-50/40 dark:from-teal-950/35 dark:via-slate-900 dark:to-teal-950/20 px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2 sm:col-span-2 lg:col-span-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-teal-500/15 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
+                  <Coffee className="w-3.5 h-3.5" />
                 </div>
-              </div>
-              <div className="mt-3 text-xl font-black text-slate-900 dark:text-white tabular-nums">
-                {formatMinutesPersian(metrics.nonStudyActualMinutes)}
-              </div>
-              <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-                پیش‌بینی: {formatMinutesPersian(metrics.nonStudyPredictedMinutes)}
+                <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                  <span>۱۰. زمان فعالیت غیردرسی: </span>
+                  <span className="font-black text-teal-800 dark:text-teal-300 tabular-nums">
+                    {formatMinutesPersian(metrics.nonStudyActualMinutes)}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Daily Numeric Study Goals & Progress Bars */}
+          {/* =================================================================
+              SECTION 10: DAILY NUMERIC STUDY GOALS & PROGRESS BARS (PRESERVED)
+          ================================================================= */}
           <DailyNumericGoalsPanel />
 
           {/* 7-Day Daily Study Hours Chart (Recharts) */}
@@ -434,7 +435,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToPlanne
                   در این بازه زمانی هنوز فعالیت درسی ثبت نشده است.
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  اولین درس امروزت را برنامه‌ریزی کن تا نمودار پیشرفت هر کتاب اینجا فعال شود!
+                  اولین درس امروزت را برنامه‌ریزی کن تا پیشرفت هر کتاب اینجا فعال شود!
                 </p>
                 <button
                   type="button"

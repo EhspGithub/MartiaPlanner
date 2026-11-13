@@ -208,7 +208,7 @@ export const WeeklyStudyChart: React.FC = () => {
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-              نمودار روند ساعات مطالعه در ۷ روز گذشته
+              روند ساعات مطالعه در ۷ روز گذشته
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               مقایسه دیداری ساعت مطالعه واقعی روزانه با هدف پیش‌بینی‌شده در یک هفته اخیر
@@ -343,7 +343,7 @@ export const WeeklyStudyChart: React.FC = () => {
               {chartType === 'composed' ? (
                 <ComposedChart
                   data={chartData}
-                  margin={{ top: 12, right: 16, left: 0, bottom: 8 }}
+                  margin={{ top: 12, right: 16, left: 0, bottom: 16 }}
                 >
                   <defs>
                     <linearGradient id="actualBarGrad" x1="0" y1="0" x2="0" y2="1">
@@ -363,7 +363,12 @@ export const WeeklyStudyChart: React.FC = () => {
                   />
                   <XAxis
                     dataKey="shortLabel"
-                    tick={{ fontSize: 11, fill: '#64748b', fontWeight: 700 }}
+                    angle={-90}
+                    textAnchor="end"
+                    height={68}
+                    tickMargin={6}
+                    interval={0}
+                    tick={{ fontSize: 10, fill: '#64748b', fontWeight: 700 }}
                     axisLine={{ stroke: '#cbd5e1', strokeOpacity: 0.4 }}
                     tickLine={false}
                   />
@@ -402,7 +407,7 @@ export const WeeklyStudyChart: React.FC = () => {
               ) : (
                 <AreaChart
                   data={chartData}
-                  margin={{ top: 12, right: 16, left: 0, bottom: 8 }}
+                  margin={{ top: 12, right: 16, left: 0, bottom: 16 }}
                 >
                   <defs>
                     <linearGradient id="actualWaveGrad" x1="0" y1="0" x2="0" y2="1">
@@ -422,7 +427,12 @@ export const WeeklyStudyChart: React.FC = () => {
                   />
                   <XAxis
                     dataKey="shortLabel"
-                    tick={{ fontSize: 11, fill: '#64748b', fontWeight: 700 }}
+                    angle={-90}
+                    textAnchor="end"
+                    height={68}
+                    tickMargin={6}
+                    interval={0}
+                    tick={{ fontSize: 10, fill: '#64748b', fontWeight: 700 }}
                     axisLine={{ stroke: '#cbd5e1', strokeOpacity: 0.4 }}
                     tickLine={false}
                   />

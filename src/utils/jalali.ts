@@ -240,6 +240,59 @@ export function formatHoursAndMinutesPersian(minutes: number): string {
 }
 
 /**
+ * Converts a Jalali date (jy, jm, jd) to a YYYY-MM-DD Gregorian ISO string
+ */
+export function jalaliToIso(jy: number, jm: number, jd: number): string {
+  const g = jalaali.toGregorian(jy, jm, jd);
+  return `${g.gy}-${String(g.gm).padStart(2, '0')}-${String(g.gd).padStart(2, '0')}`;
+}
+
+/**
+ * Generates calendar grid data for a given Jalali year and month (1..12)
+ */
+export function getJalaliMonthGrid(
+  jy: number,
+  jm: number
+): {
+  jy: number;
+  jm: number;
+  monthName: string;
+  monthLength: number;
+  firstDayWeekdayIndex: number; // 0 = شنبه ... 6 = جمعه
+  days: Array<{
+    jd: number;
+    persianDay: string;
+    isoDate: string;
+    isToday: boolean;
+  }>;
+} {
+  const todayIso = getTodayISO();
+  const monthLength = jalaali.jalaaliMonthLength(jy, jm);
+  const firstIso = jalaliToIso(jy, jm, 1);
+  const firstDayWeekdayIndex = getPersianWeekdayIndex(firstIso);
+
+  const days = Array.from({ length: monthLength }, (_, idx) => {
+    const jd = idx + 1;
+    const isoDate = jalaliToIso(jy, jm, jd);
+    return {
+      jd,
+      persianDay: toPersianDigits(jd),
+      isoDate,
+      isToday: isoDate === todayIso,
+    };
+  });
+
+  return {
+    jy,
+    jm,
+    monthName: PERSIAN_MONTHS[jm - 1] || '',
+    monthLength,
+    firstDayWeekdayIndex,
+    days,
+  };
+}
+
+/**
  * Returns an inclusive array of YYYY-MM-DD strings between startIso and endIso (max 366 days safety cap)
  */
 export function getDateRangeISOList(startIso: string, endIso: string): string[] {
@@ -254,4 +307,5 @@ export function getDateRangeISOList(startIso: string, endIso: string): string[] 
   }
   return result;
 }
+
 
