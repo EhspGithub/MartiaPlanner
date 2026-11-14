@@ -436,7 +436,20 @@ function createInitialDatabaseSeed(): LocalSQLiteDatabaseDump {
   };
 }
 
+let cachedDb: LocalSQLiteDatabaseDump | null = null;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEY) {
+      cachedDb = null;
+    }
+  });
+}
+
 function loadDB(): LocalSQLiteDatabaseDump {
+  if (cachedDb) {
+    return cachedDb;
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -476,6 +489,7 @@ function loadDB(): LocalSQLiteDatabaseDump {
           };
         }
       }
+      cachedDb = parsed;
       return parsed;
     }
   } catch {
@@ -487,6 +501,7 @@ function loadDB(): LocalSQLiteDatabaseDump {
 }
 
 function saveDB(db: LocalSQLiteDatabaseDump) {
+  cachedDb = db;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
   } catch {
@@ -495,6 +510,7 @@ function saveDB(db: LocalSQLiteDatabaseDump) {
 }
 
 function hydratePlans(db: LocalSQLiteDatabaseDump, rawPlans: Omit<DailyPlanItem, 'performance' | 'priority_rank'>[]): DailyPlanItem[] {
+  if (rawPlans.length === 0) return [];
   const perfMap = new Map(db.performances.map((p) => [p.plan_id, p]));
   const prioRankMap = new Map(db.priorities.map((p) => [p.code, p.sort_rank]));
 
@@ -508,14 +524,23 @@ function hydratePlans(db: LocalSQLiteDatabaseDump, rawPlans: Omit<DailyPlanItem,
 export const localSQLiteFallback = {
   getBootstrap(): AppBootstrapData {
     const db = loadDB();
+    const unitsBySubject = new Map<string, SubjectUnit[]>();
+    for (const u of db.units) {
+      if (u.is_archived !== 0) continue;
+      const list = unitsBySubject.get(u.subject_id);
+      if (list) list.push(u);
+      else unitsBySubject.set(u.subject_id, [u]);
+    }
+    for (const list of unitsBySubject.values()) {
+      list.sort((a, b) => a.sort_order - b.sort_order);
+    }
+
     const activeSubjects = db.subjects
       .filter((s) => s.is_archived === 0)
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((s) => ({
         ...s,
-        units: db.units
-          .filter((u) => u.subject_id === s.id && u.is_archived === 0)
-          .sort((a, b) => a.sort_order - b.sort_order),
+        units: unitsBySubject.get(s.id) || [],
       }));
 
     return {
@@ -526,7 +551,7 @@ export const localSQLiteFallback = {
       engineInfo: {
         mode: 'tauri-sqlite',
         databasePath: 'sqlite:martia_planner.db (Device Native)',
-        version: '1.0.0 (Standalone Windows / Android)',
+        version: '1.11.0 (Standalone Windows / Android)',
       },
     };
   },
@@ -891,13 +916,17 @@ export const localSQLiteFallback = {
     return { ...subj, units: createdUnits };
   },
 
-  updateSubject(id: string, payload: { name: string; grade_level?: string; unit_type_label?: string }): Subject {
+  updateSubject(
+    id: string,
+    payload: { name: string; grade_level?: string; unit_type_label?: string; color_code?: string }
+  ): Subject {
     const db = loadDB();
     const s = db.subjects.find((x) => x.id === id);
     if (!s) throw new Error('درس یافت نشد.');
     s.name = payload.name;
     if (payload.grade_level) s.grade_level = payload.grade_level;
     if (payload.unit_type_label) s.unit_type_label = payload.unit_type_label;
+    if (payload.color_code) s.color_code = payload.color_code;
     saveDB(db);
     return {
       ...s,
@@ -909,6 +938,9 @@ export const localSQLiteFallback = {
     const db = loadDB();
     const s = db.subjects.find((x) => x.id === id);
     if (s) s.is_archived = 1;
+    for (const u of db.units) {
+      if (u.subject_id === id) u.is_archived = 1;
+    }
     saveDB(db);
     return { success: true };
   },
@@ -1066,7 +1098,7 @@ export const localSQLiteFallback = {
     return {
       exportedAt: new Date().toISOString(),
       app: 'MartiaPlanner',
-      version: '1.3.0',
+      version: '1.11.0',
       activity_categories: db.categories,
       study_activity_types: db.studyTypes,
       priority_levels: db.priorities,
@@ -1082,6 +1114,17 @@ export const localSQLiteFallback = {
     if (!payload || payload.app !== 'MartiaPlanner') {
       throw new Error('فایل پشتیبان معتبر نیست.');
     }
+    let normalizedBudgets: Record<string, DailyTimeBudgetConfig> = {};
+    if (Array.isArray(payload.daily_time_budgets)) {
+      for (const b of payload.daily_time_budgets) {
+        if (b && b.plan_date) {
+          normalizedBudgets[b.plan_date] = b;
+        }
+      }
+    } else if (payload.daily_time_budgets && typeof payload.daily_time_budgets === 'object') {
+      normalizedBudgets = payload.daily_time_budgets;
+    }
+
     const db: LocalSQLiteDatabaseDump = {
       version: 2,
       categories: payload.activity_categories || [],
@@ -1091,9 +1134,31 @@ export const localSQLiteFallback = {
       units: payload.subject_units || [],
       plans: payload.daily_plans || [],
       performances: payload.performance_logs || [],
-      timeBudgets: payload.daily_time_budgets || {},
+      timeBudgets: normalizedBudgets,
     };
     saveDB(db);
+
+    if (Array.isArray(payload.daily_study_goals)) {
+      for (const g of payload.daily_study_goals) {
+        if (g && g.goal_date) {
+          let customGoals = g.custom_goals;
+          if (!Array.isArray(customGoals) && typeof g.custom_goals_json === 'string') {
+            try {
+              customGoals = JSON.parse(g.custom_goals_json);
+            } catch {
+              customGoals = [];
+            }
+          }
+          this.saveDailyGoal({
+            goal_date: g.goal_date,
+            target_study_minutes: Number(g.target_study_minutes ?? 210),
+            target_exercises_count: Number(g.target_exercises_count ?? 50),
+            target_completed_tasks: Number(g.target_completed_tasks ?? 3),
+            custom_goals: Array.isArray(customGoals) ? customGoals : [],
+          });
+        }
+      }
+    }
     return { success: true };
   },
 
@@ -1120,6 +1185,18 @@ export const localSQLiteFallback = {
       ],
       updated_at: new Date().toISOString(),
     };
+  },
+
+  getDailyGoalsByRange(startDate: string, endDate: string) {
+    const result = [];
+    let cur = startDate;
+    let guard = 0;
+    while (cur <= endDate && guard < 366) {
+      result.push(this.getDailyGoal(cur));
+      cur = addDaysISO(cur, 1);
+      guard++;
+    }
+    return result;
   },
 
   saveDailyGoal(payload: {

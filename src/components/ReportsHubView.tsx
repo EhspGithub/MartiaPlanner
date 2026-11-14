@@ -337,7 +337,13 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
         }
       >();
 
+      const subjPlansByDate = new Map<string, DailyPlanItem[]>();
+
       for (const p of subjPlans) {
+        const dayBucket = subjPlansByDate.get(p.plan_date);
+        if (dayBucket) dayBucket.push(p);
+        else subjPlansByDate.set(p.plan_date, [p]);
+
         if (p.status === 'completed') completedCount++;
         else if (p.status === 'partial') partialCount++;
         else pendingCount++;
@@ -415,26 +421,34 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
 
       const theme = getCardGradientTheme(entry.name, 'مطالعه درسی', true, 'educational');
 
-      // Daily trend for this subject
+      // Daily trend for this subject using O(1) indexed lookup + empty-day short-circuit
       const dailyTrend = dateIsoList.map((dIso) => {
-        const daySubjPlans = subjPlans.filter((p) => p.plan_date === dIso);
-        const dPred = daySubjPlans.reduce(
-          (s, p) => s + Math.max(0, Number(p.initial_predicted_minutes || p.predicted_minutes || 0)),
-          0
-        );
-        const dAct = daySubjPlans.reduce(
-          (s, p) => s + Math.max(0, Number(p.performance?.actual_minutes || 0)),
-          0
-        );
-        const dTEx = daySubjPlans.reduce(
-          (s, p) => s + Math.max(0, Number(p.target_exercises || 0)),
-          0
-        );
-        const dAEx = daySubjPlans.reduce(
-          (s, p) => s + Math.max(0, Number(p.performance?.exercises_count || 0)),
-          0
-        );
-        const dLogged = daySubjPlans.some((p) => Boolean(p.performance));
+        const daySubjPlans = subjPlansByDate.get(dIso);
+        if (!daySubjPlans || daySubjPlans.length === 0) {
+          return {
+            dateIso: dIso,
+            label: formatJalaliCompact(dIso),
+            predictedMinutes: 0,
+            actualMinutes: 0,
+            actualExercises: 0,
+            targetExercises: 0,
+            quality0To10: 0,
+            score0To100: 0,
+          };
+        }
+
+        let dPred = 0;
+        let dAct = 0;
+        let dTEx = 0;
+        let dAEx = 0;
+        let dLogged = false;
+        for (const p of daySubjPlans) {
+          dPred += Math.max(0, Number(p.initial_predicted_minutes || p.predicted_minutes || 0));
+          dAct += Math.max(0, Number(p.performance?.actual_minutes || 0));
+          dTEx += Math.max(0, Number(p.target_exercises || 0));
+          dAEx += Math.max(0, Number(p.performance?.exercises_count || 0));
+          if (p.performance) dLogged = true;
+        }
         const dT = dLogged ? calculateStudyTimeIndexT(dAct, dPred) : null;
         const dQ = dLogged
           ? calculateExercisesIndexQ(dAEx, dTEx > 0 ? dTEx : null)

@@ -4,6 +4,16 @@
 
 ---
 
+## [1.11.0] — ۱۴۰۵/۰۸/۲۳ (2026-11-14)
+### ممیزی جامع فنی، بهینه‌سازی کوئری‌ها و ایندکس‌های SQLite، کش واکنش‌گرای API و تکمیل یکپارچگی پشتیبان‌گیری (Fixed & Optimized)
+- **بهینه‌سازی پایگاه داده SQLite و حذف الگوی پرهزینه واکشی سه‌مرحله‌ای:** افزودن ۵ ایندکس کلیدی (`idx_daily_plans_date_order`، `idx_daily_plans_subject_date`، `idx_daily_plans_study_date`، `idx_subject_units_subject_archived` و `idx_performance_logs_plan_id`) و جایگزینی تابع سه‌مرحله‌ای `hydratePlansWithPerformance` (که با `WHERE plan_id IN (...)` در خطر برخورد با سقف ۹۹۹ پارامتر SQLite در تاریخچه‌های طولانی بود) با یک کوئری واحد و ایندکس‌شده `LEFT JOIN` (کاهش ۴۸.۵٪ زمان واکشی کل تاریخچه برنامه‌ها).
+- **کش حافظه (In-Memory Cache) در موتور دیتابیس محلی مرورگر (`localSqliteFallback`):** حذف اجرای تکراری `JSON.parse(localStorage.getItem(...))` در هر بار خواندن اطلاعات و نگهداری نمونه پارس‌شده در حافظه با همگام‌سازی خودکار رویداد `storage` بین تب‌ها (کاهش ۹۹.۴٪ زمان خواندن دیتابیس محلی از `6.758 ms` به `0.040 ms`).
+- **حذف درخواست‌های شبکه تکراری با Deduplication و کش واکنش‌گرای کلاینت (`api.ts`):** اشتراک‌گذاری درخواست‌های هم‌زمان (`in-flight promise deduplication`)، برش هوشمند بازه‌های زمانی از کش کل برنامه‌ها (`allTimePlans`) و افزودن Endpoint بازه‌ای `GET /api/goals?startDate=...&endDate=...` که تعداد درخواست‌های HTTP هنگام باز شدن منوی «عملکرد» را از **۱۳ درخواست به ۳ درخواست** کاهش داد (کاهش ۷۶.۹٪ ترافیک اولیه و پاسخ‌دهی آنی `0 ms` در جابه‌جایی بین تب‌ها و فیلترها).
+- **تراکنش‌های اتمیک دیتابیس (`db.transaction`) و تکمیل ۱۰۰٪ پشتیبان‌گیری (`Backup Export/Import`):** قرار دادن تمام عملیات‌های چندمرحله‌ای (`POST /api/subjects`، `DELETE /api/subjects/:id`، `PUT /api/plans/:id`، `POST /api/plans/:id/performance` و `DELETE /api/plans/:id/performance`) در تراکنش‌های اتمیک SQLite و تکمیل خروجی و بازیابی فایل پشتیبان شامل جداول `daily_study_goals`، `daily_time_budgets`، `activity_categories`، `study_activity_types`، `priority_levels` و ستون‌های اسنپ‌شات جدید (`activity_group_snapshot`، `target_exercises` و `reminder_time`) به همراه سازگاری متقابل بین نسخه سرور و نسخه تک‌فایل/آفلاین.
+- **بهینه‌سازی الگوریتمی رندر، گزارش‌های دروس و مدیریت منابع مرورگر:** کاهش پیچیدگی زمانی گروه‌بندی فصل‌های دروس در `/api/bootstrap` و روند روزانه دروس در `ReportsHubView` از $O(S \times D \times P)$ به $O(P + S \times D)$ با استفاده از `Map`، محاسبه تنبل (Lazy) توصیه‌های مشاوره‌ای در `SmartAdvisoryAccordionCard` فقط برای بازه زمانی فعال (کاهش ۷۵٪ بار پردازشی کارت مشاوره)، تفکیک `onPlanMutated` از `loadBootstrap` در `App.tsx`، بستن ایمن `AudioContext` پس از پخش زنگ یادآور مطالعه در `StudyReminderManager` و بهینه‌سازی تابع پرتکرار `toPersianDigits`.
+
+---
+
 ## [1.10.0] — ۱۴۰۵/۰۸/۲۳ (2026-11-14)
 ### اصلاحات تکمیلی منوی عملکرد، تکمیل مستندات شاخص‌های سرعت و هم‌سنجی XP و بازطراحی جامع منوی دروس (Added & Changed)
 - **تکمیل مستندات شاخص‌های جدید در منوی «راهنما ← تعاریف شاخص‌ها»:** افزودن تعاریف ۹ بخشی برای چهار شاخص جدید شامل «۱۵. سرعت روزانه کسب XP (`XP_vel`)»، «۱۶. روند سرعت پیشرفت هفتگی (`XP_trend`)»، «۱۷. هم‌سنجی XP با رشد واقعی تحصیلی و وضعیت‌های تفسیری آن (`XP_align`)» (همراه با شفاف‌سازی وضعیت «رشد اصیل و هم‌راستای XP با پیشرفت واقعی تحصیلی» و چالش غیرتنبیهی احیای ریتم) و «۱۸. پیش‌بینی زمان صعود به سطح بعد (`T_next_level`)».

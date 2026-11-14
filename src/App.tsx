@@ -69,6 +69,7 @@ export default function App() {
   const loadBootstrap = useCallback(async () => {
     try {
       setError(null);
+      api.invalidateCache('bootstrap');
       const data = await api.getBootstrap();
       setBootstrapData(data);
     } catch (err: any) {
@@ -76,6 +77,10 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const handlePlanMutated = useCallback(() => {
+    api.invalidateCache('plans');
   }, []);
 
   useEffect(() => {
@@ -299,7 +304,7 @@ export default function App() {
                 studyTypes={bootstrapData.studyTypes}
                 priorities={bootstrapData.priorities}
                 subjects={bootstrapData.subjects}
-                onDataMutated={loadBootstrap}
+                onDataMutated={handlePlanMutated}
                 onNavigateToDefinitions={() => setActiveMenu('guide')}
               />
             )}

@@ -90,6 +90,9 @@ function playStudyReminderChime() {
       osc.start(ctx.currentTime + idx * 0.16);
       osc.stop(ctx.currentTime + idx * 0.16 + 0.48);
     });
+    setTimeout(() => {
+      ctx.close().catch(() => {});
+    }, 1200);
   } catch {
     // Ignore audio context restriction errors if user hasn't interacted yet
   }

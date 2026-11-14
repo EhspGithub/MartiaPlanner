@@ -521,61 +521,59 @@ export const SmartAdvisoryAccordionCard: React.FC<SmartAdvisoryAccordionCardProp
   const todayIso = getTodayISO();
   const currentWeekDays = useMemo(() => getPersianWeekDays(todayIso), [todayIso]);
 
-  const advisoryByTimeframe = useMemo(() => {
-    const weekStart = currentWeekDays[0].isoDate;
-    const weekEnd = currentWeekDays[6].isoDate;
-    const semiWeekStart = addDaysISO(todayIso, -2);
-    const monthStart = addDaysISO(todayIso, -29);
-
-    const dailyPlans = allTimePlans.filter((p) => p.plan_date === todayIso);
-    const prevDailyPlans = allTimePlans.filter((p) => p.plan_date === addDaysISO(todayIso, -1));
-
-    const semiWeeklyPlans = allTimePlans.filter(
-      (p) => p.plan_date >= semiWeekStart && p.plan_date <= todayIso
-    );
-    const prevSemiStart = addDaysISO(semiWeekStart, -3);
-    const prevSemiEnd = addDaysISO(semiWeekStart, -1);
-    const prevSemiWeeklyPlans = allTimePlans.filter(
-      (p) => p.plan_date >= prevSemiStart && p.plan_date <= prevSemiEnd
-    );
-
-    const weeklyPlans = allTimePlans.filter(
-      (p) => p.plan_date >= weekStart && p.plan_date <= weekEnd
-    );
-    const prevWeekStart = addDaysISO(weekStart, -7);
-    const prevWeekEnd = addDaysISO(weekStart, -1);
-    const prevWeeklyPlans = allTimePlans.filter(
-      (p) => p.plan_date >= prevWeekStart && p.plan_date <= prevWeekEnd
-    );
-
-    const monthlyPlans = allTimePlans.filter(
-      (p) => p.plan_date >= monthStart && p.plan_date <= todayIso
-    );
-    const prevMonthStart = addDaysISO(monthStart, -30);
-    const prevMonthEnd = addDaysISO(monthStart, -1);
-    const prevMonthlyPlans = allTimePlans.filter(
-      (p) => p.plan_date >= prevMonthStart && p.plan_date <= prevMonthEnd
-    );
-
-    return {
-      daily: buildTimeframeAdvisory(dailyPlans, 1, 'امروز (روزانه)', prevDailyPlans),
-      semi_weekly: buildTimeframeAdvisory(
+  const activeBundle = useMemo(() => {
+    if (timeframe === 'daily') {
+      const prevIso = addDaysISO(todayIso, -1);
+      const dailyPlans = allTimePlans.filter((p) => p.plan_date === todayIso);
+      const prevDailyPlans = allTimePlans.filter((p) => p.plan_date === prevIso);
+      return buildTimeframeAdvisory(dailyPlans, 1, 'امروز (روزانه)', prevDailyPlans);
+    }
+    if (timeframe === 'semi_weekly') {
+      const semiWeekStart = addDaysISO(todayIso, -2);
+      const prevSemiStart = addDaysISO(semiWeekStart, -3);
+      const prevSemiEnd = addDaysISO(semiWeekStart, -1);
+      const semiWeeklyPlans = allTimePlans.filter(
+        (p) => p.plan_date >= semiWeekStart && p.plan_date <= todayIso
+      );
+      const prevSemiWeeklyPlans = allTimePlans.filter(
+        (p) => p.plan_date >= prevSemiStart && p.plan_date <= prevSemiEnd
+      );
+      return buildTimeframeAdvisory(
         semiWeeklyPlans,
         3,
         '۳ روز اخیر (نیمه‌هفتگی)',
         prevSemiWeeklyPlans
-      ),
-      weekly: buildTimeframeAdvisory(weeklyPlans, 7, 'این هفته', prevWeeklyPlans),
-      monthly: buildTimeframeAdvisory(
+      );
+    }
+    if (timeframe === 'monthly') {
+      const monthStart = addDaysISO(todayIso, -29);
+      const prevMonthStart = addDaysISO(monthStart, -30);
+      const prevMonthEnd = addDaysISO(monthStart, -1);
+      const monthlyPlans = allTimePlans.filter(
+        (p) => p.plan_date >= monthStart && p.plan_date <= todayIso
+      );
+      const prevMonthlyPlans = allTimePlans.filter(
+        (p) => p.plan_date >= prevMonthStart && p.plan_date <= prevMonthEnd
+      );
+      return buildTimeframeAdvisory(
         monthlyPlans,
         30,
         '۳۰ روز اخیر (ماهانه)',
         prevMonthlyPlans
-      ),
-    };
-  }, [allTimePlans, todayIso, currentWeekDays]);
-
-  const activeBundle = advisoryByTimeframe[timeframe];
+      );
+    }
+    const weekStart = currentWeekDays[0].isoDate;
+    const weekEnd = currentWeekDays[6].isoDate;
+    const prevWeekStart = addDaysISO(weekStart, -7);
+    const prevWeekEnd = addDaysISO(weekStart, -1);
+    const weeklyPlans = allTimePlans.filter(
+      (p) => p.plan_date >= weekStart && p.plan_date <= weekEnd
+    );
+    const prevWeeklyPlans = allTimePlans.filter(
+      (p) => p.plan_date >= prevWeekStart && p.plan_date <= prevWeekEnd
+    );
+    return buildTimeframeAdvisory(weeklyPlans, 7, 'این هفته', prevWeeklyPlans);
+  }, [allTimePlans, todayIso, currentWeekDays, timeframe]);
 
   return (
     <div className="rounded-3xl bg-gradient-to-l from-indigo-50 via-violet-50/75 to-amber-50/55 dark:from-indigo-950/45 dark:via-slate-900 dark:to-slate-900/90 border border-indigo-200/80 dark:border-indigo-900/60 shadow-xs overflow-hidden transition-all">
@@ -779,7 +777,7 @@ export const WeeklyAnalyticalReport: React.FC = () => {
 
     Promise.all([
       api.getPlansByRange(startDate, endDate),
-      Promise.all(weekDays.map((d) => api.getDailyGoal(d.isoDate))),
+      api.getDailyGoalsByRange(startDate, endDate),
     ])
       .then(([plansData, goalsData]) => {
         if (mounted) {
@@ -797,7 +795,7 @@ export const WeeklyAnalyticalReport: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [startDate, endDate, weekDays]);
+  }, [startDate, endDate]);
 
   const analysis = useMemo(() => {
     const studyPlans = plans.filter((p) => Number(p.is_study) === 1);

@@ -30,13 +30,24 @@ export const PERSIAN_MONTHS = [
   'اسفند',
 ];
 
+const PERSIAN_DIGITS = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+
 /**
- * Converts English/Arabic digits to Persian digits (۰-۹)
+ * Converts English/Arabic digits to Persian digits (۰-۹) using fast charCode lookup
  */
 export function toPersianDigits(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '';
-  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-  return String(value).replace(/\d/g, (d) => persianDigits[Number(d)]);
+  const str = String(value);
+  let out = '';
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code >= 48 && code <= 57) {
+      out += PERSIAN_DIGITS[code - 48];
+    } else {
+      out += str[i];
+    }
+  }
+  return out;
 }
 
 /**
@@ -750,12 +761,15 @@ export function getJalaliMonthGrid(
  */
 export function getDateRangeISOList(startIso: string, endIso: string): string[] {
   if (!startIso || !endIso || startIso > endIso) return [startIso || getTodayISO()];
+  if (startIso === endIso) return [startIso];
   const result: string[] = [];
+  const dt = parseISODate(startIso);
   let current = startIso;
   let guard = 0;
   while (current <= endIso && guard < 366) {
     result.push(current);
-    current = addDaysISO(current, 1);
+    dt.setDate(dt.getDate() + 1);
+    current = toISODateString(dt);
     guard++;
   }
   return result;

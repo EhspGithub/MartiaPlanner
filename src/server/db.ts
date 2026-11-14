@@ -160,6 +160,15 @@ export function initDatabase() {
     }
   }
 
+  // Composite & foreign-key indexes for fast range scans, joins, and subject filtering
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_daily_plans_date_order ON daily_plans(plan_date, custom_sort_order);
+    CREATE INDEX IF NOT EXISTS idx_daily_plans_subject_date ON daily_plans(subject_id, plan_date);
+    CREATE INDEX IF NOT EXISTS idx_daily_plans_study_date ON daily_plans(is_study, plan_date);
+    CREATE INDEX IF NOT EXISTS idx_subject_units_subject_archived ON subject_units(subject_id, is_archived, sort_order);
+    CREATE INDEX IF NOT EXISTS idx_performance_logs_plan_id ON performance_logs(plan_id);
+  `);
+
   seedInitialDataIfEmpty();
 
   // Ensure activity_group is accurately set on existing categories & plans

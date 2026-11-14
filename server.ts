@@ -51,9 +51,15 @@ app.get('/api/bootstrap', (_req, res) => {
       .prepare('SELECT * FROM subject_units WHERE is_archived = 0 ORDER BY sort_order ASC')
       .all() as any[];
 
+    const unitsBySubject = new Map<string, any[]>();
+    for (const u of unitsRaw) {
+      const list = unitsBySubject.get(u.subject_id);
+      if (list) list.push(u);
+      else unitsBySubject.set(u.subject_id, [u]);
+    }
     const subjects = subjectsRaw.map((s) => ({
       ...s,
-      units: unitsRaw.filter((u) => u.subject_id === s.id),
+      units: unitsBySubject.get(s.id) || [],
     }));
 
     res.json({
@@ -86,22 +92,25 @@ app.post('/api/subjects', (req, res) => {
     const maxSort = (db.prepare('SELECT MAX(sort_order) as m FROM subjects').get() as any)?.m || 0;
     const now = new Date().toISOString();
 
-    db.prepare(`
-      INSERT INTO subjects (id, name, grade_level, unit_type_label, color_code, sort_order, is_archived, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, 0, ?)
-    `).run(id, String(name).trim(), grade_level, unit_type_label, color_code, maxSort + 1, now);
+    const createSubjectTx = db.transaction(() => {
+      db.prepare(`
+        INSERT INTO subjects (id, name, grade_level, unit_type_label, color_code, sort_order, is_archived, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+      `).run(id, String(name).trim(), grade_level, unit_type_label, color_code, maxSort + 1, now);
 
-    if (Array.isArray(initial_units) && initial_units.length > 0) {
-      const insertUnit = db.prepare(`
-        INSERT INTO subject_units (id, subject_id, title, sort_order, is_archived)
-        VALUES (?, ?, ?, ?, 0)
-      `);
-      initial_units.forEach((uTitle: string, idx: number) => {
-        if (String(uTitle).trim()) {
-          insertUnit.run(`${id}-u${idx + 1}-${crypto.randomUUID().slice(0, 4)}`, id, String(uTitle).trim(), idx + 1);
-        }
-      });
-    }
+      if (Array.isArray(initial_units) && initial_units.length > 0) {
+        const insertUnit = db.prepare(`
+          INSERT INTO subject_units (id, subject_id, title, sort_order, is_archived)
+          VALUES (?, ?, ?, ?, 0)
+        `);
+        initial_units.forEach((uTitle: string, idx: number) => {
+          if (String(uTitle).trim()) {
+            insertUnit.run(`${id}-u${idx + 1}-${crypto.randomUUID().slice(0, 4)}`, id, String(uTitle).trim(), idx + 1);
+          }
+        });
+      }
+    });
+    createSubjectTx();
 
     const created = db.prepare('SELECT * FROM subjects WHERE id = ?').get(id) as any;
     const units = db.prepare('SELECT * FROM subject_units WHERE subject_id = ? AND is_archived = 0 ORDER BY sort_order ASC').all(id);
@@ -136,9 +145,11 @@ app.put('/api/subjects/:id', (req, res) => {
 app.delete('/api/subjects/:id', (req, res) => {
   try {
     const { id } = req.params;
-    // Soft-archive so historical daily_plans keep their snapshots and integrity
-    db.prepare('UPDATE subjects SET is_archived = 1 WHERE id = ?').run(id);
-    db.prepare('UPDATE subject_units SET is_archived = 1 WHERE subject_id = ?').run(id);
+    const archiveSubjectTx = db.transaction((subjectId: string) => {
+      db.prepare('UPDATE subjects SET is_archived = 1 WHERE id = ?').run(subjectId);
+      db.prepare('UPDATE subject_units SET is_archived = 1 WHERE subject_id = ?').run(subjectId);
+    });
+    archiveSubjectTx(id);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -218,47 +229,89 @@ app.delete('/api/units/:id', (req, res) => {
 // ============================================================================
 // 3. DAILY & WEEKLY PLANS CRUD (برنامه‌ریزی امروز، فردا و هفتگی)
 // ============================================================================
-function hydratePlansWithPerformance(rows: any[]) {
-  if (rows.length === 0) return [];
-  const planIds = rows.map((r) => r.id);
-  const placeholders = planIds.map(() => '?').join(',');
-  const perfs = db
-    .prepare(`SELECT * FROM performance_logs WHERE plan_id IN (${placeholders})`)
-    .all(...planIds) as any[];
-  const perfMap = new Map(perfs.map((p) => [p.plan_id, p]));
+const HYDRATED_PLAN_SELECT_SQL = `
+  SELECT
+    dp.*,
+    COALESCE(pl.sort_rank, 99) AS priority_rank,
+    pf.id AS perf_id,
+    pf.actual_minutes AS perf_actual_minutes,
+    pf.exercises_count AS perf_exercises_count,
+    pf.learning_quality AS perf_learning_quality,
+    pf.completion_status AS perf_completion_status,
+    pf.notes AS perf_notes,
+    pf.logged_at AS perf_logged_at,
+    pf.updated_at AS perf_updated_at
+  FROM daily_plans dp
+  LEFT JOIN priority_levels pl ON pl.code = dp.priority_code
+  LEFT JOIN performance_logs pf ON pf.plan_id = dp.id
+`;
 
-  const priorities = db.prepare('SELECT code, sort_rank FROM priority_levels').all() as any[];
-  const prioRankMap = new Map(priorities.map((p) => [p.code, p.sort_rank]));
+function mapJoinedPlanRow(r: any) {
+  const {
+    perf_id,
+    perf_actual_minutes,
+    perf_exercises_count,
+    perf_learning_quality,
+    perf_completion_status,
+    perf_notes,
+    perf_logged_at,
+    perf_updated_at,
+    ...planFields
+  } = r;
+  return {
+    ...planFields,
+    priority_rank: Number(r.priority_rank ?? 99),
+    performance: perf_id
+      ? {
+          id: perf_id,
+          plan_id: r.id,
+          actual_minutes: perf_actual_minutes,
+          exercises_count: perf_exercises_count,
+          learning_quality: perf_learning_quality,
+          completion_status: perf_completion_status,
+          notes: perf_notes,
+          logged_at: perf_logged_at,
+          updated_at: perf_updated_at,
+        }
+      : null,
+  };
+}
 
-  return rows.map((r) => ({
-    ...r,
-    priority_rank: prioRankMap.get(r.priority_code) ?? 99,
-    performance: perfMap.get(r.id) || null,
-  }));
+function getHydratedPlanById(id: string) {
+  const row = db.prepare(`${HYDRATED_PLAN_SELECT_SQL} WHERE dp.id = ?`).get(id) as any;
+  return row ? mapJoinedPlanRow(row) : null;
+}
+
+function getHydratedPlansByDateRange(startDate: string, endDate: string) {
+  const rows = db
+    .prepare(
+      `${HYDRATED_PLAN_SELECT_SQL} WHERE dp.plan_date >= ? AND dp.plan_date <= ? ORDER BY dp.plan_date ASC, dp.custom_sort_order ASC`
+    )
+    .all(startDate, endDate) as any[];
+  return rows.map(mapJoinedPlanRow);
 }
 
 app.get('/api/plans', (req, res) => {
   try {
     const { date, startDate, endDate } = req.query;
-    let rows: any[] = [];
 
     if (date) {
-      rows = db
-        .prepare('SELECT * FROM daily_plans WHERE plan_date = ? ORDER BY custom_sort_order ASC, created_at ASC')
-        .all(String(date));
-    } else if (startDate && endDate) {
-      rows = db
+      const rows = db
         .prepare(
-          'SELECT * FROM daily_plans WHERE plan_date >= ? AND plan_date <= ? ORDER BY plan_date ASC, custom_sort_order ASC'
+          `${HYDRATED_PLAN_SELECT_SQL} WHERE dp.plan_date = ? ORDER BY dp.custom_sort_order ASC, dp.created_at ASC`
         )
-        .all(String(startDate), String(endDate));
-    } else {
-      rows = db
-        .prepare('SELECT * FROM daily_plans ORDER BY plan_date DESC, custom_sort_order ASC LIMIT 200')
-        .all();
+        .all(String(date)) as any[];
+      return res.json(rows.map(mapJoinedPlanRow));
     }
 
-    res.json(hydratePlansWithPerformance(rows));
+    if (startDate && endDate) {
+      return res.json(getHydratedPlansByDateRange(String(startDate), String(endDate)));
+    }
+
+    const rows = db
+      .prepare(`${HYDRATED_PLAN_SELECT_SQL} ORDER BY dp.plan_date DESC, dp.custom_sort_order ASC LIMIT 200`)
+      .all() as any[];
+    res.json(rows.map(mapJoinedPlanRow));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -360,8 +413,7 @@ app.post('/api/plans', (req, res) => {
       now
     );
 
-    const created = db.prepare('SELECT * FROM daily_plans WHERE id = ?').get(id);
-    res.json(hydratePlansWithPerformance([created])[0]);
+    res.json(getHydratedPlanById(id));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -419,24 +471,11 @@ app.put('/api/plans/:id', (req, res) => {
 
     const now = new Date().toISOString();
 
-    const existingPerf = db.prepare('SELECT * FROM performance_logs WHERE plan_id = ?').get(id);
+    const existingPerf = db.prepare('SELECT id FROM performance_logs WHERE plan_id = ?').get(id);
     let newPredictedMinutes = predMins;
     let newInitialPredictedMinutes = existing.initial_predicted_minutes;
 
     if (existingPerf) {
-      if (predMins !== existing.predicted_minutes) {
-        db.prepare(`
-          INSERT INTO plan_history_audit (id, plan_id, previous_predicted_minutes, new_predicted_minutes, changed_at, reason)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `).run(
-          crypto.randomUUID(),
-          id,
-          existing.predicted_minutes,
-          predMins,
-          now,
-          'تلاش برای ویرایش زمان پیش‌بینی‌شده پس از ثبت عملکرد (زمان اولیه جهت حفظ صحت تحلیل‌ها ثابت نگه داشته شد)'
-        );
-      }
       newPredictedMinutes = existing.predicted_minutes;
     } else {
       newInitialPredictedMinutes = predMins;
@@ -458,49 +497,65 @@ app.put('/api/plans/:id', (req, res) => {
         ? String(reminder_time).trim()
         : null;
 
-    db.prepare(`
-      UPDATE daily_plans
-      SET category_id = ?,
-          category_title_snapshot = ?,
-          is_study = ?,
-          activity_group_snapshot = ?,
-          subject_id = ?,
-          subject_name_snapshot = ?,
-          unit_id = ?,
-          unit_title_snapshot = ?,
-          study_type_id = ?,
-          study_type_title_snapshot = ?,
-          priority_code = ?,
-          initial_predicted_minutes = ?,
-          predicted_minutes = ?,
-          target_exercises = ?,
-          reminder_time = ?,
-          description = ?,
-          updated_at = ?
-      WHERE id = ?
-    `).run(
-      category_id,
-      categoryTitleSnapshot,
-      isStudy,
-      activityGroupSnapshot,
-      isStudy ? (subject_id ?? existing.subject_id) : null,
-      subjectNameSnapshot,
-      isStudy ? (unit_id ?? existing.unit_id) : null,
-      unitTitleSnapshot,
-      isStudy ? (study_type_id ?? existing.study_type_id) : null,
-      studyTypeTitleSnapshot,
-      priority_code,
-      newInitialPredictedMinutes,
-      newPredictedMinutes,
-      finalTargetExercises,
-      finalReminderTime,
-      String(description || '').trim(),
-      now,
-      id
-    );
+    const updatePlanTx = db.transaction(() => {
+      if (existingPerf && predMins !== existing.predicted_minutes) {
+        db.prepare(`
+          INSERT INTO plan_history_audit (id, plan_id, previous_predicted_minutes, new_predicted_minutes, changed_at, reason)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          crypto.randomUUID(),
+          id,
+          existing.predicted_minutes,
+          predMins,
+          now,
+          'تلاش برای ویرایش زمان پیش‌بینی‌شده پس از ثبت عملکرد (زمان اولیه جهت حفظ صحت تحلیل‌ها ثابت نگه داشته شد)'
+        );
+      }
 
-    const updated = db.prepare('SELECT * FROM daily_plans WHERE id = ?').get(id);
-    res.json(hydratePlansWithPerformance([updated])[0]);
+      db.prepare(`
+        UPDATE daily_plans
+        SET category_id = ?,
+            category_title_snapshot = ?,
+            is_study = ?,
+            activity_group_snapshot = ?,
+            subject_id = ?,
+            subject_name_snapshot = ?,
+            unit_id = ?,
+            unit_title_snapshot = ?,
+            study_type_id = ?,
+            study_type_title_snapshot = ?,
+            priority_code = ?,
+            initial_predicted_minutes = ?,
+            predicted_minutes = ?,
+            target_exercises = ?,
+            reminder_time = ?,
+            description = ?,
+            updated_at = ?
+        WHERE id = ?
+      `).run(
+        category_id,
+        categoryTitleSnapshot,
+        isStudy,
+        activityGroupSnapshot,
+        isStudy ? (subject_id ?? existing.subject_id) : null,
+        subjectNameSnapshot,
+        isStudy ? (unit_id ?? existing.unit_id) : null,
+        unitTitleSnapshot,
+        isStudy ? (study_type_id ?? existing.study_type_id) : null,
+        studyTypeTitleSnapshot,
+        priority_code,
+        newInitialPredictedMinutes,
+        newPredictedMinutes,
+        finalTargetExercises,
+        finalReminderTime,
+        String(description || '').trim(),
+        now,
+        id
+      );
+    });
+    updatePlanTx();
+
+    res.json(getHydratedPlanById(id));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -573,48 +628,50 @@ app.post('/api/plans/:id/performance', (req, res) => {
     const validStatus = completion_status === 'partial' ? 'partial' : 'completed';
     const now = new Date().toISOString();
 
-    const existingPerf = db
-      .prepare('SELECT * FROM performance_logs WHERE plan_id = ?')
-      .get(plan_id) as any;
+    const savePerfTx = db.transaction(() => {
+      const existingPerf = db
+        .prepare('SELECT id FROM performance_logs WHERE plan_id = ?')
+        .get(plan_id) as any;
 
-    if (existingPerf) {
-      db.prepare(`
-        UPDATE performance_logs
-        SET actual_minutes = ?,
-            exercises_count = ?,
-            learning_quality = ?,
-            completion_status = ?,
-            notes = ?,
-            updated_at = ?
-        WHERE plan_id = ?
-      `).run(actualMins, exercisesVal, qualityVal, validStatus, String(notes || '').trim(), now, plan_id);
-    } else {
-      db.prepare(`
-        INSERT INTO performance_logs (
-          id, plan_id, actual_minutes, exercises_count, learning_quality,
-          completion_status, notes, logged_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        `perf-${crypto.randomUUID().slice(0, 8)}`,
-        plan_id,
-        actualMins,
-        exercisesVal,
-        qualityVal,
+      if (existingPerf) {
+        db.prepare(`
+          UPDATE performance_logs
+          SET actual_minutes = ?,
+              exercises_count = ?,
+              learning_quality = ?,
+              completion_status = ?,
+              notes = ?,
+              updated_at = ?
+          WHERE plan_id = ?
+        `).run(actualMins, exercisesVal, qualityVal, validStatus, String(notes || '').trim(), now, plan_id);
+      } else {
+        db.prepare(`
+          INSERT INTO performance_logs (
+            id, plan_id, actual_minutes, exercises_count, learning_quality,
+            completion_status, notes, logged_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          `perf-${crypto.randomUUID().slice(0, 8)}`,
+          plan_id,
+          actualMins,
+          exercisesVal,
+          qualityVal,
+          validStatus,
+          String(notes || '').trim(),
+          now,
+          now
+        );
+      }
+
+      db.prepare('UPDATE daily_plans SET status = ?, updated_at = ? WHERE id = ?').run(
         validStatus,
-        String(notes || '').trim(),
         now,
-        now
+        plan_id
       );
-    }
+    });
+    savePerfTx();
 
-    db.prepare('UPDATE daily_plans SET status = ?, updated_at = ? WHERE id = ?').run(
-      validStatus,
-      now,
-      plan_id
-    );
-
-    const updatedPlan = db.prepare('SELECT * FROM daily_plans WHERE id = ?').get(plan_id);
-    res.json(hydratePlansWithPerformance([updatedPlan])[0]);
+    res.json(getHydratedPlanById(plan_id));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -624,10 +681,12 @@ app.delete('/api/plans/:id/performance', (req, res) => {
   try {
     const { id: plan_id } = req.params;
     const now = new Date().toISOString();
-    db.prepare('DELETE FROM performance_logs WHERE plan_id = ?').run(plan_id);
-    db.prepare("UPDATE daily_plans SET status = 'pending', updated_at = ? WHERE id = ?").run(now, plan_id);
-    const updatedPlan = db.prepare('SELECT * FROM daily_plans WHERE id = ?').get(plan_id);
-    res.json(hydratePlansWithPerformance([updatedPlan])[0]);
+    const deletePerfTx = db.transaction(() => {
+      db.prepare('DELETE FROM performance_logs WHERE plan_id = ?').run(plan_id);
+      db.prepare("UPDATE daily_plans SET status = 'pending', updated_at = ? WHERE id = ?").run(now, plan_id);
+    });
+    deletePerfTx();
+    res.json(getHydratedPlanById(plan_id));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -654,11 +713,7 @@ app.get('/api/dashboard', (req, res) => {
       endDate = mRange.endIso;
     }
 
-    const rawPlans = db
-      .prepare('SELECT * FROM daily_plans WHERE plan_date >= ? AND plan_date <= ?')
-      .all(startDate, endDate) as any[];
-
-    const plans = hydratePlansWithPerformance(rawPlans);
+    const plans = getHydratedPlansByDateRange(startDate, endDate);
     const studyPlans = plans.filter((p) => Number(p.is_study) === 1);
 
     let totalPredictedStudyMinutes = 0;
@@ -760,48 +815,74 @@ app.get('/api/dashboard', (req, res) => {
 // ============================================================================
 // 5.5 DAILY NUMERIC STUDY GOALS API (اهداف عددی روزانه دانش‌آموز)
 // ============================================================================
+function buildDefaultDailyGoal(goalDate: string) {
+  return {
+    goal_date: goalDate,
+    target_study_minutes: 210, // Default: 3.5 hours (210 mins)
+    target_exercises_count: 50, // Default: 50 exercises/tests
+    target_completed_tasks: 3, // Default: 3 study lessons
+    custom_goals: [
+      {
+        id: 'cgoal-vocab',
+        title: 'حفظ لغات جدید (زبان و عربی)',
+        unitLabel: 'لغت',
+        targetValue: 15,
+        currentValue: 12,
+        color: 'purple',
+      },
+    ],
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function mapGoalRow(row: any) {
+  let customGoals = [];
+  try {
+    customGoals = JSON.parse(row.custom_goals_json || '[]');
+  } catch {
+    customGoals = [];
+  }
+  return {
+    goal_date: row.goal_date,
+    target_study_minutes: Number(row.target_study_minutes || 210),
+    target_exercises_count: Number(row.target_exercises_count || 50),
+    target_completed_tasks: Number(row.target_completed_tasks || 3),
+    custom_goals: customGoals,
+    updated_at: row.updated_at,
+  };
+}
+
 app.get('/api/goals', (req, res) => {
   try {
-    const goalDate = String(req.query.date || getTodayISO());
+    const { date, startDate, endDate } = req.query;
+    if (startDate && endDate) {
+      const startStr = String(startDate);
+      const endStr = String(endDate);
+      const rows = db
+        .prepare('SELECT * FROM daily_study_goals WHERE goal_date >= ? AND goal_date <= ? ORDER BY goal_date ASC')
+        .all(startStr, endStr) as any[];
+      const rowMap = new Map(rows.map((r) => [r.goal_date, mapGoalRow(r)]));
+      const result: any[] = [];
+      let cur = startStr;
+      let guard = 0;
+      while (cur <= endStr && guard < 366) {
+        result.push(rowMap.get(cur) || buildDefaultDailyGoal(cur));
+        cur = addDaysISO(cur, 1);
+        guard++;
+      }
+      return res.json(result);
+    }
+
+    const goalDate = String(date || getTodayISO());
     const row = db
       .prepare('SELECT * FROM daily_study_goals WHERE goal_date = ?')
       .get(goalDate) as any;
 
     if (!row) {
-      return res.json({
-        goal_date: goalDate,
-        target_study_minutes: 210, // Default: 3.5 hours (210 mins)
-        target_exercises_count: 50, // Default: 50 exercises/tests
-        target_completed_tasks: 3, // Default: 3 study lessons
-        custom_goals: [
-          {
-            id: 'cgoal-vocab',
-            title: 'حفظ لغات جدید (زبان و عربی)',
-            unitLabel: 'لغت',
-            targetValue: 15,
-            currentValue: 12,
-            color: 'purple',
-          },
-        ],
-        updated_at: new Date().toISOString(),
-      });
+      return res.json(buildDefaultDailyGoal(goalDate));
     }
 
-    let customGoals = [];
-    try {
-      customGoals = JSON.parse(row.custom_goals_json || '[]');
-    } catch {
-      customGoals = [];
-    }
-
-    res.json({
-      goal_date: row.goal_date,
-      target_study_minutes: Number(row.target_study_minutes || 210),
-      target_exercises_count: Number(row.target_exercises_count || 50),
-      target_completed_tasks: Number(row.target_completed_tasks || 3),
-      custom_goals: customGoals,
-      updated_at: row.updated_at,
-    });
+    res.json(mapGoalRow(row));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1074,7 +1155,7 @@ app.get('/api/backup/export', (_req, res) => {
     const data = {
       exportedAt: new Date().toISOString(),
       app: 'MartiaPlanner',
-      version: '1.0.0',
+      version: '1.11.0',
       activity_categories: db.prepare('SELECT * FROM activity_categories').all(),
       study_activity_types: db.prepare('SELECT * FROM study_activity_types').all(),
       priority_levels: db.prepare('SELECT * FROM priority_levels').all(),
@@ -1083,6 +1164,8 @@ app.get('/api/backup/export', (_req, res) => {
       daily_plans: db.prepare('SELECT * FROM daily_plans').all(),
       performance_logs: db.prepare('SELECT * FROM performance_logs').all(),
       plan_history_audit: db.prepare('SELECT * FROM plan_history_audit').all(),
+      daily_study_goals: db.prepare('SELECT * FROM daily_study_goals').all(),
+      daily_time_budgets: db.prepare('SELECT * FROM daily_time_budgets').all(),
     };
     res.json(data);
   } catch (err: any) {
@@ -1104,69 +1187,171 @@ app.post('/api/backup/import', (req, res) => {
       db.prepare('DELETE FROM subject_units').run();
       db.prepare('DELETE FROM subjects').run();
 
-      for (const s of payload.subjects || []) {
-        db.prepare(`
-          INSERT OR REPLACE INTO subjects (id, name, grade_level, unit_type_label, color_code, sort_order, is_archived, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(s.id, s.name, s.grade_level, s.unit_type_label, s.color_code, s.sort_order, s.is_archived, s.created_at);
+      if (Array.isArray(payload.activity_categories) && payload.activity_categories.length > 0) {
+        const upsertCat = db.prepare(`
+          INSERT OR REPLACE INTO activity_categories (
+            id, title, is_study, activity_group, impact_weight, icon, color, sort_order, is_active
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const c of payload.activity_categories) {
+          upsertCat.run(
+            c.id,
+            c.title,
+            Number(c.is_study ? 1 : 0),
+            c.activity_group || (c.is_study ? 'educational' : 'essential'),
+            Number(c.impact_weight ?? 1.0),
+            c.icon || 'Sparkles',
+            c.color || 'slate',
+            Number(c.sort_order ?? 1),
+            Number(c.is_active ?? 1)
+          );
+        }
       }
 
-      for (const u of payload.subject_units || []) {
-        db.prepare(`
-          INSERT OR REPLACE INTO subject_units (id, subject_id, title, sort_order, is_archived)
+      if (Array.isArray(payload.study_activity_types) && payload.study_activity_types.length > 0) {
+        const upsertSt = db.prepare(`
+          INSERT OR REPLACE INTO study_activity_types (
+            id, title, description, badge_color, sort_order, is_active
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        for (const st of payload.study_activity_types) {
+          upsertSt.run(
+            st.id,
+            st.title,
+            st.description || '',
+            st.badge_color || 'indigo',
+            Number(st.sort_order ?? 1),
+            Number(st.is_active ?? 1)
+          );
+        }
+      }
+
+      if (Array.isArray(payload.priority_levels) && payload.priority_levels.length > 0) {
+        const upsertPrio = db.prepare(`
+          INSERT OR REPLACE INTO priority_levels (code, title, label, sort_rank, color_code)
           VALUES (?, ?, ?, ?, ?)
-        `).run(u.id, u.subject_id, u.title, u.sort_order, u.is_archived);
+        `);
+        for (const pr of payload.priority_levels) {
+          upsertPrio.run(pr.code, pr.title || pr.code, pr.label, Number(pr.sort_rank ?? 99), pr.color_code || 'indigo');
+        }
       }
 
+      const insertSubj = db.prepare(`
+        INSERT OR REPLACE INTO subjects (id, name, grade_level, unit_type_label, color_code, sort_order, is_archived, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const s of payload.subjects || []) {
+        insertSubj.run(
+          s.id,
+          s.name,
+          s.grade_level || 'هشتم',
+          s.unit_type_label || 'درس',
+          s.color_code || 'indigo',
+          Number(s.sort_order ?? 1),
+          Number(s.is_archived ?? 0),
+          s.created_at || new Date().toISOString()
+        );
+      }
+
+      const insertUnit = db.prepare(`
+        INSERT OR REPLACE INTO subject_units (id, subject_id, title, sort_order, is_archived)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      for (const u of payload.subject_units || []) {
+        insertUnit.run(u.id, u.subject_id, u.title, Number(u.sort_order ?? 1), Number(u.is_archived ?? 0));
+      }
+
+      const insertPlan = db.prepare(`
+        INSERT OR REPLACE INTO daily_plans (
+          id, plan_date, category_id, category_title_snapshot, is_study, activity_group_snapshot,
+          subject_id, subject_name_snapshot, unit_id, unit_title_snapshot,
+          study_type_id, study_type_title_snapshot, priority_code,
+          initial_predicted_minutes, predicted_minutes, target_exercises, reminder_time, description, status,
+          custom_sort_order, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
       for (const p of payload.daily_plans || []) {
-        db.prepare(`
-          INSERT OR REPLACE INTO daily_plans (
-            id, plan_date, category_id, category_title_snapshot, is_study,
-            subject_id, subject_name_snapshot, unit_id, unit_title_snapshot,
-            study_type_id, study_type_title_snapshot, priority_code,
-            initial_predicted_minutes, predicted_minutes, description, status,
-            custom_sort_order, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
+        insertPlan.run(
           p.id,
           p.plan_date,
           p.category_id,
           p.category_title_snapshot,
-          p.is_study,
-          p.subject_id,
-          p.subject_name_snapshot,
-          p.unit_id,
-          p.unit_title_snapshot,
-          p.study_type_id,
-          p.study_type_title_snapshot,
-          p.priority_code,
-          p.initial_predicted_minutes,
-          p.predicted_minutes,
-          p.description,
-          p.status,
-          p.custom_sort_order,
-          p.created_at,
-          p.updated_at
+          Number(p.is_study ? 1 : 0),
+          p.activity_group_snapshot || (p.is_study ? 'educational' : 'essential'),
+          p.subject_id ?? null,
+          p.subject_name_snapshot ?? null,
+          p.unit_id ?? null,
+          p.unit_title_snapshot ?? null,
+          p.study_type_id ?? null,
+          p.study_type_title_snapshot ?? null,
+          p.priority_code || 'A1',
+          Number(p.initial_predicted_minutes ?? p.predicted_minutes ?? 30),
+          Number(p.predicted_minutes ?? 30),
+          p.target_exercises !== undefined && p.target_exercises !== null ? Number(p.target_exercises) : null,
+          p.reminder_time ?? null,
+          p.description || '',
+          p.status || 'pending',
+          Number(p.custom_sort_order ?? 1),
+          p.created_at || new Date().toISOString(),
+          p.updated_at || new Date().toISOString()
         );
       }
 
+      const insertPerf = db.prepare(`
+        INSERT OR REPLACE INTO performance_logs (
+          id, plan_id, actual_minutes, exercises_count, learning_quality,
+          completion_status, notes, logged_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
       for (const perf of payload.performance_logs || []) {
-        db.prepare(`
-          INSERT OR REPLACE INTO performance_logs (
-            id, plan_id, actual_minutes, exercises_count, learning_quality,
-            completion_status, notes, logged_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
+        insertPerf.run(
           perf.id,
           perf.plan_id,
-          perf.actual_minutes,
-          perf.exercises_count,
-          perf.learning_quality,
-          perf.completion_status,
-          perf.notes,
-          perf.logged_at,
-          perf.updated_at
+          Number(perf.actual_minutes ?? 0),
+          perf.exercises_count !== undefined && perf.exercises_count !== null ? Number(perf.exercises_count) : null,
+          perf.learning_quality ?? null,
+          perf.completion_status || 'completed',
+          perf.notes || '',
+          perf.logged_at || new Date().toISOString(),
+          perf.updated_at || new Date().toISOString()
         );
+      }
+
+      if (Array.isArray(payload.daily_study_goals)) {
+        const upsertGoal = db.prepare(`
+          INSERT OR REPLACE INTO daily_study_goals (
+            goal_date, target_study_minutes, target_exercises_count, target_completed_tasks, custom_goals_json, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        for (const g of payload.daily_study_goals) {
+          const customJson =
+            typeof g.custom_goals_json === 'string'
+              ? g.custom_goals_json
+              : JSON.stringify(Array.isArray(g.custom_goals) ? g.custom_goals : []);
+          upsertGoal.run(
+            g.goal_date,
+            Number(g.target_study_minutes ?? 210),
+            Number(g.target_exercises_count ?? 50),
+            Number(g.target_completed_tasks ?? 3),
+            customJson,
+            g.updated_at || new Date().toISOString()
+          );
+        }
+      }
+
+      if (Array.isArray(payload.daily_time_budgets)) {
+        const upsertBudget = db.prepare(`
+          INSERT OR REPLACE INTO daily_time_budgets (plan_date, budget_minutes, input_unit, updated_at)
+          VALUES (?, ?, ?, ?)
+        `);
+        for (const b of payload.daily_time_budgets) {
+          upsertBudget.run(
+            b.plan_date,
+            b.budget_minutes !== undefined && b.budget_minutes !== null ? Number(b.budget_minutes) : null,
+            b.input_unit || 'hours',
+            b.updated_at || new Date().toISOString()
+          );
+        }
       }
     });
 

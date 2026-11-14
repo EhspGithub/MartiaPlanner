@@ -12,7 +12,7 @@ import {
   CheckCircle2,
   Compass,
 } from 'lucide-react';
-import type { DailyPlanItem, DashboardMetrics } from '../types.ts';
+import type { DailyPlanItem } from '../types.ts';
 import { api } from '../services/api.ts';
 import {
   toPersianDigits,
@@ -35,7 +35,6 @@ import { XpCoinBadge } from './XpCoinBadge.tsx';
 
 export const DashboardView: React.FC = () => {
   const [range] = useState<'today' | 'week' | 'month'>('today');
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [allTimePlans, setAllTimePlans] = useState<DailyPlanItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,13 +54,10 @@ export const DashboardView: React.FC = () => {
     let active = true;
     setLoading(true);
     setError(null);
-    Promise.all([
-      api.getDashboardMetrics(range, todayIso),
-      api.getPlansByRange('2020-01-01', '2099-12-31'),
-    ])
-      .then(([data, allPlans]) => {
+    api
+      .getPlansByRange('2020-01-01', '2099-12-31')
+      .then((allPlans) => {
         if (active) {
-          setMetrics(data);
           setAllTimePlans(allPlans);
           setLoading(false);
         }
@@ -83,12 +79,9 @@ export const DashboardView: React.FC = () => {
   );
 
   const rangeXpBreakdown = useMemo(() => {
-    if (!metrics) return calculateXpFromPlans([]);
-    const filtered = allTimePlans.filter(
-      (p) => p.plan_date >= metrics.startDate && p.plan_date <= metrics.endDate
-    );
+    const filtered = allTimePlans.filter((p) => p.plan_date === todayIso);
     return calculateXpFromPlans(filtered);
-  }, [allTimePlans, metrics]);
+  }, [allTimePlans, todayIso]);
 
   const levelProgress = useMemo(
     () => calculateUserLevelProgress(allTimeXpBreakdown.totalXp),
@@ -145,7 +138,7 @@ export const DashboardView: React.FC = () => {
           </div>
 
           {/* Compact Single-Line Today XP Row with Coin-Shaped XP Badge */}
-          {metrics && (
+          {!loading && (
             <div className="mx-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-white/15 backdrop-blur-md border border-white/25 px-4 py-2 shadow-xs">
               <Trophy className="w-4 h-4 text-amber-300 shrink-0" />
               <span className="text-xs sm:text-sm font-extrabold text-indigo-50 whitespace-nowrap">
@@ -523,7 +516,7 @@ export const DashboardView: React.FC = () => {
         </div>
       )}
 
-      {!loading && metrics && (
+      {!loading && !error && (
         <>
           {/* =================================================================
               SMART MULTI-TIMEFRAME ADVISORY ACCORDION CARD (Section 10)
