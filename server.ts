@@ -23,8 +23,13 @@ import {
 } from './src/utils/analyticsEngine.ts';
 import {
   generateThreeMonthSampleData,
+  generateOneWeekSampleData,
   SAMPLE_DEMO_PREFIX,
   SAMPLE_DEMO_TAG,
+  SAMPLE_WEEK_PREFIX,
+  SAMPLE_WEEK_TAG,
+  WEEKLY_SAMPLE_START_ISO,
+  WEEKLY_SAMPLE_END_ISO,
 } from './src/utils/sampleDataGenerator.ts';
 
 dotenv.config();
@@ -1538,14 +1543,33 @@ function getServerSampleDataStatus() {
   const perfRow = db
     .prepare('SELECT COUNT(*) as cnt FROM performance_logs WHERE id LIKE ?')
     .get(`${SAMPLE_DEMO_PREFIX}%`) as any;
+
+  const weekPlanRow = db
+    .prepare(
+      'SELECT COUNT(*) as cnt, COUNT(DISTINCT plan_date) as daysCnt FROM daily_plans WHERE id LIKE ?'
+    )
+    .get(`${SAMPLE_WEEK_PREFIX}%`) as any;
+  const weekPerfRow = db
+    .prepare('SELECT COUNT(*) as cnt FROM performance_logs WHERE id LIKE ?')
+    .get(`${SAMPLE_WEEK_PREFIX}%`) as any;
+
   const samplePlansCount = Number(planRow?.cnt || 0);
   const samplePerformancesCount = Number(perfRow?.cnt || 0);
   const sampleDaysCount = Number(planRow?.daysCnt || 0);
+
+  const weeklySamplePlansCount = Number(weekPlanRow?.cnt || 0);
+  const weeklySamplePerformancesCount = Number(weekPerfRow?.cnt || 0);
+  const weeklySampleDaysCount = Number(weekPlanRow?.daysCnt || 0);
+
   return {
     hasSampleData: samplePlansCount > 0,
     samplePlansCount,
     samplePerformancesCount,
     sampleDaysCount,
+    hasWeeklySampleData: weeklySamplePlansCount > 0,
+    weeklySamplePlansCount,
+    weeklySamplePerformancesCount,
+    weeklySampleDaysCount,
   };
 }
 
@@ -1714,6 +1738,191 @@ app.delete('/api/sample-data', (_req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'خطا در حذف داده‌های نمونه' });
+  }
+});
+
+app.post('/api/sample-data/seed-week', (req, res) => {
+  try {
+    const replace = Boolean(req.body?.replace);
+    const currentStatus = getServerSampleDataStatus();
+    if (currentStatus.hasWeeklySampleData && !replace) {
+      return res.json({
+        ...currentStatus,
+        alreadyLoaded: true,
+      });
+    }
+
+    const subjects = db
+      .prepare('SELECT * FROM subjects WHERE is_archived = 0 ORDER BY sort_order ASC')
+      .all() as any[];
+    const units = db
+      .prepare('SELECT * FROM subject_units WHERE is_archived = 0 ORDER BY sort_order ASC')
+      .all() as any[];
+    const categories = db
+      .prepare('SELECT * FROM activity_categories WHERE is_active = 1 ORDER BY sort_order ASC')
+      .all() as any[];
+    const studyTypes = db
+      .prepare('SELECT * FROM study_activity_types WHERE is_active = 1 ORDER BY sort_order ASC')
+      .all() as any[];
+
+    const generated = generateOneWeekSampleData({
+      subjects,
+      units,
+      categories,
+      studyTypes,
+    });
+
+    const seedWeekTx = db.transaction(() => {
+      if (replace) {
+        db.prepare('DELETE FROM performance_logs WHERE id LIKE ? OR plan_id LIKE ?').run(
+          `${SAMPLE_WEEK_PREFIX}%`,
+          `${SAMPLE_WEEK_PREFIX}%`
+        );
+        db.prepare('DELETE FROM plan_history_audit WHERE plan_id LIKE ?').run(
+          `${SAMPLE_WEEK_PREFIX}%`
+        );
+        db.prepare('DELETE FROM daily_plans WHERE id LIKE ?').run(`${SAMPLE_WEEK_PREFIX}%`);
+      }
+
+      const insertPlan = db.prepare(`
+        INSERT OR REPLACE INTO daily_plans (
+          id, plan_date, category_id, category_title_snapshot, is_study, activity_group_snapshot,
+          subject_id, subject_name_snapshot, unit_id, unit_title_snapshot,
+          study_type_id, study_type_title_snapshot, priority_code,
+          initial_predicted_minutes, predicted_minutes, target_exercises, reminder_time, description, status,
+          custom_sort_order, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const p of generated.plans) {
+        insertPlan.run(
+          p.id,
+          p.plan_date,
+          p.category_id,
+          p.category_title_snapshot,
+          p.is_study,
+          p.activity_group_snapshot,
+          p.subject_id,
+          p.subject_name_snapshot,
+          p.unit_id,
+          p.unit_title_snapshot,
+          p.study_type_id,
+          p.study_type_title_snapshot,
+          p.priority_code,
+          p.initial_predicted_minutes,
+          p.predicted_minutes,
+          p.target_exercises,
+          p.reminder_time,
+          p.description,
+          p.status,
+          p.custom_sort_order,
+          p.created_at,
+          p.updated_at
+        );
+      }
+
+      const insertPerf = db.prepare(`
+        INSERT OR REPLACE INTO performance_logs (
+          id, plan_id, actual_minutes, exercises_count, learning_quality,
+          completion_status, notes, logged_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const pf of generated.performances) {
+        insertPerf.run(
+          pf.id,
+          pf.plan_id,
+          pf.actual_minutes,
+          pf.exercises_count,
+          pf.learning_quality,
+          pf.completion_status,
+          pf.notes,
+          pf.logged_at,
+          pf.updated_at
+        );
+      }
+
+      const insertBudget = db.prepare(`
+        INSERT OR REPLACE INTO daily_time_budgets (plan_date, budget_minutes, input_unit, updated_at)
+        VALUES (?, ?, ?, ?)
+      `);
+      for (const tb of generated.timeBudgets) {
+        insertBudget.run(
+          tb.plan_date,
+          tb.budget_minutes,
+          tb.input_unit,
+          `${tb.updated_at}_${SAMPLE_WEEK_TAG}`
+        );
+      }
+
+      const insertGoal = db.prepare(`
+        INSERT OR REPLACE INTO daily_study_goals (
+          goal_date, target_study_minutes, target_exercises_count, target_completed_tasks, custom_goals_json, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      for (const sg of generated.studyGoals) {
+        insertGoal.run(
+          sg.goal_date,
+          sg.target_study_minutes,
+          sg.target_exercises_count,
+          sg.target_completed_tasks,
+          JSON.stringify(sg.custom_goals || []),
+          `${sg.updated_at}_${SAMPLE_WEEK_TAG}`
+        );
+      }
+    });
+
+    seedWeekTx();
+
+    res.json({
+      ...getServerSampleDataStatus(),
+      alreadyLoaded: false,
+      replaced: replace,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'خطا در افزودن داده‌های نمونه یک‌هفته‌ای' });
+  }
+});
+
+app.delete('/api/sample-data/week', (_req, res) => {
+  try {
+    const deleteWeekTx = db.transaction(() => {
+      db.prepare('DELETE FROM performance_logs WHERE id LIKE ? OR plan_id LIKE ?').run(
+        `${SAMPLE_WEEK_PREFIX}%`,
+        `${SAMPLE_WEEK_PREFIX}%`
+      );
+      db.prepare('DELETE FROM plan_history_audit WHERE plan_id LIKE ?').run(
+        `${SAMPLE_WEEK_PREFIX}%`
+      );
+      const deletedPlans = db
+        .prepare('DELETE FROM daily_plans WHERE id LIKE ?')
+        .run(`${SAMPLE_WEEK_PREFIX}%`);
+      db.prepare(
+        'DELETE FROM daily_time_budgets WHERE updated_at LIKE ? OR (plan_date >= ? AND plan_date <= ? AND updated_at LIKE ?)'
+      ).run(
+        `%${SAMPLE_WEEK_TAG}%`,
+        WEEKLY_SAMPLE_START_ISO,
+        WEEKLY_SAMPLE_END_ISO,
+        `%${SAMPLE_WEEK_TAG}%`
+      );
+      db.prepare(
+        'DELETE FROM daily_study_goals WHERE updated_at LIKE ? OR (goal_date >= ? AND goal_date <= ? AND updated_at LIKE ?)'
+      ).run(
+        `%${SAMPLE_WEEK_TAG}%`,
+        WEEKLY_SAMPLE_START_ISO,
+        WEEKLY_SAMPLE_END_ISO,
+        `%${SAMPLE_WEEK_TAG}%`
+      );
+      return deletedPlans.changes;
+    });
+
+    const removedWeeklyPlansCount = deleteWeekTx();
+    res.json({
+      ...getServerSampleDataStatus(),
+      removedWeeklyPlansCount,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'خطا در حذف داده‌های نمونه یک‌هفته‌ای' });
   }
 });
 

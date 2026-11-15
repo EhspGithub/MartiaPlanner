@@ -181,22 +181,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setChangelogLoading(false);
   };
 
-  // Sample Data (3-Month Demo Dataset) state
+  // Sample Data (3-Month Demo Dataset + 1-Week Verification Dataset) state
   const [sampleDataStatus, setSampleDataStatus] = useState<{
     hasSampleData: boolean;
     samplePlansCount: number;
     samplePerformancesCount: number;
     sampleDaysCount: number;
+    hasWeeklySampleData?: boolean;
+    weeklySamplePlansCount?: number;
+    weeklySamplePerformancesCount?: number;
+    weeklySampleDaysCount?: number;
   }>({
     hasSampleData: false,
     samplePlansCount: 0,
     samplePerformancesCount: 0,
     sampleDaysCount: 0,
+    hasWeeklySampleData: false,
+    weeklySamplePlansCount: 0,
+    weeklySamplePerformancesCount: 0,
+    weeklySampleDaysCount: 0,
   });
   const [sampleDataLoading, setSampleDataLoading] = useState<boolean>(false);
+  const [weeklySampleLoading, setWeeklySampleLoading] = useState<boolean>(false);
   const [sampleDataMessage, setSampleDataMessage] = useState<string | null>(null);
   const [sampleDataError, setSampleDataError] = useState<string | null>(null);
   const [confirmDeleteSampleModal, setConfirmDeleteSampleModal] = useState<boolean>(false);
+  const [confirmDeleteWeeklySampleModal, setConfirmDeleteWeeklySampleModal] =
+    useState<boolean>(false);
+  const [confirmReplaceWeeklySampleModal, setConfirmReplaceWeeklySampleModal] =
+    useState<boolean>(false);
 
   const refreshSampleDataStatus = async () => {
     try {
@@ -217,12 +230,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setSampleDataError(null);
       setSampleDataMessage(null);
       const res = await api.seedSampleData();
-      setSampleDataStatus({
-        hasSampleData: res.hasSampleData,
-        samplePlansCount: res.samplePlansCount,
-        samplePerformancesCount: res.samplePerformancesCount,
-        sampleDaysCount: res.sampleDaysCount,
-      });
+      setSampleDataStatus((prev) => ({
+        ...prev,
+        ...res,
+      }));
       await onRefreshBootstrap();
       if (res.alreadyLoaded) {
         setSampleDataMessage(
@@ -254,16 +265,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setSampleDataError(null);
       setSampleDataMessage(null);
       const res = await api.deleteSampleData();
-      setSampleDataStatus({
-        hasSampleData: res.hasSampleData,
-        samplePlansCount: res.samplePlansCount,
-        samplePerformancesCount: res.samplePerformancesCount,
-        sampleDaysCount: res.sampleDaysCount,
-      });
+      setSampleDataStatus((prev) => ({
+        ...prev,
+        ...res,
+      }));
       setConfirmDeleteSampleModal(false);
       await onRefreshBootstrap();
       setSampleDataMessage(
-        `تمام داده‌های نمونه (${toPersianDigits(
+        `تمام داده‌های نمونه ۳ ماهه (${toPersianDigits(
           res.removedPlansCount || 0
         )} رکورد آزمایشی) با موفقیت پاک‌سازی شدند و داده‌های واقعی شما ۱۰۰٪ دست‌نخورده باقی ماندند.`
       );
@@ -271,6 +280,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setSampleDataError(err.message || 'خطا در حذف داده‌های نمونه');
     } finally {
       setSampleDataLoading(false);
+    }
+  };
+
+  const handleSeedWeeklySampleData = async (replace = false) => {
+    if (sampleDataStatus.hasWeeklySampleData && !replace) {
+      setConfirmReplaceWeeklySampleModal(true);
+      return;
+    }
+    try {
+      setWeeklySampleLoading(true);
+      setConfirmReplaceWeeklySampleModal(false);
+      setSampleDataError(null);
+      setSampleDataMessage(null);
+      const res = await api.seedWeeklySampleData(replace);
+      setSampleDataStatus((prev) => ({
+        ...prev,
+        ...res,
+      }));
+      await onRefreshBootstrap();
+      setSampleDataMessage(
+        res.replaced
+          ? `داده‌های نمونه یک‌هفته‌ای (شنبه ۱۶ آبان ۱۴۰۵ تا جمعه ۲۲ آبان ۱۴۰۵) بدون ایجاد رکورد تکراری با موفقیت بازنویسی و جایگزین شدند (${toPersianDigits(
+              res.weeklySamplePlansCount
+            )} فعالیت و ${toPersianDigits(res.weeklySamplePerformancesCount)} رکورد عملکرد در ۷ روز).`
+          : `داده‌های نمونه یک‌هفته‌ای در بازه ثابت شنبه ۱۶ آبان ۱۴۰۵ تا جمعه ۲۲ آبان ۱۴۰۵ شامل ${toPersianDigits(
+              res.weeklySamplePlansCount
+            )} فعالیت و ${toPersianDigits(
+              res.weeklySamplePerformancesCount
+            )} رکورد عملکرد با موفقیت وارد سامانه شد. می‌توانید محاسبات گام‌به‌گام آن را در «منوی راهنما ← تب تعاریف ← محاسبات داده‌های نمونه یک‌هفته‌ای» مشاهده کنید.`
+      );
+    } catch (err: any) {
+      setSampleDataError(err.message || 'خطا در ورود داده‌های نمونه یک‌هفته‌ای');
+    } finally {
+      setWeeklySampleLoading(false);
+    }
+  };
+
+  const handleConfirmDeleteWeeklySampleData = async () => {
+    try {
+      setWeeklySampleLoading(true);
+      setSampleDataError(null);
+      setSampleDataMessage(null);
+      const res = await api.deleteWeeklySampleData();
+      setSampleDataStatus((prev) => ({
+        ...prev,
+        ...res,
+      }));
+      setConfirmDeleteWeeklySampleModal(false);
+      await onRefreshBootstrap();
+      setSampleDataMessage(
+        `داده‌های نمونه یک‌هفته‌ای (۱۶ تا ۲۲ آبان ۱۴۰۵ — ${toPersianDigits(
+          res.removedWeeklyPlansCount || 0
+        )} رکورد) با موفقیت حذف شدند و سایر داده‌های شما کاملاً دست‌نخورده باقی ماندند.`
+      );
+    } catch (err: any) {
+      setSampleDataError(err.message || 'خطا در حذف داده‌های نمونه یک‌هفته‌ای');
+    } finally {
+      setWeeklySampleLoading(false);
     }
   };
 
@@ -728,7 +795,7 @@ git push -u origin main`;
         >
           <FlaskConical className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">داده‌های نمونه</span>
-          {sampleDataStatus.hasSampleData && (
+          {(sampleDataStatus.hasSampleData || sampleDataStatus.hasWeeklySampleData) && (
             <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
           )}
         </button>
@@ -1029,6 +1096,142 @@ git push -u origin main`;
               >
                 <Trash2 className="w-4 h-4 shrink-0" />
                 <span>حذف داده‌های نمونه</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Section B: 1-Week Controlled Sample Dataset (۱۶ تا ۲۲ آبان ۱۴۰۵) */}
+          <div
+            className={`rounded-2xl border p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${
+              sampleDataStatus.hasWeeklySampleData
+                ? 'border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/70 dark:bg-emerald-950/30'
+                : 'border-indigo-200/80 dark:border-indigo-900/50 bg-indigo-50/40 dark:bg-indigo-950/20'
+            }`}
+          >
+            <div className="flex items-start sm:items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                  sampleDataStatus.hasWeeklySampleData
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-indigo-600 text-white'
+                }`}
+              >
+                <FlaskConical className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                    وضعیت داده‌های نمونه یک‌هفته‌ای (شنبه ۱۶ آبان ۱۴۰۵ تا جمعه ۲۲ آبان ۱۴۰۵)
+                  </h2>
+                  <span
+                    className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-lg ${
+                      sampleDataStatus.hasWeeklySampleData
+                        ? 'bg-emerald-100 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200'
+                        : 'bg-indigo-100 dark:bg-indigo-900/70 text-indigo-800 dark:text-indigo-200'
+                    }`}
+                  >
+                    {sampleDataStatus.hasWeeklySampleData
+                      ? 'فعال و بارگذاری‌شده (۱۶ تا ۲۲ آبان ۱۴۰۵)'
+                      : 'آماده بارگذاری'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed text-justify">
+                  {sampleDataStatus.hasWeeklySampleData
+                    ? `در حال حاضر ${toPersianDigits(
+                        sampleDataStatus.weeklySamplePlansCount || 0
+                      )} فعالیت نمونه یک‌هفته‌ای و ${toPersianDigits(
+                        sampleDataStatus.weeklySamplePerformancesCount || 0
+                      )} رکورد عملکرد در ${toPersianDigits(
+                        sampleDataStatus.weeklySampleDaysCount || 7
+                      )} روز (۱۴۰۵/۰۸/۱۶ تا ۱۴۰۵/۰۸/۲۲) ثبت شده است.`
+                    : 'داده‌های نمونه یک‌هفته‌ای مخصوص بررسی دقیق و گام‌به‌گام فرمول‌ها در بازه ثابت شنبه ۱۶ آبان ۱۴۰۵ تا جمعه ۲۲ آبان ۱۴۰۵ طراحی شده‌اند و کاملاً مستقل از داده‌های نمونه ۳ ماهه هستند.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* پ) ورود داده‌های نمونه یک‌هفته‌ای (۱۶ تا ۲۲ آبان ۱۴۰۵) */}
+            <div className="rounded-3xl border border-emerald-200/90 dark:border-emerald-900/60 bg-white dark:bg-slate-900 p-6 shadow-xs flex flex-col justify-between space-y-5">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-emerald-600/20">
+                    <Plus className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                      ورود داده‌های نمونه یک‌هفته‌ای
+                    </h3>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">
+                      بازه ثابت: شنبه ۱۶ آبان ۱۴۰۵ تا جمعه ۲۲ آبان ۱۴۰۵ (۷ روز کامل)
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed text-justify">
+                  با کلیک روی این دکمه، یک هفته نمونه کنترل‌شده و دقیق شامل ۶ درس (ریاضی، علوم تجربی، فارسی، عربی، زبان انگلیسی و مطالعات اجتماعی) در بازه ۱۶ تا ۲۲ آبان ۱۴۰۵ وارد برنامه می‌شود که تمامی محاسبات گام‌به‌گام آن در منوی «راهنما ← تعاریف ← محاسبات داده‌های نمونه یک‌هفته‌ای» قابل راستی‌آزمایی است:
+                </p>
+
+                <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300 list-disc list-inside leading-relaxed bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-3.5 border border-slate-200/70 dark:border-slate-800">
+                  <li>شامل تمام حالت‌های واقعی: تکمیل‌شده، ناقص، انجام‌نشده، روز بدون تست و روز دارای جریمه وقفه (-XP)</li>
+                  <li>پوشش زمان واقعی کمتر، مساوی و بیشتر از پیش‌بینی + فعالیت‌های سرگرمی در سقف مجاز و بیش از سقف مجاز</li>
+                  <li>کاملاً مستقل از داده‌های نمونه ۳ ماهه و داده‌های شخصی شما (بدون ایجاد رکورد تکراری)</li>
+                </ul>
+              </div>
+
+              <button
+                type="button"
+                disabled={weeklySampleLoading}
+                onClick={() => handleSeedWeeklySampleData(false)}
+                className="w-full flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-55 px-5 py-3 text-xs sm:text-sm font-extrabold text-white transition-colors cursor-pointer min-h-[46px] shadow-sm shadow-emerald-600/20"
+              >
+                <FlaskConical className="w-4 h-4 shrink-0" />
+                <span>
+                  {weeklySampleLoading
+                    ? 'در حال ثبت داده‌های نمونه یک‌هفته‌ای...'
+                    : sampleDataStatus.hasWeeklySampleData
+                    ? 'بازنویسی مجدد داده‌های نمونه یک‌هفته‌ای'
+                    : 'ورود داده‌های نمونه یک‌هفته‌ای'}
+                </span>
+              </button>
+            </div>
+
+            {/* ت) حذف داده‌های نمونه یک‌هفته‌ای */}
+            <div className="rounded-3xl border border-amber-200/90 dark:border-amber-900/60 bg-white dark:bg-slate-900 p-6 shadow-xs flex flex-col justify-between space-y-5">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-amber-600/20">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                      حذف داده‌های نمونه یک‌هفته‌ای
+                    </h3>
+                    <p className="text-xs text-amber-600 dark:text-amber-400 font-bold mt-0.5">
+                      پاک‌سازی اختصاصی رکوردهای ۱۶ تا ۲۲ آبان ۱۴۰۵
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed text-justify">
+                  با کلیک روی این گزینه، فقط رکوردهای مربوط به «داده‌های نمونه یک‌هفته‌ای» (۱۶ تا ۲۲ آبان ۱۴۰۵) حذف می‌شوند و نه داده‌های واقعی شما و نه داده‌های نمونه ۳ ماهه دستکاری نخواهند شد:
+                </p>
+
+                <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300 list-disc list-inside leading-relaxed bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-3.5 border border-slate-200/70 dark:border-slate-800">
+                  <li>جداسازی کامل با پیشوند اختصاصی بدون تداخل با سایر تاریخ‌ها</li>
+                  <li>امکان بارگذاری و حذف چندباره بدون ایجاد تغییر در اطلاعات شخصی</li>
+                  <li>بازمحاسبه فوری شاخص‌های عملکرد و دروس پس از حذف</li>
+                </ul>
+              </div>
+
+              <button
+                type="button"
+                disabled={weeklySampleLoading || !sampleDataStatus.hasWeeklySampleData}
+                onClick={() => setConfirmDeleteWeeklySampleModal(true)}
+                className="w-full flex items-center justify-center gap-2 rounded-2xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 px-5 py-3 text-xs sm:text-sm font-extrabold text-white transition-colors cursor-pointer min-h-[46px] shadow-sm shadow-amber-600/20"
+              >
+                <Trash2 className="w-4 h-4 shrink-0" />
+                <span>حذف داده‌های نمونه یک‌هفته‌ای</span>
               </button>
             </div>
           </div>
@@ -1913,6 +2116,100 @@ git push -u origin main`;
                 <Trash2 className="w-4 h-4" />
                 <span>
                   {sampleDataLoading ? 'در حال حذف داده‌های نمونه...' : 'تأیید و حذف داده‌های نمونه'}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Replace 1-Week Sample Data Modal */}
+      {confirmReplaceWeeklySampleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <RefreshCw className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                  داده‌های نمونه یک‌هفته‌ای قبلاً وارد شده‌اند
+                </h3>
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">
+                  بازه شنبه ۱۶ آبان ۱۴۰۵ تا جمعه ۲۲ آبان ۱۴۰۵
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed text-justify">
+              داده‌های نمونه یک‌هفته‌ای هم‌اکنون در سامانه وجود دارند. آیا مایل هستید بدون ایجاد رکوردهای تکراری، این داده‌ها به حالت استاندارد اولیه بازنویسی و جایگزین شوند؟
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={weeklySampleLoading}
+                onClick={() => setConfirmReplaceWeeklySampleModal(false)}
+                className="rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-xs font-extrabold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={weeklySampleLoading}
+                onClick={() => handleSeedWeeklySampleData(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 px-5 py-2.5 text-xs font-extrabold text-white cursor-pointer shadow-sm"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>تأیید و بازنویسی بدون تکرار</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete 1-Week Sample Data Modal */}
+      {confirmDeleteWeeklySampleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                  تأیید حذف داده‌های نمونه یک‌هفته‌ای
+                </h3>
+                <p className="text-xs text-amber-600 dark:text-amber-400 font-bold mt-0.5">
+                  حذف {toPersianDigits(sampleDataStatus.weeklySamplePlansCount || 0)} رکورد نمونه در بازه ۱۶ تا ۲۲ آبان ۱۴۰۵
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed text-justify">
+              آیا از حذف داده‌های نمونه یک‌هفته‌ای مطمئن هستید؟ با تأیید این گزینه، فقط رکوردهای آزمایشی هفته ۱۶ تا ۲۲ آبان ۱۴۰۵ پاک می‌شوند و سایر اطلاعات شما کاملاً دست‌نخورده باقی خواهند ماند.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={weeklySampleLoading}
+                onClick={() => setConfirmDeleteWeeklySampleModal(false)}
+                className="rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-xs font-extrabold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={weeklySampleLoading}
+                onClick={handleConfirmDeleteWeeklySampleData}
+                className="inline-flex items-center gap-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-60 px-5 py-2.5 text-xs font-extrabold text-white cursor-pointer shadow-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>
+                  {weeklySampleLoading
+                    ? 'در حال حذف...'
+                    : 'تأیید و حذف داده‌های نمونه یک‌هفته‌ای'}
                 </span>
               </button>
             </div>

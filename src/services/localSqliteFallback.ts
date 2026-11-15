@@ -36,8 +36,11 @@ import {
 } from '../utils/analyticsEngine.ts';
 import {
   generateThreeMonthSampleData,
+  generateOneWeekSampleData,
   SAMPLE_DEMO_PREFIX,
   SAMPLE_DEMO_TAG,
+  SAMPLE_WEEK_PREFIX,
+  SAMPLE_WEEK_TAG,
 } from '../utils/sampleDataGenerator.ts';
 
 interface LocalSQLiteDatabaseDump {
@@ -1365,11 +1368,20 @@ export const localSQLiteFallback = {
     const samplePlans = db.plans.filter((p) => p.id.startsWith(SAMPLE_DEMO_PREFIX));
     const samplePerfs = db.performances.filter((pf) => pf.id.startsWith(SAMPLE_DEMO_PREFIX));
     const distinctDates = new Set(samplePlans.map((p) => p.plan_date));
+
+    const weeklyPlans = db.plans.filter((p) => p.id.startsWith(SAMPLE_WEEK_PREFIX));
+    const weeklyPerfs = db.performances.filter((pf) => pf.id.startsWith(SAMPLE_WEEK_PREFIX));
+    const weeklyDates = new Set(weeklyPlans.map((p) => p.plan_date));
+
     return {
       hasSampleData: samplePlans.length > 0,
       samplePlansCount: samplePlans.length,
       samplePerformancesCount: samplePerfs.length,
       sampleDaysCount: distinctDates.size,
+      hasWeeklySampleData: weeklyPlans.length > 0,
+      weeklySamplePlansCount: weeklyPlans.length,
+      weeklySamplePerformancesCount: weeklyPerfs.length,
+      weeklySampleDaysCount: weeklyDates.size,
     };
   },
 
@@ -1469,6 +1481,117 @@ export const localSQLiteFallback = {
     return {
       ...this.getSampleDataStatus(),
       removedPlansCount,
+    };
+  },
+
+  seedWeeklySampleData(replace = false) {
+    const currentStatus = this.getSampleDataStatus();
+    if (currentStatus.hasWeeklySampleData && !replace) {
+      return {
+        ...currentStatus,
+        alreadyLoaded: true,
+        replaced: false,
+      };
+    }
+
+    const db = loadDB();
+    if (replace) {
+      db.plans = db.plans.filter((p) => !p.id.startsWith(SAMPLE_WEEK_PREFIX));
+      db.performances = db.performances.filter(
+        (pf) =>
+          !pf.id.startsWith(SAMPLE_WEEK_PREFIX) && !pf.plan_id.startsWith(SAMPLE_WEEK_PREFIX)
+      );
+    }
+
+    const generated = generateOneWeekSampleData({
+      subjects: db.subjects.filter((s) => s.is_archived === 0),
+      units: db.units.filter((u) => u.is_archived === 0),
+      categories: db.categories.filter((c) => c.is_active === 1),
+      studyTypes: db.studyTypes.filter((st) => st.is_active === 1),
+    });
+
+    const existingPlanIds = new Set(db.plans.map((p) => p.id));
+    for (const p of generated.plans) {
+      if (!existingPlanIds.has(p.id)) {
+        db.plans.push(p);
+      }
+    }
+
+    const existingPerfIds = new Set(db.performances.map((pf) => pf.id));
+    for (const pf of generated.performances) {
+      if (!existingPerfIds.has(pf.id)) {
+        db.performances.push(pf);
+      }
+    }
+
+    if (!db.timeBudgets) db.timeBudgets = {};
+    for (const tb of generated.timeBudgets) {
+      db.timeBudgets[tb.plan_date] = {
+        ...tb,
+        updated_at: `${tb.updated_at}_${SAMPLE_WEEK_TAG}`,
+      };
+    }
+
+    try {
+      for (const sg of generated.studyGoals) {
+        const key = `martia_daily_goal_${sg.goal_date}`;
+        localStorage.setItem(
+          key,
+          JSON.stringify({
+            ...sg,
+            updated_at: `${sg.updated_at}_${SAMPLE_WEEK_TAG}`,
+          })
+        );
+      }
+    } catch {}
+
+    saveDB(db);
+    return {
+      ...this.getSampleDataStatus(),
+      alreadyLoaded: false,
+      replaced: replace,
+    };
+  },
+
+  deleteWeeklySampleData() {
+    const db = loadDB();
+    const beforeCount = db.plans.length;
+    db.plans = db.plans.filter((p) => !p.id.startsWith(SAMPLE_WEEK_PREFIX));
+    const removedWeeklyPlansCount = beforeCount - db.plans.length;
+
+    db.performances = db.performances.filter(
+      (pf) =>
+        !pf.id.startsWith(SAMPLE_WEEK_PREFIX) && !pf.plan_id.startsWith(SAMPLE_WEEK_PREFIX)
+    );
+
+    if (db.timeBudgets) {
+      for (const [dateKey, cfg] of Object.entries(db.timeBudgets)) {
+        if (cfg && typeof cfg.updated_at === 'string' && cfg.updated_at.includes(SAMPLE_WEEK_TAG)) {
+          delete db.timeBudgets[dateKey];
+        }
+      }
+    }
+
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('martia_daily_goal_')) {
+          const raw = localStorage.getItem(k);
+          if (raw && raw.includes(SAMPLE_WEEK_TAG)) {
+            keysToRemove.push(k);
+          }
+        }
+      }
+      for (const k of keysToRemove) {
+        localStorage.removeItem(k);
+      }
+    } catch {}
+
+    saveDB(db);
+    return {
+      ...this.getSampleDataStatus(),
+      removedWeeklyPlansCount,
     };
   },
 };

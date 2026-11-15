@@ -35,6 +35,9 @@ import {
 } from 'lucide-react';
 import { APP_VERSION } from '../version.ts';
 import { toPersianDigits } from '../utils/jalali.ts';
+import { WeeklySampleCalculationsReport } from './WeeklySampleCalculationsReport.tsx';
+
+const WEEKLY_SAMPLE_ACCORDION_ID = 'metric-20-weekly-sample-calculations';
 
 export interface MetricExampleTableRow {
   col1: string;
@@ -1100,7 +1103,8 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
   initialTab = 'definitions',
 }) => {
   const [activeGuideTab, setActiveGuideTab] = useState<GuideTabKey>(initialTab);
-  const [manualOpenIds, setManualOpenIds] = useState<Record<string, boolean>>({});
+  // Single-select accordion state: at most ONE card (definition or weekly sample calculations) can be open at any moment
+  const [openAccordionId, setOpenAccordionId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const normalizedQuery = useMemo(() => normalizeSearchText(searchQuery), [searchQuery]);
@@ -1143,27 +1147,26 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
     });
   }, [isSearchActive, normalizedQuery, searchableMap]);
 
+  const showWeeklyCalculationsCard = useMemo(() => {
+    if (!isSearchActive) return true;
+    const weeklySearchable = normalizeSearchText(
+      'محاسبات داده‌های نمونه یک‌هفته‌ای ۱۶ تا ۲۲ آبان ۱۴۰۵ شاخص‌های روزانه محاسبات دروس امتیاز عملکرد کلی XP و Level ریاضی علوم فارسی عربی زبان مطالعات'
+    );
+    const tokens = normalizedQuery.split(' ').filter(Boolean);
+    return tokens.every((tk) => weeklySearchable.includes(tk));
+  }, [isSearchActive, normalizedQuery]);
+
+  // Single-select toggle: opening an item automatically closes any previously open item; clicking the open item closes it
   const toggleAccordion = (id: string) => {
-    setManualOpenIds((prev) => ({
-      ...prev,
-      [id]: !(prev[id] ?? isSearchActive),
-    }));
+    setOpenAccordionId((prev) => (prev === id ? null : id));
   };
 
-  const expandAll = () => {
-    const next: Record<string, boolean> = {};
-    for (const item of METRICS_DEFINITIONS_DATA) {
-      next[item.id] = true;
-    }
-    setManualOpenIds(next);
+  const openWeeklySampleCard = () => {
+    setOpenAccordionId(WEEKLY_SAMPLE_ACCORDION_ID);
   };
 
   const collapseAll = () => {
-    const next: Record<string, boolean> = {};
-    for (const item of METRICS_DEFINITIONS_DATA) {
-      next[item.id] = false;
-    }
-    setManualOpenIds(next);
+    setOpenAccordionId(null);
   };
 
   return (
@@ -1243,10 +1246,10 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
                   ۲. امتیاز مستقیم آموزشی (E)
                 </div>
                 <div className="text-xs font-extrabold text-slate-900 dark:text-white" dir="ltr">
-                  E = 0.4×T + 0.3×Q + 0.3×L
+                  E = 0.40×T + 0.30×Q + 0.30×L
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                  با نرمال‌سازی خودکار در صورت نبود هدف تست
+                  با نرمال‌سازی خودکار (۵۷.۱٪ T و ۴۲.۹٪ L) در روز بدون تست
                 </div>
               </div>
 
@@ -1267,20 +1270,17 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
                   ۴. امتیاز نهایی روز (DS)
                 </div>
                 <div className="text-xs font-extrabold text-slate-900 dark:text-white" dir="ltr">
-                  DS = (0.8 × E) + (0.2 × C)
+                  DS = 0.80×E + 0.20×C
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                  ۸۰٪ عملکرد آموزشی + ۲۰٪ کنترل سرگرمی
+                  ترکیب ۸۰٪ عملکرد آموزشی و ۲۰٪ کنترل سرگرمی
                 </div>
               </div>
             </div>
           </div>
 
           {/* =====================================================================
-              REDESIGNED CONTROL BAR (SECTION 7-2 & 7-3)
-              - No category filter buttons
-              - Row 1: Full-width search bar
-              - Row 2: Two side-by-side buttons («باز کردن همه» | «بستن همه»)
+              REDESIGNED CONTROL BAR (SINGLE-SELECT ACCORDION MODE)
           ===================================================================== */}
           <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs space-y-3">
             {/* Row 1: Full-Width Search Input */}
@@ -1292,12 +1292,8 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
                 onChange={(e) => {
                   const val = e.target.value;
                   setSearchQuery(val);
-                  // Reset any manual overrides triggered during search when clearing
-                  if (!val.trim()) {
-                    setManualOpenIds((prev) => ({ ...prev }));
-                  }
                 }}
-                placeholder="جستجو در تعاریف، فرمول‌ها و مثال‌ها..."
+                placeholder="جستجو در تعاریف، فرمول‌ها، مثال‌ها و محاسبات نمونه یک‌هفته‌ای..."
                 className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/90 pr-10 pl-10 py-2.5 text-xs sm:text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-600 focus:outline-none transition-colors"
               />
               {searchQuery && (
@@ -1312,38 +1308,31 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
               )}
             </div>
 
-            {/* Row 2: Two Equal-Width Side-by-Side Buttons («باز کردن همه» | «بستن همه») */}
-            <div className="grid grid-cols-2 gap-2.5">
+            {/* Row 2: Two Equal-Width Side-by-Side Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <button
                 type="button"
-                onClick={expandAll}
-                className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-4 py-2.5 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer min-h-[42px]"
+                onClick={openWeeklySampleCard}
+                className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-4 py-2.5 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer min-h-[42px]"
               >
-                <span>باز کردن همه</span>
+                <Calculator className="w-4 h-4 shrink-0" />
+                <span>مشاهده «محاسبات داده‌های نمونه یک‌هفته‌ای»</span>
               </button>
               <button
                 type="button"
                 onClick={collapseAll}
-                className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 px-4 py-2.5 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer min-h-[42px]"
+                disabled={!openAccordionId}
+                className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 px-4 py-2.5 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer min-h-[42px]"
               >
-                <span>بستن همه</span>
+                <span>بستن تعریف باز</span>
               </button>
             </div>
           </div>
 
           {/* =====================================================================
-              COMPREHENSIVE 9-PART METRICS REFERENCE ACCORDIONS (SECTION 8)
-              الف) عنوان شاخص
-              ب) تعریف ساده
-              ج) هدف از محاسبه
-              د) داده‌های مورد استفاده
-              هـ) فرمول ریاضی استاندارد
-              و) تعریف متغیرها
-              ز) مثال عددی کامل با مراحل محاسبه
-              ح) تفسیر نتیجه
-              ط) ارتباط با XP و Level
+              COMPREHENSIVE 9-PART METRICS REFERENCE ACCORDIONS (SINGLE-SELECT)
           ===================================================================== */}
-          {filteredMetrics.length === 0 ? (
+          {filteredMetrics.length === 0 && !showWeeklyCalculationsCard ? (
             <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-10 text-center space-y-2.5">
               <Search className="w-8 h-8 text-slate-400 mx-auto" />
               <div className="text-sm font-extrabold text-slate-900 dark:text-white">
@@ -1356,11 +1345,7 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
           ) : (
             <div className="space-y-3.5">
               {filteredMetrics.map((metric) => {
-                const isOpen = isSearchActive
-                  ? manualOpenIds[metric.id] !== undefined
-                    ? manualOpenIds[metric.id]
-                    : true
-                  : Boolean(manualOpenIds[metric.id]);
+                const isOpen = openAccordionId === metric.id;
 
                 const { Icon: MetricIcon, iconBoxClass } = getMetricIconConfig(metric.id);
 
@@ -1585,6 +1570,66 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
                   </div>
                 );
               })}
+
+              {/* ===============================================================
+                  ITEM 20 (AT THE END OF DEFINITIONS): محاسبات داده‌های نمونه یک‌هفته‌ای
+              =============================================================== */}
+              {showWeeklyCalculationsCard && (
+                <div className="rounded-3xl border-2 border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden transition-all">
+                  <button
+                    type="button"
+                    onClick={() => toggleAccordion(WEEKLY_SAMPLE_ACCORDION_ID)}
+                    aria-expanded={openAccordionId === WEEKLY_SAMPLE_ACCORDION_ID}
+                    className="w-full flex items-center justify-between gap-3 px-4 sm:px-6 py-4 text-right hover:bg-emerald-50/50 dark:hover:bg-emerald-950/25 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-11 h-11 rounded-2xl border border-emerald-300 dark:border-emerald-700 bg-gradient-to-br from-emerald-500/25 to-teal-500/15 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 shadow-2xs">
+                        <Calculator className="w-5 h-5 stroke-[2.2]" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                            محاسبات داده‌های نمونه یک‌هفته‌ای
+                          </h2>
+                          <span
+                            dir="ltr"
+                            className="text-[10px] font-black px-2 py-0.5 rounded-md bg-emerald-900 text-emerald-200"
+                          >
+                            1405/08/16 .. 22
+                          </span>
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-lg border bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700">
+                            گزارش مرجع گام‌به‌گام و راستی‌آزمایی زنده (۱۶ تا ۲۲ آبان ۱۴۰۵)
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 truncate">
+                          محاسبه عددی و مرحله‌به‌مرحله تمام شاخص‌های روزانه، دروس، امتیاز کل، XP و Level بر اساس داده‌های نمونه یک‌هفته‌ای
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="hidden sm:inline-block text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                        {openAccordionId === WEEKLY_SAMPLE_ACCORDION_ID
+                          ? 'بستن'
+                          : 'مشاهده محاسبات کامل هفتگی'}
+                      </span>
+                      <div
+                        className={`w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-700 dark:text-emerald-300 transition-transform duration-200 ${
+                          openAccordionId === WEEKLY_SAMPLE_ACCORDION_ID ? 'rotate-180' : ''
+                        }`}
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </div>
+                    </div>
+                  </button>
+
+                  {openAccordionId === WEEKLY_SAMPLE_ACCORDION_ID && (
+                    <div className="px-4 sm:px-6 pb-6 pt-4 border-t border-emerald-200/80 dark:border-emerald-800/80 bg-slate-50/50 dark:bg-slate-950/40">
+                      <WeeklySampleCalculationsReport />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </>

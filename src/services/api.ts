@@ -881,6 +881,10 @@ export const api = {
     samplePlansCount: number;
     samplePerformancesCount: number;
     sampleDaysCount: number;
+    hasWeeklySampleData?: boolean;
+    weeklySamplePlansCount?: number;
+    weeklySamplePerformancesCount?: number;
+    weeklySampleDaysCount?: number;
   }> {
     return request('/api/sample-data/status', undefined, () =>
       localSQLiteFallback.getSampleDataStatus()
@@ -892,6 +896,10 @@ export const api = {
     samplePlansCount: number;
     samplePerformancesCount: number;
     sampleDaysCount: number;
+    hasWeeklySampleData?: boolean;
+    weeklySamplePlansCount?: number;
+    weeklySamplePerformancesCount?: number;
+    weeklySampleDaysCount?: number;
     alreadyLoaded?: boolean;
   }> {
     const res = await request(
@@ -911,6 +919,10 @@ export const api = {
     samplePlansCount: number;
     samplePerformancesCount: number;
     sampleDaysCount: number;
+    hasWeeklySampleData?: boolean;
+    weeklySamplePlansCount?: number;
+    weeklySamplePerformancesCount?: number;
+    weeklySampleDaysCount?: number;
     removedPlansCount?: number;
   }> {
     const res = await request(
@@ -920,6 +932,53 @@ export const api = {
     );
     try {
       localSQLiteFallback.deleteSampleData();
+    } catch {}
+    invalidateApiCache('all');
+    return res;
+  },
+
+  async seedWeeklySampleData(replace = false): Promise<{
+    hasSampleData: boolean;
+    samplePlansCount: number;
+    samplePerformancesCount: number;
+    sampleDaysCount: number;
+    hasWeeklySampleData: boolean;
+    weeklySamplePlansCount: number;
+    weeklySamplePerformancesCount: number;
+    weeklySampleDaysCount: number;
+    alreadyLoaded?: boolean;
+    replaced?: boolean;
+  }> {
+    const res = await request(
+      '/api/sample-data/seed-week',
+      { method: 'POST', body: JSON.stringify({ replace }) },
+      () => localSQLiteFallback.seedWeeklySampleData(replace)
+    );
+    try {
+      localSQLiteFallback.seedWeeklySampleData(replace);
+    } catch {}
+    invalidateApiCache('all');
+    return res;
+  },
+
+  async deleteWeeklySampleData(): Promise<{
+    hasSampleData: boolean;
+    samplePlansCount: number;
+    samplePerformancesCount: number;
+    sampleDaysCount: number;
+    hasWeeklySampleData: boolean;
+    weeklySamplePlansCount: number;
+    weeklySamplePerformancesCount: number;
+    weeklySampleDaysCount: number;
+    removedWeeklyPlansCount?: number;
+  }> {
+    const res = await request(
+      '/api/sample-data/week',
+      { method: 'DELETE' },
+      () => localSQLiteFallback.deleteWeeklySampleData()
+    );
+    try {
+      localSQLiteFallback.deleteWeeklySampleData();
     } catch {}
     invalidateApiCache('all');
     return res;

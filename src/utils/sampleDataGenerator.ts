@@ -485,3 +485,928 @@ export function generateThreeMonthSampleData(
     },
   };
 }
+
+export const SAMPLE_WEEK_PREFIX = 'sample_week_';
+export const SAMPLE_WEEK_TAG = '#sample_week';
+export const WEEKLY_SAMPLE_START_JALALI = '1405/08/16';
+export const WEEKLY_SAMPLE_END_JALALI = '1405/08/22';
+export const WEEKLY_SAMPLE_START_ISO = '2026-11-07'; // شنبه ۱۶ آبان ۱۴۰۵
+export const WEEKLY_SAMPLE_END_ISO = '2026-11-13';   // جمعه ۲۲ آبان ۱۴۰۵
+
+/**
+ * Generates deterministic, controlled 1-week sample data strictly for
+ * Saturday 16 Aban 1405 (2026-11-07) to Friday 22 Aban 1405 (2026-11-13).
+ * Designed so every single formula and metric in the application has rich,
+ * verifiable, non-zero, and varied scenarios (completed, partial, pending,
+ * actual < predicted, actual == predicted, actual > predicted, days with tests,
+ * days without tests, high/medium/low quality, restricted within cap and over cap,
+ * and a low-fulfillment day to demonstrate -XP penalty).
+ */
+export function generateOneWeekSampleData(
+  ctx: SampleGeneratorContext
+): GeneratedSampleDataset {
+  const plans: GeneratedSampleDataset['plans'] = [];
+  const performances: GeneratedSampleDataset['performances'] = [];
+  const timeBudgets: GeneratedSampleDataset['timeBudgets'] = [];
+  const studyGoals: GeneratedSampleDataset['studyGoals'] = [];
+
+  const unitsBySubject = new Map<string, Array<{ id: string; title: string }>>();
+  if (Array.isArray(ctx.units)) {
+    for (const u of ctx.units) {
+      const list = unitsBySubject.get(u.subject_id) || [];
+      list.push({ id: u.id, title: u.title });
+      unitsBySubject.set(u.subject_id, list);
+    }
+  }
+  for (const s of ctx.subjects) {
+    if (Array.isArray(s.units) && s.units.length > 0 && !unitsBySubject.has(s.id)) {
+      unitsBySubject.set(
+        s.id,
+        s.units.map((u) => ({ id: u.id, title: u.title }))
+      );
+    }
+  }
+
+  const pickSubject = (keyword: string, fallbackIndex: number) => {
+    const found = ctx.subjects.find((s) => s.name.includes(keyword));
+    if (found) return found;
+    if (ctx.subjects.length > 0) return ctx.subjects[fallbackIndex % ctx.subjects.length];
+    return { id: `subj_w_${fallbackIndex}`, name: keyword };
+  };
+
+  const subjMath = pickSubject('ریاضی', 0);
+  const subjScience = pickSubject('علوم', 1);
+  const subjFarsi = pickSubject('فارسی', 2);
+  const subjArabic = pickSubject('عربی', 3);
+  const subjEnglish = pickSubject('انگلیسی', 4);
+  const subjSocial = pickSubject('اجتماعی', 5);
+
+  const pickUnit = (subjId: string, unitIdx: number, defaultTitle: string) => {
+    const list = unitsBySubject.get(subjId);
+    if (list && list.length > 0) {
+      return list[unitIdx % list.length];
+    }
+    return { id: null as string | null, title: defaultTitle };
+  };
+
+  const studyCat =
+    ctx.categories.find((c) => Number(c.is_study) === 1) || {
+      id: 'cat-study-1',
+      title: 'مطالعه و تکالیف درسی',
+      is_study: 1,
+    };
+
+  const restrictedCats = ctx.categories.filter(
+    (c) =>
+      Number(c.is_study) === 0 &&
+      (c.activity_group === 'restricted' ||
+        c.title.includes('بازی') ||
+        c.title.includes('مجازی') ||
+        c.title.includes('فیلم') ||
+        c.title.includes('سرگرمی'))
+  );
+  const recCatGame = restrictedCats[0] || {
+    id: 'cat-rec-game',
+    title: 'بازی و سرگرمی دیجیتال',
+    is_study: 0,
+  };
+  const recCatMedia = restrictedCats[1] || restrictedCats[0] || {
+    id: 'cat-rec-social',
+    title: 'وب‌گردی و فضای مجازی',
+    is_study: 0,
+  };
+
+  const essentialCats = ctx.categories.filter(
+    (c) =>
+      Number(c.is_study) === 0 &&
+      c.activity_group !== 'restricted' &&
+      !restrictedCats.some((r) => r.id === c.id)
+  );
+  const essCatSport = essentialCats[0] || {
+    id: 'cat-ess-sport',
+    title: 'ورزش و تحرک روزانه',
+    is_study: 0,
+  };
+  const essCatRest = essentialCats[1] || essentialCats[0] || {
+    id: 'cat-ess-rest',
+    title: 'استراحت، تغذیه و امور شخصی',
+    is_study: 0,
+  };
+
+  const getStudyType = (keyword: string, fallbackTitle: string, idx: number) => {
+    const found = ctx.studyTypes.find((st) => st.title.includes(keyword));
+    if (found) return found;
+    if (ctx.studyTypes.length > 0) return ctx.studyTypes[idx % ctx.studyTypes.length];
+    return { id: `st_w_${idx}`, title: fallbackTitle };
+  };
+
+  const stRead = getStudyType('مطالعه', 'مطالعه درسنامه', 0);
+  const stTest = getStudyType('تست', 'حل تمرین و تست', 1);
+  const stReview = getStudyType('مرور', 'مرور و جمع‌بندی', 2);
+
+  interface DayBlueprint {
+    dateIso: string;
+    jalaliLabel: string;
+    budgetMinutes: number;
+    goalMinutes: number;
+    goalExercises: number;
+    goalTasks: number;
+    studyTasks: Array<{
+      subj: { id: string; name: string };
+      unitIdx: number;
+      defaultUnitTitle: string;
+      st: { id: string; title: string };
+      priority: string;
+      initialPred: number;
+      pred: number;
+      targetEx: number | null;
+      status: 'completed' | 'partial' | 'pending';
+      actualMins: number | null;
+      actualEx: number | null;
+      quality: string | null;
+      desc: string;
+      perfNote: string;
+    }>;
+    restrictedTasks: Array<{
+      cat: { id: string; title: string };
+      priority: string;
+      allowedMins: number;
+      actualMins: number;
+      desc: string;
+      note: string;
+    }>;
+    essentialTasks: Array<{
+      cat: { id: string; title: string };
+      priority: string;
+      predMins: number;
+      actualMins: number;
+      desc: string;
+    }>;
+  }
+
+  const weekBlueprints: DayBlueprint[] = [
+    // روز ۱: شنبه ۱۶ آبان ۱۴۰۵ (2026-11-07) — شروع قوی، زمان بیشتر از پیش‌بینی در ریاضی، برابر در علوم، ناقص در فارسی
+    {
+      dateIso: '2026-11-07',
+      jalaliLabel: '1405/08/16',
+      budgetMinutes: 480,
+      goalMinutes: 210,
+      goalExercises: 45,
+      goalTasks: 3,
+      studyTasks: [
+        {
+          subj: subjMath,
+          unitIdx: 0,
+          defaultUnitTitle: 'فصل ۱: عددهای صحیح و گویا',
+          st: stTest,
+          priority: 'A1',
+          initialPred: 90,
+          pred: 90,
+          targetEx: 30,
+          status: 'completed',
+          actualMins: 105, // بیشتر از پیش‌بینی (۱۱۷٪)
+          actualEx: 32,
+          quality: '9',
+          desc: 'مطالعه عمیق و حل تست‌های زمان‌دار ریاضی #sample_week',
+          perfNote: 'تسلط عالی بر تیپ‌بندی سوالات فصل اول',
+        },
+        {
+          subj: subjScience,
+          unitIdx: 0,
+          defaultUnitTitle: 'فصل ۱: مخلوط و جداسازی مواد',
+          st: stRead,
+          priority: 'A2',
+          initialPred: 60,
+          pred: 60,
+          targetEx: 15,
+          status: 'completed',
+          actualMins: 60, // برابر با پیش‌بینی (۱۰۰٪)
+          actualEx: 15,
+          quality: '8.5',
+          desc: 'مطالعه درسنامه و حل سوالات تشریحی علوم #sample_week',
+          perfNote: 'مطابق زمان‌بندی پیش‌بینی‌شده انجام شد',
+        },
+        {
+          subj: subjFarsi,
+          unitIdx: 0,
+          defaultUnitTitle: 'درس ۱: ستایش و زیبایی شکفتن',
+          st: stReview,
+          priority: 'B1',
+          initialPred: 60,
+          pred: 60,
+          targetEx: null,
+          status: 'partial',
+          actualMins: 45, // کمتر از پیش‌بینی (۷۵٪)
+          actualEx: 0,
+          quality: '7.5',
+          desc: 'بررسی آرایه‌های ادبی و معنی اشعار فارسی #sample_week',
+          perfNote: 'بخش واژگان کامل شد؛ تاریخ ادبیات به فردا موکول شد',
+        },
+      ],
+      restrictedTasks: [
+        {
+          cat: recCatGame,
+          priority: 'C1',
+          allowedMins: 60,
+          actualMins: 45, // رعایت کامل سقف مجاز (Ci = 100%)
+          desc: 'بازی و استراحت دیجیتال عصرگاهی #sample_week',
+          note: 'کنترل کامل زمان و توقف پیش از اتمام سقف مجاز',
+        },
+      ],
+      essentialTasks: [
+        {
+          cat: essCatSport,
+          priority: 'B2',
+          predMins: 60,
+          actualMins: 60,
+          desc: 'پیاده‌روی تند و نرمش عصرگاهی #sample_week',
+        },
+      ],
+    },
+
+    // روز ۲: یکشنبه ۱۷ آبان ۱۴۰۵ (2026-11-08) — ۴ فعالیت (۲ کامل، ۱ ناقص، ۱ انجام‌نشده)، سرگرمی کمی بیش از سقف مجاز
+    {
+      dateIso: '2026-11-08',
+      jalaliLabel: '1405/08/17',
+      budgetMinutes: 480,
+      goalMinutes: 225,
+      goalExercises: 45,
+      goalTasks: 4,
+      studyTasks: [
+        {
+          subj: subjMath,
+          unitIdx: 1,
+          defaultUnitTitle: 'فصل ۲: عددهای اول',
+          st: stTest,
+          priority: 'A1',
+          initialPred: 75,
+          pred: 90, // ویرایش‌شده نسبت به پیش‌بینی اولیه (حفاظت از initial_predicted_minutes = 75)
+          targetEx: 25,
+          status: 'completed',
+          actualMins: 75,
+          actualEx: 25,
+          quality: '8.5',
+          desc: 'حل تمرین‌های غربال و اعداد اول #sample_week',
+          perfNote: 'تمام ۲۵ تست هدف با دقت بالا تحلیل شد',
+        },
+        {
+          subj: subjArabic,
+          unitIdx: 0,
+          defaultUnitTitle: 'درس ۱: مرور واژگان و قواعد پایه',
+          st: stRead,
+          priority: 'B1',
+          initialPred: 60,
+          pred: 60,
+          targetEx: 20,
+          status: 'completed',
+          actualMins: 50,
+          actualEx: 18,
+          quality: '7.5',
+          desc: 'ترجمه متن درس اول و تمرین قواعد عربی #sample_week',
+          perfNote: 'ترجمه کامل انجام شد، ۲ تست قواعد باقی ماند',
+        },
+        {
+          subj: subjEnglish,
+          unitIdx: 0,
+          defaultUnitTitle: 'Lesson 1: My Nationality',
+          st: stReview,
+          priority: 'B2',
+          initialPred: 45,
+          pred: 45,
+          targetEx: null,
+          status: 'partial',
+          actualMins: 30,
+          actualEx: 0,
+          quality: '7',
+          desc: 'تمرین مکالمه و دیکته واژگان انگلیسی #sample_week',
+          perfNote: 'واژگان مرور شد اما تمرین شنیداری ناقص ماند',
+        },
+        {
+          subj: subjSocial,
+          unitIdx: 0,
+          defaultUnitTitle: 'فصل ۱: تعاون و زندگی اجتماعی',
+          st: stRead,
+          priority: 'C1',
+          initialPred: 45,
+          pred: 45,
+          targetEx: null,
+          status: 'pending', // انجام‌نشده
+          actualMins: null,
+          actualEx: null,
+          quality: null,
+          desc: 'مطالعه درس اول مطالعات اجتماعی #sample_week',
+          perfNote: '',
+        },
+      ],
+      restrictedTasks: [
+        {
+          cat: recCatMedia,
+          priority: 'C2',
+          allowedMins: 60,
+          actualMins: 90, // ۳۰ دقیقه تخطی از سقف مجاز (Ci = 67%)
+          desc: 'وب‌گردی و تماشای ویدیوهای کوتاه #sample_week',
+          note: '۳۰ دقیقه بیشتر از سقف مجاز روزانه زمان صرف شد',
+        },
+      ],
+      essentialTasks: [
+        {
+          cat: essCatRest,
+          priority: 'B2',
+          predMins: 60,
+          actualMins: 60,
+          desc: 'استراحت نیمروزی و نظم شخصی #sample_week',
+        },
+      ],
+    },
+
+    // روز ۳: دوشنبه ۱۸ آبان ۱۴۰۵ (2026-11-09) — روز طلایی با تحقق ۱۰۰٪ همه برنامه‌ها و کنترل کامل سرگرمی
+    {
+      dateIso: '2026-11-09',
+      jalaliLabel: '1405/08/18',
+      budgetMinutes: 480,
+      goalMinutes: 225,
+      goalExercises: 60,
+      goalTasks: 3,
+      studyTasks: [
+        {
+          subj: subjScience,
+          unitIdx: 1,
+          defaultUnitTitle: 'فصل ۲: تغییرهای شیمیایی در خدمت زندگی',
+          st: stTest,
+          priority: 'A1',
+          initialPred: 90,
+          pred: 90,
+          targetEx: 30,
+          status: 'completed',
+          actualMins: 95,
+          actualEx: 35,
+          quality: '9.5',
+          desc: 'بررسی واکنش‌های شیمیایی و حل تست‌های تکمیلی #sample_week',
+          perfNote: '۵ تست بیشتر از هدف با کیفیت عالی حل شد',
+        },
+        {
+          subj: subjMath,
+          unitIdx: 1,
+          defaultUnitTitle: 'فصل ۲: عددهای اول و ک.م.م / ب.م.م',
+          st: stTest,
+          priority: 'A2',
+          initialPred: 75,
+          pred: 75,
+          targetEx: 20,
+          status: 'completed',
+          actualMins: 80,
+          actualEx: 22,
+          quality: '9',
+          desc: 'حل مسائل کاربردی ب.م.م و ک.م.م #sample_week',
+          perfNote: 'تمرکز بسیار بالا و بدون خطای محاسباتی',
+        },
+        {
+          subj: subjFarsi,
+          unitIdx: 1,
+          defaultUnitTitle: 'درس ۲: خوب جهان را ببین',
+          st: stRead,
+          priority: 'B1',
+          initialPred: 60,
+          pred: 60,
+          targetEx: 10,
+          status: 'completed',
+          actualMins: 60,
+          actualEx: 10,
+          quality: '8.5',
+          desc: 'مطالعه دستور زبان و قرابت معنایی درس دوم #sample_week',
+          perfNote: 'تکمیل کامل طبق برنامه',
+        },
+      ],
+      restrictedTasks: [
+        {
+          cat: recCatGame,
+          priority: 'C1',
+          allowedMins: 60,
+          actualMins: 40, // Ci = 100%
+          desc: 'تفریح و بازی فکری عصرگاهی #sample_week',
+          note: 'مدیریت عالی زمان تفریح',
+        },
+      ],
+      essentialTasks: [
+        {
+          cat: essCatSport,
+          priority: 'B2',
+          predMins: 60,
+          actualMins: 60,
+          desc: 'تمرین ورزشی و حرکات کششی #sample_week',
+        },
+      ],
+    },
+
+    // روز ۴: سه‌شنبه ۱۹ آبان ۱۴۰۵ (2026-11-10) — روز افت عملکرد (<50% تحقق درسی) و تخطی سرگرمی (نمایش جریمه -XP)
+    {
+      dateIso: '2026-11-10',
+      jalaliLabel: '1405/08/19',
+      budgetMinutes: 450,
+      goalMinutes: 180,
+      goalExercises: 35,
+      goalTasks: 3,
+      studyTasks: [
+        {
+          subj: subjArabic,
+          unitIdx: 1,
+          defaultUnitTitle: 'درس ۲: فعل مضارع و کاربرد آن',
+          st: stRead,
+          priority: 'A1',
+          initialPred: 60,
+          pred: 60,
+          targetEx: 15,
+          status: 'partial',
+          actualMins: 25, // کمتر از ۳۰ دقیقه و کیفیت متوسط رو به پایین
+          actualEx: 5,
+          quality: '5.5',
+          desc: 'مطالعه قواعد فعل مضارع عربی #sample_week',
+          perfNote: 'به دلیل خستگی فقط بخشی از درسنامه خوانده شد',
+        },
+        {
+          subj: subjMath,
+          unitIdx: 2,
+          defaultUnitTitle: 'فصل ۳: چندضلعی‌ها و تقارن',
+          st: stTest,
+          priority: 'A2',
+          initialPred: 75,
+          pred: 75,
+          targetEx: 20,
+          status: 'pending', // انجام‌نشده
+          actualMins: null,
+          actualEx: null,
+          quality: null,
+          desc: 'حل تمرین‌های زاویه داخلی و خارجی چندضلعی‌ها #sample_week',
+          perfNote: '',
+        },
+        {
+          subj: subjSocial,
+          unitIdx: 0,
+          defaultUnitTitle: 'فصل ۱: تعاون و زندگی اجتماعی',
+          st: stRead,
+          priority: 'B2',
+          initialPred: 45,
+          pred: 45,
+          targetEx: null,
+          status: 'pending', // انجام‌نشده (دومین نوبت متوالی ازدست‌رفته مطالعات اجتماعی)
+          actualMins: null,
+          actualEx: null,
+          quality: null,
+          desc: 'جبران مطالعه عقب‌افتاده مطالعات اجتماعی #sample_week',
+          perfNote: '',
+        },
+      ],
+      restrictedTasks: [
+        {
+          cat: recCatMedia,
+          priority: 'C2',
+          allowedMins: 60,
+          actualMins: 120, // ۲ برابر سقف مجاز! (Ci = 50%)
+          desc: 'تماشای فیلم و گشت‌وگذار طولانی در شبکه‌های اجتماعی #sample_week',
+          note: 'تخطی ۶۰ دقیقه‌ای از سقف مجاز سرگرمی و افت تمرکز مطالعه',
+        },
+      ],
+      essentialTasks: [
+        {
+          cat: essCatRest,
+          priority: 'B2',
+          predMins: 60,
+          actualMins: 60,
+          desc: 'استراحت و خواب عصرگاهی #sample_week',
+        },
+      ],
+    },
+
+    // روز ۵: چهارشنبه ۲۰ آبان ۱۴۰۵ (2026-11-11) — روز بدون هدف تست (تغییر خودکار وزن‌های E به ۵۷.۱٪ زمان و ۴۲.۹٪ کیفیت)
+    {
+      dateIso: '2026-11-11',
+      jalaliLabel: '1405/08/20',
+      budgetMinutes: 480,
+      goalMinutes: 180,
+      goalExercises: 0,
+      goalTasks: 3,
+      studyTasks: [
+        {
+          subj: subjEnglish,
+          unitIdx: 1,
+          defaultUnitTitle: 'Lesson 2: My Weekdays',
+          st: stRead,
+          priority: 'A1',
+          initialPred: 60,
+          pred: 60,
+          targetEx: null,
+          status: 'completed',
+          actualMins: 65,
+          actualEx: 0,
+          quality: '8.5',
+          desc: 'مطالعه گرامر و جمله‌سازی روزهای هفته به انگلیسی #sample_week',
+          perfNote: 'تسلط کامل بر ساختار جملات بدون نیاز به تست چهارگزینه‌ای',
+        },
+        {
+          subj: subjSocial,
+          unitIdx: 1,
+          defaultUnitTitle: 'فصل ۲: دوره صفویه و شکوفایی ایران',
+          st: stRead,
+          priority: 'A2',
+          initialPred: 60,
+          pred: 60,
+          targetEx: null,
+          status: 'completed',
+          actualMins: 60,
+          actualEx: 0,
+          quality: '8',
+          desc: 'مطالعه تشریحی و خلاصه‌نویسی تاریخ صفویه #sample_week',
+          perfNote: 'نقشه ذهنی فصل دوم به‌طور کامل ترسیم شد',
+        },
+        {
+          subj: subjFarsi,
+          unitIdx: 2,
+          defaultUnitTitle: 'درس ۳: ارمغان ایران',
+          st: stReview,
+          priority: 'B1',
+          initialPred: 60,
+          pred: 60,
+          targetEx: null,
+          status: 'partial',
+          actualMins: 40,
+          actualEx: 0,
+          quality: '7.5',
+          desc: 'مرور تاریخ ادبیات و لغات مهم درس سوم فارسی #sample_week',
+          perfNote: 'لغات تکمیل شد؛ نگارش انشا باقی ماند',
+        },
+      ],
+      restrictedTasks: [
+        {
+          cat: recCatGame,
+          priority: 'C1',
+          allowedMins: 60,
+          actualMins: 55, // Ci = 100%
+          desc: 'سرگرمی کنترل‌شده در محدوده مجاز #sample_week',
+          note: 'رعایت سقف مجاز ۶۰ دقیقه',
+        },
+      ],
+      essentialTasks: [
+        {
+          cat: essCatSport,
+          priority: 'B2',
+          predMins: 45,
+          actualMins: 45,
+          desc: 'ورزش هوازی در خانه #sample_week',
+        },
+      ],
+    },
+
+    // روز ۶: پنجشنبه ۲۱ آبان ۱۴۰۵ (2026-11-12) — روز تست‌زنی و جمع‌بندی آخر هفته با ۲ فعالیت سرگرمی مجزا
+    {
+      dateIso: '2026-11-12',
+      jalaliLabel: '1405/08/21',
+      budgetMinutes: 540,
+      goalMinutes: 270,
+      goalExercises: 85,
+      goalTasks: 4,
+      studyTasks: [
+        {
+          subj: subjMath,
+          unitIdx: 2,
+          defaultUnitTitle: 'فصل ۳: چندضلعی‌ها و توازی',
+          st: stTest,
+          priority: 'A1',
+          initialPred: 90,
+          pred: 90,
+          targetEx: 35,
+          status: 'completed',
+          actualMins: 90,
+          actualEx: 35,
+          quality: '9',
+          desc: 'جبران کامل مبحث چندضلعی‌ها و حل تست‌های آزمونی #sample_week',
+          perfNote: 'تمام تست‌های هدف با دقت ۹۰٪ حل شد',
+        },
+        {
+          subj: subjScience,
+          unitIdx: 2,
+          defaultUnitTitle: 'فصل ۳: از درون اتم چه خبر',
+          st: stTest,
+          priority: 'A2',
+          initialPred: 75,
+          pred: 75,
+          targetEx: 25,
+          status: 'completed',
+          actualMins: 85,
+          actualEx: 28,
+          quality: '9',
+          desc: 'مطالعه ساختار اتم و حل تست‌های ذرات زیراتمی #sample_week',
+          perfNote: '۳ تست اضافه بر هدف حل شد',
+        },
+        {
+          subj: subjArabic,
+          unitIdx: 1,
+          defaultUnitTitle: 'درس ۲: تمرین‌های جامع فعل مضارع',
+          st: stTest,
+          priority: 'B1',
+          initialPred: 60,
+          pred: 60,
+          targetEx: 15,
+          status: 'completed',
+          actualMins: 55,
+          actualEx: 14,
+          quality: '8',
+          desc: 'تثبیت قواعد فعل مضارع و تست‌های ترجمه عربی #sample_week',
+          perfNote: 'جبران عقب‌ماندگی روز سه‌شنبه',
+        },
+        {
+          subj: subjEnglish,
+          unitIdx: 1,
+          defaultUnitTitle: 'Lesson 2: Practice & Workbook',
+          st: stTest,
+          priority: 'B2',
+          initialPred: 45,
+          pred: 45,
+          targetEx: 10,
+          status: 'partial',
+          actualMins: 30,
+          actualEx: 6,
+          quality: '6.5',
+          desc: 'حل تمرین‌های کتاب کار زبان انگلیسی #sample_week',
+          perfNote: '۶ تمرین اول کامل شد، صفحه آخر باقی ماند',
+        },
+      ],
+      restrictedTasks: [
+        {
+          cat: recCatGame,
+          priority: 'C1',
+          allowedMins: 60,
+          actualMins: 75, // Ci = 80%
+          desc: 'بازی ویدیویی عصر پنجشنبه #sample_week',
+          note: '۱۵ دقیقه بیشتر از سقف مجاز',
+        },
+        {
+          cat: recCatMedia,
+          priority: 'C2',
+          allowedMins: 30,
+          actualMins: 30, // Ci = 100%
+          desc: 'مرور پیام‌ها و فضای مجازی #sample_week',
+          note: 'دقیقاً در سقف مجاز ۳۰ دقیقه',
+        },
+      ],
+      essentialTasks: [
+        {
+          cat: essCatSport,
+          priority: 'B2',
+          predMins: 60,
+          actualMins: 60,
+          desc: 'فوتسال و ورزش گروهی پنجشنبه #sample_week',
+        },
+      ],
+    },
+
+    // روز ۷: جمعه ۲۲ آبان ۱۴۰۵ (2026-11-13) — روز مرور سبک‌تر و آزمونک پایان هفته
+    {
+      dateIso: '2026-11-13',
+      jalaliLabel: '1405/08/22',
+      budgetMinutes: 420,
+      goalMinutes: 165,
+      goalExercises: 35,
+      goalTasks: 3,
+      studyTasks: [
+        {
+          subj: subjFarsi,
+          unitIdx: 2,
+          defaultUnitTitle: 'مرور جامع درس‌های ۱ تا ۳ فارسی',
+          st: stReview,
+          priority: 'A1',
+          initialPred: 60,
+          pred: 60,
+          targetEx: 15,
+          status: 'completed',
+          actualMins: 60,
+          actualEx: 15,
+          quality: '8.5',
+          desc: 'آزمونک مرور هفتگی ادبیات فارسی #sample_week',
+          perfNote: 'تسلط کامل بر تاریخ ادبیات و آرایه‌ها',
+        },
+        {
+          subj: subjScience,
+          unitIdx: 2,
+          defaultUnitTitle: 'مرور فصل‌های ۱ تا ۳ علوم تجربی',
+          st: stReview,
+          priority: 'A2',
+          initialPred: 60,
+          pred: 60,
+          targetEx: 20,
+          status: 'completed',
+          actualMins: 65,
+          actualEx: 20,
+          quality: '9',
+          desc: 'تست‌زنی مروری شیمی و ساختار اتم #sample_week',
+          perfNote: 'آمادگی کامل برای آزمون کلاسی شنبه',
+        },
+        {
+          subj: subjSocial,
+          unitIdx: 1,
+          defaultUnitTitle: 'مرور فصل‌های ۱ و ۲ مطالعات اجتماعی',
+          st: stReview,
+          priority: 'B1',
+          initialPred: 45,
+          pred: 45,
+          targetEx: null,
+          status: 'completed',
+          actualMins: 40,
+          actualEx: 0,
+          quality: '7.5',
+          desc: 'مرور خلاصه‌ها و سوالات تشریحی مطالعات اجتماعی #sample_week',
+          perfNote: 'مرور کامل نکات مهم هفته',
+        },
+      ],
+      restrictedTasks: [
+        {
+          cat: recCatGame,
+          priority: 'C1',
+          allowedMins: 90,
+          actualMins: 90, // Ci = 100%
+          desc: 'تفریح و تماشای فیلم روز جمعه در سقف مجاز #sample_week',
+          note: 'استفاده دقیق به اندازه سقف مجاز ۹۰ دقیقه‌ای روز جمعه',
+        },
+      ],
+      essentialTasks: [
+        {
+          cat: essCatRest,
+          priority: 'B2',
+          predMins: 75,
+          actualMins: 75,
+          desc: 'استراحت پایان هفته و آماده‌سازی برنامه هفته بعد #sample_week',
+        },
+      ],
+    },
+  ];
+
+  const subjectsUsed = new Set<string>();
+  let activeStudyDaysCount = 0;
+
+  for (const day of weekBlueprints) {
+    let sortOrder = 1;
+    const createdBaseIso = `${day.dateIso}T07:30:00.000Z`;
+
+    timeBudgets.push({
+      plan_date: day.dateIso,
+      budget_minutes: day.budgetMinutes,
+      input_unit: 'hours',
+      updated_at: createdBaseIso,
+    });
+
+    studyGoals.push({
+      goal_date: day.dateIso,
+      target_study_minutes: day.goalMinutes,
+      target_exercises_count: day.goalExercises,
+      target_completed_tasks: day.goalTasks,
+      custom_goals: [],
+      updated_at: createdBaseIso,
+    });
+
+    let hasLoggedStudyToday = false;
+
+    day.studyTasks.forEach((task, idx) => {
+      const planId = `${SAMPLE_WEEK_PREFIX}plan_${day.dateIso}_s${idx + 1}`;
+      const unitInfo = pickUnit(task.subj.id, task.unitIdx, task.defaultUnitTitle);
+      subjectsUsed.add(task.subj.id);
+
+      plans.push({
+        id: planId,
+        plan_date: day.dateIso,
+        category_id: studyCat.id,
+        category_title_snapshot: studyCat.title,
+        is_study: 1,
+        activity_group_snapshot: 'educational',
+        subject_id: task.subj.id,
+        subject_name_snapshot: task.subj.name,
+        unit_id: unitInfo.id,
+        unit_title_snapshot: unitInfo.title,
+        study_type_id: task.st.id,
+        study_type_title_snapshot: task.st.title,
+        priority_code: task.priority,
+        initial_predicted_minutes: task.initialPred,
+        predicted_minutes: task.pred,
+        target_exercises: task.targetEx,
+        reminder_time: null,
+        description: task.desc,
+        status: task.status,
+        custom_sort_order: sortOrder++,
+        created_at: `${day.dateIso}T08:0${idx}:00.000Z`,
+        updated_at: `${day.dateIso}T20:0${idx}:00.000Z`,
+      });
+
+      if (task.status !== 'pending' && task.actualMins !== null) {
+        hasLoggedStudyToday = true;
+        performances.push({
+          id: `${SAMPLE_WEEK_PREFIX}perf_${day.dateIso}_s${idx + 1}`,
+          plan_id: planId,
+          actual_minutes: task.actualMins,
+          exercises_count: task.actualEx,
+          learning_quality: task.quality,
+          completion_status: task.status,
+          notes: task.perfNote,
+          logged_at: `${day.dateIso}T20:1${idx}:00.000Z`,
+          updated_at: `${day.dateIso}T20:1${idx}:00.000Z`,
+        });
+      }
+    });
+
+    if (hasLoggedStudyToday) {
+      activeStudyDaysCount++;
+    }
+
+    day.restrictedTasks.forEach((rec, idx) => {
+      const planId = `${SAMPLE_WEEK_PREFIX}plan_${day.dateIso}_r${idx + 1}`;
+      plans.push({
+        id: planId,
+        plan_date: day.dateIso,
+        category_id: rec.cat.id,
+        category_title_snapshot: rec.cat.title,
+        is_study: 0,
+        activity_group_snapshot: 'restricted',
+        subject_id: null,
+        subject_name_snapshot: null,
+        unit_id: null,
+        unit_title_snapshot: null,
+        study_type_id: null,
+        study_type_title_snapshot: null,
+        priority_code: rec.priority,
+        initial_predicted_minutes: rec.allowedMins,
+        predicted_minutes: rec.allowedMins,
+        target_exercises: null,
+        reminder_time: null,
+        description: rec.desc,
+        status: 'completed',
+        custom_sort_order: sortOrder++,
+        created_at: `${day.dateIso}T18:0${idx}:00.000Z`,
+        updated_at: `${day.dateIso}T21:3${idx}:00.000Z`,
+      });
+
+      performances.push({
+        id: `${SAMPLE_WEEK_PREFIX}perf_${day.dateIso}_r${idx + 1}`,
+        plan_id: planId,
+        actual_minutes: rec.actualMins,
+        exercises_count: null,
+        learning_quality: null,
+        completion_status: 'completed',
+        notes: rec.note,
+        logged_at: `${day.dateIso}T21:3${idx}:00.000Z`,
+        updated_at: `${day.dateIso}T21:3${idx}:00.000Z`,
+      });
+    });
+
+    day.essentialTasks.forEach((ess, idx) => {
+      const planId = `${SAMPLE_WEEK_PREFIX}plan_${day.dateIso}_e${idx + 1}`;
+      plans.push({
+        id: planId,
+        plan_date: day.dateIso,
+        category_id: ess.cat.id,
+        category_title_snapshot: ess.cat.title,
+        is_study: 0,
+        activity_group_snapshot: 'essential',
+        subject_id: null,
+        subject_name_snapshot: null,
+        unit_id: null,
+        unit_title_snapshot: null,
+        study_type_id: null,
+        study_type_title_snapshot: null,
+        priority_code: ess.priority,
+        initial_predicted_minutes: ess.predMins,
+        predicted_minutes: ess.predMins,
+        target_exercises: null,
+        reminder_time: null,
+        description: ess.desc,
+        status: 'completed',
+        custom_sort_order: sortOrder++,
+        created_at: `${day.dateIso}T14:0${idx}:00.000Z`,
+        updated_at: `${day.dateIso}T16:0${idx}:00.000Z`,
+      });
+
+      performances.push({
+        id: `${SAMPLE_WEEK_PREFIX}perf_${day.dateIso}_e${idx + 1}`,
+        plan_id: planId,
+        actual_minutes: ess.actualMins,
+        exercises_count: null,
+        learning_quality: null,
+        completion_status: 'completed',
+        notes: 'انجام طبق برنامه روزانه',
+        logged_at: `${day.dateIso}T16:0${idx}:00.000Z`,
+        updated_at: `${day.dateIso}T16:0${idx}:00.000Z`,
+      });
+    });
+  }
+
+  return {
+    plans,
+    performances,
+    timeBudgets,
+    studyGoals,
+    stats: {
+      daysCount: weekBlueprints.length,
+      activeStudyDaysCount,
+      plansCount: plans.length,
+      performancesCount: performances.length,
+      subjectsCoveredCount: subjectsUsed.size,
+    },
+  };
+}
+
