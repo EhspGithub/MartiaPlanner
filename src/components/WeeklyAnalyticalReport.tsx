@@ -395,7 +395,7 @@ function buildTimeframeAdvisory(
   }
 
   if (
-    currentXp.totalXp >= 150 &&
+    currentXp.totalXp >= 15 &&
     ((avgQuality !== null && avgQuality < 6.5) || timeAchievementPct < 60)
   ) {
     improvements.push({

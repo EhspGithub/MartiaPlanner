@@ -32,6 +32,7 @@ import {
 } from './WeeklyAnalyticalReport.tsx';
 import { PerformanceAnalyticsView } from './PerformanceAnalyticsView.tsx';
 import { XpCoinBadge } from './XpCoinBadge.tsx';
+import { LevelEmblemBadge, StepSegmentDots } from './LevelIdentityCard.tsx';
 
 export const DashboardView: React.FC = () => {
   const [range] = useState<'today' | 'week' | 'month'>('today');
@@ -154,204 +155,312 @@ export const DashboardView: React.FC = () => {
       </div>
 
       {/* =====================================================================
-          DEDICATED FULL-WIDTH USER LEVEL, XP PROGRESSION & VELOCITY CARD
+          DEDICATED FULL-WIDTH USER LEVEL (1..13 × 3 STEPS = 39 STAGES),
+          XP PROGRESSION & VELOCITY CARD
       ===================================================================== */}
-      <div className="rounded-3xl border border-indigo-200/80 dark:border-indigo-900/60 bg-gradient-to-l from-indigo-50/70 via-white to-violet-50/50 dark:from-slate-900 dark:via-slate-900/95 dark:to-indigo-950/30 p-5 sm:p-6 shadow-xs space-y-4">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
-          {/* Right Column (Section 2): Permanent Level Identity & 3-Line Vertical Summary */}
-          <div className="lg:col-span-4 flex items-center gap-4 border-b lg:border-b-0 lg:border-l border-slate-200/80 dark:border-slate-800 pb-4 lg:pb-0 lg:pl-5">
-            <div className="relative shrink-0">
-              <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-gradient-to-br from-amber-400 via-orange-500 to-indigo-600 p-0.5 shadow-md shadow-amber-500/15">
-                <div className="w-full h-full rounded-[14px] bg-slate-950/90 text-white flex flex-col items-center justify-center">
-                  <span className="text-[10px] font-bold text-amber-300 leading-none">
-                    LEVEL
-                  </span>
-                  <span className="text-xl sm:text-2xl font-black text-white tabular-nums leading-tight mt-0.5">
-                    {toPersianDigits(levelProgress.level)}
-                  </span>
-                </div>
-              </div>
-              <div className="-bottom-1.5 -right-1.5 absolute w-7 h-7 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center text-sm shadow-xs border-2 border-white dark:border-slate-900">
-                <Crown className="w-3.5 h-3.5" />
-              </div>
-            </div>
+      {(() => {
+        const { palette } = levelProgress;
+        const isDarkLux = Boolean(palette.isDarkLuxury);
 
-            {/* Strictly Three Clean Vertically Aligned Lines (Section 2) */}
-            <div className="min-w-0 flex flex-col justify-center space-y-1">
-              <div className="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400 leading-tight">
-                سطح کل
-              </div>
-              <div className="text-sm sm:text-base font-black text-slate-900 dark:text-white truncate leading-snug">
-                سطح {toPersianDigits(levelProgress.level)} – {levelProgress.rankTitle}{' '}
-                <span>{levelProgress.rankBadgeEmoji}</span>
-              </div>
-              <div className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate leading-tight">
-                پله بعدی (سطح {toPersianDigits(levelProgress.level + 1)}):{' '}
-                <span className="text-indigo-600 dark:text-indigo-300 font-extrabold">
-                  {levelProgress.nextRankTitle}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Center Column: Level Step Progress Bar & Cumulative XP */}
-          <div className="lg:col-span-5 space-y-2.5 border-b lg:border-b-0 lg:border-l border-slate-200/80 dark:border-slate-800 pb-4 lg:pb-0 lg:pl-5">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                <Zap className="w-4 h-4 text-amber-500 shrink-0" />
-                <span>
-                  پیشرفت از سطح {toPersianDigits(levelProgress.level)} به{' '}
-                  {toPersianDigits(levelProgress.level + 1)}
-                </span>
-              </div>
-              <div className="font-black text-indigo-700 dark:text-indigo-300 tabular-nums flex items-center gap-1">
-                <span>
-                  {toPersianDigits(levelProgress.xpInCurrentLevel)} از{' '}
-                  {toPersianDigits(levelProgress.xpRequiredForCurrentStep)}
-                </span>
-                <XpCoinBadge size="xs" />
-                <span>این پله ({toPersianDigits(levelProgress.progressPercentage)}٪ پیشرفت)</span>
-              </div>
-            </div>
-
-            {/* Rich Progress Bar */}
-            <div className="relative h-4 w-full rounded-2xl bg-slate-200/90 dark:bg-slate-800 p-0.5 overflow-hidden shadow-inner">
+        return (
+          <div
+            className={`rounded-3xl border bg-gradient-to-l ${palette.cardBgClass} ${palette.cardBorderClass} p-5 sm:p-6 shadow-xs space-y-4 transition-all`}
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+              {/* Right Column: Level Crest (1..13 + Step Badge) & Identity Summary */}
               <div
-                className="h-full rounded-xl bg-gradient-to-l from-amber-400 via-indigo-500 to-violet-600 transition-all duration-500 relative overflow-hidden"
-                style={{ width: `${Math.max(4, levelProgress.progressPercentage)}%` }}
+                className={`lg:col-span-4 flex items-center gap-4 border-b lg:border-b-0 lg:border-l pb-4 lg:pb-0 lg:pl-5 ${
+                  isDarkLux
+                    ? 'border-white/15'
+                    : 'border-slate-200/80 dark:border-slate-800'
+                }`}
               >
-                <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.28)_50%,rgba(255,255,255,0)_100%)]" />
+                <LevelEmblemBadge
+                  level={levelProgress.level}
+                  stepNumber={levelProgress.stepNumber}
+                  palette={palette}
+                  size="lg"
+                />
+
+                <div className="min-w-0 flex flex-col justify-center space-y-1 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5 leading-tight">
+                    <span className={`text-[11px] font-extrabold ${palette.accentTextClass}`}>
+                      سطح کل ({toPersianDigits(levelProgress.stageNumber)} از ۳۹)
+                    </span>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${palette.pillBgClass}`}>
+                      {levelProgress.stepOrdinalFa}
+                    </span>
+                  </div>
+
+                  <div
+                    className={`flex flex-wrap items-center gap-1.5 text-sm sm:text-base font-black leading-snug ${
+                      isDarkLux ? 'text-white' : 'text-slate-900 dark:text-white'
+                    }`}
+                  >
+                    <span>
+                      Level {toPersianDigits(levelProgress.level)} — {levelProgress.stageNameFa}
+                    </span>
+                    <span
+                      dir="ltr"
+                      className={`text-xs font-black px-2 py-0.5 rounded-lg ${palette.pillBgClass}`}
+                    >
+                      {levelProgress.stageNameEn}
+                    </span>
+                  </div>
+
+                  <div
+                    className={`flex flex-wrap items-center gap-2 text-xs font-bold leading-tight ${
+                      isDarkLux ? 'text-slate-200' : 'text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    <span>
+                      عنوان افتخاری:{' '}
+                      <strong className={palette.accentTextClass}>
+                        {levelProgress.honoraryTitle}
+                      </strong>
+                    </span>
+                    <span>•</span>
+                    <span>{levelProgress.stepLabelFa}</span>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-400 tabular-nums">
-              <span className="inline-flex items-center gap-1">
-                <span>کل امتیاز تجمعی:</span>
-                <strong className="text-slate-900 dark:text-white font-black">
-                  {toPersianDigits(levelProgress.allTimeXp)}
-                </strong>
-                <XpCoinBadge size="xs" />
-              </span>
-              <span className="text-amber-700 dark:text-amber-300 font-extrabold inline-flex items-center gap-1">
-                <span>{toPersianDigits(levelProgress.xpRemainingToNextLevel)}</span>
-                <XpCoinBadge size="xs" />
-                <span>تا سطح {toPersianDigits(levelProgress.level + 1)}</span>
-              </span>
-            </div>
-          </div>
+              {/* Center Column: Step Segment Indicator, Progress Bar & Cumulative XP */}
+              <div
+                className={`lg:col-span-5 space-y-2.5 border-b lg:border-b-0 lg:border-l pb-4 lg:pb-0 lg:pl-5 ${
+                  isDarkLux
+                    ? 'border-white/15'
+                    : 'border-slate-200/80 dark:border-slate-800'
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div
+                    className={`font-extrabold flex items-center gap-1.5 ${
+                      isDarkLux ? 'text-white' : 'text-slate-800 dark:text-slate-200'
+                    }`}
+                  >
+                    {levelProgress.isMaxStage ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>بالاترین مرحله سیستم (Black Diamond Star) تکمیل شد</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 text-amber-500 shrink-0" />
+                        <span>
+                          پیشرفت تا{' '}
+                          <strong dir="ltr" className="inline-block">
+                            {levelProgress.nextStageNameEn}
+                          </strong>{' '}
+                          ({levelProgress.nextStageNameFa})
+                        </span>
+                      </>
+                    )}
+                  </div>
 
-          {/* Left Column (Section 3): Redesigned 2-Line Today's Earned XP & Working Accordion Toggle */}
-          <div className="lg:col-span-3 flex flex-col justify-center">
-            <div className="rounded-2xl bg-indigo-600/8 dark:bg-indigo-500/10 border border-indigo-200/70 dark:border-indigo-800/60 px-3.5 py-3 space-y-2">
-              {/* Line 1: Single-line Centered Title */}
-              <div className="text-xs font-extrabold text-slate-700 dark:text-slate-200 text-center whitespace-nowrap truncate">
-                XPهای کسب‌شده در {rangeLabelPersian}
-              </div>
-
-              {/* Line 2: Right = Earned XP amount + unit | Left = Working Accordion Toggle Button */}
-              <div className="flex items-center justify-between gap-2 pt-0.5">
-                <div className="text-base sm:text-lg font-black text-indigo-700 dark:text-indigo-300 tabular-nums flex items-center gap-1 shrink-0">
-                  <span>{toPersianDigits(rangeXpBreakdown.totalXp)}</span>
-                  <XpCoinBadge size="sm" />
-                  <span className="text-xs font-extrabold">امتیاز</span>
+                  <StepSegmentDots
+                    stepNumber={levelProgress.stepNumber}
+                    palette={palette}
+                    isDarkSurface={isDarkLux}
+                  />
                 </div>
 
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowXpFormulaGuide((prev) => !prev);
-                  }}
-                  aria-expanded={showXpFormulaGuide}
-                  className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-[11px] font-extrabold transition-all cursor-pointer shrink-0 shadow-2xs ${
-                    showXpFormulaGuide
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-300 hover:border-indigo-400'
+                {/* Rich Progress Bar */}
+                <div
+                  className={`relative h-4 w-full rounded-2xl p-0.5 overflow-hidden shadow-inner ${
+                    isDarkLux ? 'bg-white/15' : 'bg-slate-200/90 dark:bg-slate-800'
                   }`}
                 >
-                  <Info className="w-3.5 h-3.5 shrink-0" />
-                  <span className="whitespace-nowrap">ریز محاسبات XP</span>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${
-                      showXpFormulaGuide ? 'rotate-180' : ''
+                  <div
+                    className={`h-full rounded-xl bg-gradient-to-l ${palette.barGradientClass} transition-all duration-500 relative overflow-hidden`}
+                    style={{
+                      width: `${
+                        levelProgress.isMaxStage
+                          ? 100
+                          : Math.max(4, levelProgress.progressPercentage)
+                      }%`,
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.28)_50%,rgba(255,255,255,0)_100%)]" />
+                  </div>
+                </div>
+
+                <div
+                  className={`flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold tabular-nums ${
+                    isDarkLux ? 'text-slate-200' : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <span>XP کل فعلی:</span>
+                    <strong
+                      className={`font-black ${
+                        isDarkLux ? 'text-white' : 'text-slate-900 dark:text-white'
+                      }`}
+                    >
+                      {toPersianDigits(levelProgress.allTimeXp)}
+                    </strong>
+                    <XpCoinBadge size="xs" />
+                    {!levelProgress.isMaxStage && (
+                      <span className="opacity-85">
+                        ({toPersianDigits(levelProgress.xpInCurrentLevel)} از{' '}
+                        {toPersianDigits(levelProgress.xpRequiredForCurrentStep)} این پله •{' '}
+                        {toPersianDigits(levelProgress.progressPercentage)}٪)
+                      </span>
+                    )}
+                  </span>
+
+                  {levelProgress.isMaxStage ? (
+                    <span className="inline-flex items-center gap-1 font-black text-emerald-400">
+                      <Crown className="w-3.5 h-3.5" />
+                      <span>تکمیل ۱۰۰٪ تمام ۳۹ مرحله</span>
+                    </span>
+                  ) : (
+                    <span className={`font-extrabold inline-flex items-center gap-1 ${palette.accentTextClass}`}>
+                      <span>{toPersianDigits(levelProgress.xpRemainingToNextLevel)}</span>
+                      <XpCoinBadge size="xs" />
+                      <span>
+                        نیاز تا {levelProgress.nextStageNameEn} (آستانه{' '}
+                        {toPersianDigits(levelProgress.nextLevelTargetXp)})
+                      </span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Left Column: Today's Earned XP & Accordion Toggle */}
+              <div className="lg:col-span-3 flex flex-col justify-center">
+                <div
+                  className={`rounded-2xl border px-3.5 py-3 space-y-2 ${
+                    isDarkLux
+                      ? 'bg-white/10 border-white/20 text-white'
+                      : 'bg-indigo-600/8 dark:bg-indigo-500/10 border-indigo-200/70 dark:border-indigo-800/60'
+                  }`}
+                >
+                  <div
+                    className={`text-xs font-extrabold text-center whitespace-nowrap truncate ${
+                      isDarkLux ? 'text-slate-100' : 'text-slate-700 dark:text-slate-200'
                     }`}
-                  />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+                  >
+                    XPهای کسب‌شده در {rangeLabelPersian}
+                  </div>
 
-        {/* Expandable XP Formula Guide — directly attached below the Today XP card row (Section 3) */}
-        {showXpFormulaGuide && (
-          <div className="pt-3 border-t border-indigo-200/70 dark:border-slate-800 text-xs animate-in fade-in duration-150">
-            <div className="rounded-2xl bg-slate-50/95 dark:bg-slate-800/60 border border-indigo-200/80 dark:border-slate-700/80 p-4 space-y-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <div className="font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
-                  <span>ریز محاسبه امتیاز عملکرد (XP) در بازه «{rangeLabelPersian}»</span>
-                </div>
-                <span className="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-300 tabular-nums">
-                  مجموع: {toPersianDigits(rangeXpBreakdown.totalXp)} XP
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 tabular-nums">
-                <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 px-3 py-2 flex items-center justify-between">
-                  <span className="text-slate-600 dark:text-slate-300">
-                    ۱. فعالیت کامل ({toPersianDigits(rangeXpBreakdown.completedCount)} × ۵۰):
-                  </span>
-                  <span className="font-black text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1">
-                    <span>{toPersianDigits(rangeXpBreakdown.completedActivitiesXp)}</span>
-                    <XpCoinBadge size="xs" />
-                  </span>
-                </div>
-                <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 px-3 py-2 flex items-center justify-between">
-                  <span className="text-slate-600 dark:text-slate-300">
-                    ۲. فعالیت ناقص ({toPersianDigits(rangeXpBreakdown.partialCount)} × ۲۵):
-                  </span>
-                  <span className="font-black text-amber-600 dark:text-amber-400 inline-flex items-center gap-1">
-                    <span>{toPersianDigits(rangeXpBreakdown.partialActivitiesXp)}</span>
-                    <XpCoinBadge size="xs" />
-                  </span>
-                </div>
-                <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 px-3 py-2 flex items-center justify-between">
-                  <span className="text-slate-600 dark:text-slate-300">
-                    ۳. زمان مطالعه ({toPersianDigits(rangeXpBreakdown.actualStudyMinutes)} دقیقه ÷ ۵):
-                  </span>
-                  <span className="font-black text-indigo-600 dark:text-indigo-400 inline-flex items-center gap-1">
-                    <span>{toPersianDigits(rangeXpBreakdown.studyMinutesXp)}</span>
-                    <XpCoinBadge size="xs" />
-                  </span>
-                </div>
-                <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 px-3 py-2 flex items-center justify-between">
-                  <span className="text-slate-600 dark:text-slate-300">
-                    ۴. حل تمرین ({toPersianDigits(rangeXpBreakdown.exercisesCount)} × ۲):
-                  </span>
-                  <span className="font-black text-blue-600 dark:text-blue-400 inline-flex items-center gap-1">
-                    <span>{toPersianDigits(rangeXpBreakdown.exercisesXp)}</span>
-                    <XpCoinBadge size="xs" />
-                  </span>
-                </div>
-                <div className="sm:col-span-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 px-3 py-2 flex items-center justify-between">
-                  <span className="text-slate-600 dark:text-slate-300">
-                    ۵. پاداش کیفیت یادگیری (نمره کیفیت ۰ تا ۱۰ هر نوبت مطالعه × ۲):
-                  </span>
-                  <span className="font-black text-purple-600 dark:text-purple-400 inline-flex items-center gap-1">
-                    <span>{toPersianDigits(rangeXpBreakdown.qualityBonusXp)}</span>
-                    <XpCoinBadge size="xs" />
-                  </span>
+                  <div className="flex items-center justify-between gap-2 pt-0.5">
+                    <div
+                      className={`text-base sm:text-lg font-black tabular-nums flex items-center gap-1 shrink-0 ${
+                        isDarkLux ? 'text-amber-300' : 'text-indigo-700 dark:text-indigo-300'
+                      }`}
+                    >
+                      <span>{toPersianDigits(rangeXpBreakdown.totalXp)}</span>
+                      <XpCoinBadge size="sm" />
+                      <span className="text-xs font-extrabold">امتیاز</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowXpFormulaGuide((prev) => !prev);
+                      }}
+                      aria-expanded={showXpFormulaGuide}
+                      className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-[11px] font-extrabold transition-all cursor-pointer shrink-0 shadow-2xs ${
+                        showXpFormulaGuide
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : isDarkLux
+                          ? 'bg-slate-900 border-white/20 text-white hover:border-violet-400'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-300 hover:border-indigo-400'
+                      }`}
+                    >
+                      <Info className="w-3.5 h-3.5 shrink-0" />
+                      <span className="whitespace-nowrap">ریز محاسبات XP</span>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${
+                          showXpFormulaGuide ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* ===================================================================
-            SECTION 4: MASTER COLLAPSIBLE ACCORDION FOR THE 5 XP ANALYSIS CARDS
-            («تحلیل روند پیشرفت و رشد تحصیلی»)
-        =================================================================== */}
-        <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800/90">
-          <div className="rounded-2xl border border-indigo-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/70 overflow-hidden">
+            {/* Expandable 1/10th Scale XP Formula Guide */}
+            {showXpFormulaGuide && (
+              <div
+                className={`pt-3 border-t text-xs animate-in fade-in duration-150 ${
+                  isDarkLux ? 'border-white/15' : 'border-indigo-200/70 dark:border-slate-800'
+                }`}
+              >
+                <div className="rounded-2xl bg-slate-50/95 dark:bg-slate-800/90 text-slate-900 dark:text-white border border-indigo-200/80 dark:border-slate-700/80 p-4 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>ریز محاسبه امتیاز عملکرد (XP) در بازه «{rangeLabelPersian}»</span>
+                    </div>
+                    <span className="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-300 tabular-nums">
+                      مجموع: {toPersianDigits(rangeXpBreakdown.totalXp)} XP
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 tabular-nums">
+                    <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 px-3 py-2 flex items-center justify-between">
+                      <span className="text-slate-600 dark:text-slate-300">
+                        ۱. فعالیت کامل ({toPersianDigits(rangeXpBreakdown.completedCount)} × ۵):
+                      </span>
+                      <span className="font-black text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1">
+                        <span>{toPersianDigits(rangeXpBreakdown.completedActivitiesXp)}</span>
+                        <XpCoinBadge size="xs" />
+                      </span>
+                    </div>
+                    <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 px-3 py-2 flex items-center justify-between">
+                      <span className="text-slate-600 dark:text-slate-300">
+                        ۲. فعالیت ناقص ({toPersianDigits(rangeXpBreakdown.partialCount)} × ۲٫۵):
+                      </span>
+                      <span className="font-black text-amber-600 dark:text-amber-400 inline-flex items-center gap-1">
+                        <span>{toPersianDigits(rangeXpBreakdown.partialActivitiesXp)}</span>
+                        <XpCoinBadge size="xs" />
+                      </span>
+                    </div>
+                    <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 px-3 py-2 flex items-center justify-between">
+                      <span className="text-slate-600 dark:text-slate-300">
+                        ۳. زمان مطالعه ({toPersianDigits(rangeXpBreakdown.actualStudyMinutes)} دقیقه ÷ ۵۰):
+                      </span>
+                      <span className="font-black text-indigo-600 dark:text-indigo-400 inline-flex items-center gap-1">
+                        <span>{toPersianDigits(rangeXpBreakdown.studyMinutesXp)}</span>
+                        <XpCoinBadge size="xs" />
+                      </span>
+                    </div>
+                    <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 px-3 py-2 flex items-center justify-between">
+                      <span className="text-slate-600 dark:text-slate-300">
+                        ۴. حل تمرین ({toPersianDigits(rangeXpBreakdown.exercisesCount)} × ۰٫۲):
+                      </span>
+                      <span className="font-black text-blue-600 dark:text-blue-400 inline-flex items-center gap-1">
+                        <span>{toPersianDigits(rangeXpBreakdown.exercisesXp)}</span>
+                        <XpCoinBadge size="xs" />
+                      </span>
+                    </div>
+                    <div className="sm:col-span-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 px-3 py-2 flex items-center justify-between">
+                      <span className="text-slate-600 dark:text-slate-300">
+                        ۵. پاداش کیفیت یادگیری (نمره کیفیت ۰ تا ۱۰ هر نوبت مطالعه × ۰٫۲):
+                      </span>
+                      <span className="font-black text-purple-600 dark:text-purple-400 inline-flex items-center gap-1">
+                        <span>{toPersianDigits(rangeXpBreakdown.qualityBonusXp)}</span>
+                        <XpCoinBadge size="xs" />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===================================================================
+                MASTER COLLAPSIBLE ACCORDION FOR THE 5 XP ANALYSIS CARDS
+                («تحلیل روند پیشرفت و رشد تحصیلی»)
+            =================================================================== */}
+            <div
+              className={`pt-3 border-t ${
+                isDarkLux ? 'border-white/15' : 'border-slate-200/80 dark:border-slate-800/90'
+              }`}
+            >
+              <div className="rounded-2xl border border-indigo-200/70 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 text-slate-900 dark:text-white overflow-hidden">
             <button
               type="button"
               onClick={() => setIsXpVelocityOpen((prev) => !prev)}
@@ -494,7 +603,9 @@ export const DashboardView: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
+          </div>
+        );
+      })()}
 
       {/* Comprehensive Performance Evaluation & Analytics Section (includes all 7 charts) */}
       <PerformanceAnalyticsView />

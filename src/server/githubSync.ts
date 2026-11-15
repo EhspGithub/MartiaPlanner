@@ -83,7 +83,11 @@ function collectProjectFiles(dirPath: string, baseDir: string): Array<{ relative
   const results: Array<{ relativePath: string; fullPath: string }> = [];
 
   for (const entry of entries) {
-    if (IGNORED_DIRS.has(entry.name) || IGNORED_FILES.has(entry.name)) {
+    if (
+      IGNORED_DIRS.has(entry.name) ||
+      IGNORED_FILES.has(entry.name) ||
+      /^MartiaPlanner-v.*\.html$/i.test(entry.name)
+    ) {
       continue;
     }
     const fullPath = path.join(dirPath, entry.name);

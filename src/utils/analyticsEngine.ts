@@ -1279,8 +1279,26 @@ export function compareTwoPeriods(
 }
 
 // ============================================================================
-// 9. ENHANCED XP & PERMANENT LEVEL PROGRESSION ENGINE
+// 9. UNIFIED 1/10 XP ENGINE & 13-LEVEL × 3-STEP (39 STAGES) PROGRESSION SYSTEM
 // ============================================================================
+export const XP_SCALE_WEIGHTS = {
+  COMPLETED_ACTIVITY: 5,
+  PARTIAL_ACTIVITY: 2.5,
+  STUDY_MINUTES_DIVISOR: 50, // 0.02 XP per actual study minute (1/10th of /5)
+  EXERCISE_UNIT: 0.2,
+  QUALITY_POINT_MULTIPLIER: 0.2, // max 2 XP per evaluated session (10 * 0.2)
+} as const;
+
+export function roundXp2(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export function roundRate1(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round((value + Number.EPSILON) * 10) / 10;
+}
+
 export interface XpBreakdown {
   totalXp: number;
   completedActivitiesXp: number;
@@ -1295,49 +1313,463 @@ export interface XpBreakdown {
   qualityEvaluatedCount: number;
 }
 
+export interface LevelVisualPalette {
+  primaryHex: string;
+  secondaryHex: string;
+  glowHex: string;
+  badgeTextHex: string;
+  cardBgClass: string;
+  cardBorderClass: string;
+  barGradientClass: string;
+  accentTextClass: string;
+  pillBgClass: string;
+  stepActiveClass: string;
+  isDarkLuxury?: boolean;
+}
+
+export interface LevelCatalogEntry {
+  levelNumber: number; // 1..13
+  nameFa: string;
+  nameEn: string;
+  honoraryTitle: string;
+  palette: LevelVisualPalette;
+}
+
+export type StepTierNumber = 1 | 2 | 3;
+
+export interface ProgressionStageMeta {
+  stageNumber: number; // 1..39
+  levelNumber: number; // 1..13
+  stepNumber: StepTierNumber; // 1 | 2 | 3
+  levelNameFa: string;
+  levelNameEn: string;
+  honoraryTitle: string;
+  stageNameEn: string; // e.g., "Diamond Plus"
+  stageNameFa: string; // e.g., "الماس پلاس"
+  stepSuffixEn: '' | 'Plus' | 'Star';
+  stepSuffixFa: '' | 'پلاس' | 'استار';
+  stepLabelFa: string; // "پله ۱ از ۳" | "پله ۲ از ۳" | "پله ۳ از ۳"
+  stepOrdinalFa: string; // "پله اول از سه پله" | "پله دوم از سه پله" | "پله سوم از سه پله"
+  minXp: number;
+  nextStageMinXp: number | null; // null on Stage 39
+  palette: LevelVisualPalette;
+}
+
 export interface UserLevelProgress {
-  level: number;
+  // Core 13-Level × 3-Step (39-Stage) Identity
+  stageNumber: number; // 1..39
+  totalStages: 39;
+  level: number; // 1..13
+  stepNumber: StepTierNumber; // 1 | 2 | 3
+  levelNameFa: string;
+  levelNameEn: string;
+  honoraryTitle: string;
+  stageNameEn: string; // e.g. "Diamond Plus"
+  stageNameFa: string; // e.g. "الماس پلاس"
+  stepSuffixEn: '' | 'Plus' | 'Star';
+  stepLabelFa: string; // "پله ۲ از ۳"
+  stepOrdinalFa: string; // "پله دوم از سه پله"
+  palette: LevelVisualPalette;
+
+  // Next Stage Info
+  isMaxStage: boolean;
+  nextStageNumber: number | null;
+  nextLevel: number | null;
+  nextStageNameEn: string | null;
+  nextStageNameFa: string | null;
+  nextStepLabelFa: string | null;
+
+  // Compatibility aliases & Progress Metrics
   rankTitle: string;
   nextRankTitle: string;
   rankBadgeEmoji: string;
   allTimeXp: number;
-  currentLevelStartXp: number;
-  nextLevelTargetXp: number;
-  xpInCurrentLevel: number;
-  xpRequiredForCurrentStep: number;
-  xpRemainingToNextLevel: number;
-  progressPercentage: number;
+  currentLevelStartXp: number; // current stage start XP threshold
+  nextLevelTargetXp: number; // next stage XP threshold (equals currentLevelStartXp on Stage 39)
+  xpInCurrentLevel: number; // XP earned inside current step
+  xpRequiredForCurrentStep: number; // span required to complete current step
+  xpRemainingToNextLevel: number; // XP left to next step (0 on Stage 39)
+  progressPercentage: number; // 0..100 (100 on Stage 39)
 }
 
-const LEVEL_RANK_TITLES: Array<{ title: string; emoji: string }> = [
-  { title: 'نوآموز هدفمند', emoji: '🌱' },
-  { title: 'کاوشگر دانش', emoji: '🧭' },
-  { title: 'برنامه‌ریز پرتلاش', emoji: '⚡' },
-  { title: 'ستاره پیوستگی', emoji: '🌟' },
-  { title: 'قهرمان تمرکز', emoji: '🔥' },
-  { title: 'معمار موفقیت', emoji: '💎' },
-  { title: 'استاد برنامه‌ریزی و نخبگی', emoji: '👑' },
-];
+export const PROGRESSION_LEVELS_13: readonly LevelCatalogEntry[] = [
+  {
+    levelNumber: 1,
+    nameFa: 'سنگ',
+    nameEn: 'Stone',
+    honoraryTitle: 'آغازگر مسیر',
+    palette: {
+      primaryHex: '#78716c',
+      secondaryHex: '#57534e',
+      glowHex: 'rgba(120, 113, 108, 0.22)',
+      badgeTextHex: '#ffffff',
+      cardBgClass:
+        'from-stone-100/90 via-white to-stone-100/60 dark:from-stone-900/90 dark:via-slate-900 dark:to-stone-950/80',
+      cardBorderClass: 'border-stone-300/90 dark:border-stone-700/80',
+      barGradientClass: 'from-stone-400 via-stone-500 to-stone-600',
+      accentTextClass: 'text-stone-700 dark:text-stone-300',
+      pillBgClass: 'bg-stone-200/80 dark:bg-stone-800/90 text-stone-800 dark:text-stone-200',
+      stepActiveClass: 'bg-stone-600 text-white',
+    },
+  },
+  {
+    levelNumber: 2,
+    nameFa: 'مس',
+    nameEn: 'Copper',
+    honoraryTitle: 'در حال پیشرفت',
+    palette: {
+      primaryHex: '#c26d3a',
+      secondaryHex: '#9a4d22',
+      glowHex: 'rgba(194, 109, 58, 0.24)',
+      badgeTextHex: '#ffffff',
+      cardBgClass:
+        'from-orange-50/90 via-white to-amber-50/60 dark:from-orange-950/45 dark:via-slate-900 dark:to-amber-950/35',
+      cardBorderClass: 'border-orange-300/80 dark:border-orange-800/70',
+      barGradientClass: 'from-orange-400 via-amber-600 to-orange-700',
+      accentTextClass: 'text-orange-700 dark:text-orange-300',
+      pillBgClass: 'bg-orange-100/90 dark:bg-orange-950/70 text-orange-800 dark:text-orange-200',
+      stepActiveClass: 'bg-orange-600 text-white',
+    },
+  },
+  {
+    levelNumber: 3,
+    nameFa: 'آهن',
+    nameEn: 'Iron',
+    honoraryTitle: 'پرتلاش و استوار',
+    palette: {
+      primaryHex: '#64748b',
+      secondaryHex: '#475569',
+      glowHex: 'rgba(100, 116, 139, 0.24)',
+      badgeTextHex: '#ffffff',
+      cardBgClass:
+        'from-slate-100/95 via-white to-zinc-100/75 dark:from-slate-800/75 dark:via-slate-900 dark:to-zinc-900/75',
+      cardBorderClass: 'border-slate-300/90 dark:border-slate-700',
+      barGradientClass: 'from-slate-400 via-slate-500 to-zinc-600',
+      accentTextClass: 'text-slate-700 dark:text-slate-300',
+      pillBgClass: 'bg-slate-200/85 dark:bg-slate-800 text-slate-800 dark:text-slate-200',
+      stepActiveClass: 'bg-slate-600 text-white',
+    },
+  },
+  {
+    levelNumber: 4,
+    nameFa: 'برنز',
+    nameEn: 'Bronze',
+    honoraryTitle: 'تلاشگر پیگیر',
+    palette: {
+      primaryHex: '#b45309',
+      secondaryHex: '#78350f',
+      glowHex: 'rgba(180, 83, 9, 0.25)',
+      badgeTextHex: '#ffffff',
+      cardBgClass:
+        'from-amber-100/75 via-white to-orange-100/55 dark:from-amber-950/45 dark:via-slate-900 dark:to-stone-950/60',
+      cardBorderClass: 'border-amber-300/85 dark:border-amber-800/70',
+      barGradientClass: 'from-amber-500 via-amber-700 to-yellow-800',
+      accentTextClass: 'text-amber-800 dark:text-amber-300',
+      pillBgClass: 'bg-amber-100 dark:bg-amber-950/70 text-amber-900 dark:text-amber-200',
+      stepActiveClass: 'bg-amber-700 text-white',
+    },
+  },
+  {
+    levelNumber: 5,
+    nameFa: 'نیکل',
+    nameEn: 'Nickel',
+    honoraryTitle: 'متعهد به پیشرفت',
+    palette: {
+      primaryHex: '#7c8b99',
+      secondaryHex: '#52606d',
+      glowHex: 'rgba(124, 139, 153, 0.24)',
+      badgeTextHex: '#ffffff',
+      cardBgClass:
+        'from-zinc-100/90 via-slate-50 to-slate-200/60 dark:from-zinc-900/80 dark:via-slate-900 dark:to-slate-800/65',
+      cardBorderClass: 'border-zinc-300 dark:border-zinc-700',
+      barGradientClass: 'from-zinc-400 via-slate-400 to-slate-600',
+      accentTextClass: 'text-zinc-700 dark:text-zinc-300',
+      pillBgClass: 'bg-zinc-200/80 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200',
+      stepActiveClass: 'bg-zinc-600 text-white',
+    },
+  },
+  {
+    levelNumber: 6,
+    nameFa: 'نقره',
+    nameEn: 'Silver',
+    honoraryTitle: 'پیشرو',
+    palette: {
+      primaryHex: '#94a3b8',
+      secondaryHex: '#64748b',
+      glowHex: 'rgba(148, 163, 184, 0.30)',
+      badgeTextHex: '#0f172a',
+      cardBgClass:
+        'from-slate-200/70 via-white to-sky-50/55 dark:from-slate-800/80 dark:via-slate-900 dark:to-slate-800/50',
+      cardBorderClass: 'border-slate-300 dark:border-slate-600',
+      barGradientClass: 'from-slate-300 via-slate-400 to-sky-500',
+      accentTextClass: 'text-slate-700 dark:text-slate-200',
+      pillBgClass: 'bg-slate-200/90 dark:bg-slate-800 text-slate-800 dark:text-slate-100',
+      stepActiveClass: 'bg-slate-500 text-white',
+    },
+  },
+  {
+    levelNumber: 7,
+    nameFa: 'تیتانیوم',
+    nameEn: 'Titanium',
+    honoraryTitle: 'توانمند',
+    palette: {
+      primaryHex: '#4f6d8a',
+      secondaryHex: '#334e68',
+      glowHex: 'rgba(79, 109, 138, 0.28)',
+      badgeTextHex: '#ffffff',
+      cardBgClass:
+        'from-sky-100/75 via-white to-slate-100/80 dark:from-sky-950/45 dark:via-slate-900 dark:to-slate-800/70',
+      cardBorderClass: 'border-sky-300/80 dark:border-sky-800/70',
+      barGradientClass: 'from-sky-400 via-slate-500 to-indigo-600',
+      accentTextClass: 'text-sky-800 dark:text-sky-300',
+      pillBgClass: 'bg-sky-100/90 dark:bg-sky-950/70 text-sky-900 dark:text-sky-200',
+      stepActiveClass: 'bg-sky-700 text-white',
+    },
+  },
+  {
+    levelNumber: 8,
+    nameFa: 'طلا',
+    nameEn: 'Gold',
+    honoraryTitle: 'درخشان',
+    palette: {
+      primaryHex: '#eab308',
+      secondaryHex: '#ca8a04',
+      glowHex: 'rgba(234, 179, 8, 0.30)',
+      badgeTextHex: '#1e1b0d',
+      cardBgClass:
+        'from-yellow-100/85 via-white to-amber-50/80 dark:from-amber-950/45 dark:via-slate-900 dark:to-yellow-950/35',
+      cardBorderClass: 'border-amber-300/90 dark:border-amber-700/70',
+      barGradientClass: 'from-yellow-400 via-amber-500 to-orange-500',
+      accentTextClass: 'text-amber-700 dark:text-amber-300',
+      pillBgClass: 'bg-amber-100 dark:bg-amber-950/75 text-amber-900 dark:text-amber-200',
+      stepActiveClass: 'bg-amber-500 text-slate-950',
+    },
+  },
+  {
+    levelNumber: 9,
+    nameFa: 'زمرد',
+    nameEn: 'Emerald',
+    honoraryTitle: 'برجسته',
+    palette: {
+      primaryHex: '#10b981',
+      secondaryHex: '#047857',
+      glowHex: 'rgba(16, 185, 129, 0.28)',
+      badgeTextHex: '#ffffff',
+      cardBgClass:
+        'from-emerald-100/75 via-white to-teal-50/70 dark:from-emerald-950/45 dark:via-slate-900 dark:to-teal-950/35',
+      cardBorderClass: 'border-emerald-300/85 dark:border-emerald-800/70',
+      barGradientClass: 'from-emerald-400 via-emerald-500 to-teal-600',
+      accentTextClass: 'text-emerald-700 dark:text-emerald-300',
+      pillBgClass: 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-900 dark:text-emerald-200',
+      stepActiveClass: 'bg-emerald-600 text-white',
+    },
+  },
+  {
+    levelNumber: 10,
+    nameFa: 'پلاتینیوم',
+    nameEn: 'Platinum',
+    honoraryTitle: 'حرفه‌ای',
+    palette: {
+      primaryHex: '#06b6d4',
+      secondaryHex: '#0e7490',
+      glowHex: 'rgba(6, 182, 212, 0.28)',
+      badgeTextHex: '#ffffff',
+      cardBgClass:
+        'from-cyan-100/70 via-white to-indigo-50/70 dark:from-cyan-950/40 dark:via-slate-900 dark:to-indigo-950/40',
+      cardBorderClass: 'border-cyan-300/85 dark:border-cyan-800/70',
+      barGradientClass: 'from-cyan-400 via-teal-500 to-indigo-500',
+      accentTextClass: 'text-cyan-800 dark:text-cyan-300',
+      pillBgClass: 'bg-cyan-100/90 dark:bg-cyan-950/70 text-cyan-900 dark:text-cyan-200',
+      stepActiveClass: 'bg-cyan-600 text-white',
+    },
+  },
+  {
+    levelNumber: 11,
+    nameFa: 'یاقوت',
+    nameEn: 'Ruby',
+    honoraryTitle: 'نخبه',
+    palette: {
+      primaryHex: '#e11d48',
+      secondaryHex: '#9f1239',
+      glowHex: 'rgba(225, 29, 72, 0.28)',
+      badgeTextHex: '#ffffff',
+      cardBgClass:
+        'from-rose-100/80 via-white to-red-50/60 dark:from-rose-950/45 dark:via-slate-900 dark:to-red-950/35',
+      cardBorderClass: 'border-rose-300/85 dark:border-rose-800/70',
+      barGradientClass: 'from-rose-400 via-rose-600 to-red-700',
+      accentTextClass: 'text-rose-700 dark:text-rose-300',
+      pillBgClass: 'bg-rose-100 dark:bg-rose-950/70 text-rose-900 dark:text-rose-200',
+      stepActiveClass: 'bg-rose-600 text-white',
+    },
+  },
+  {
+    levelNumber: 12,
+    nameFa: 'الماس',
+    nameEn: 'Diamond',
+    honoraryTitle: 'استاد',
+    palette: {
+      primaryHex: '#0284c7',
+      secondaryHex: '#2563eb',
+      glowHex: 'rgba(56, 189, 248, 0.36)',
+      badgeTextHex: '#ffffff',
+      cardBgClass:
+        'from-sky-100/90 via-white to-blue-100/70 dark:from-sky-950/55 dark:via-slate-900 dark:to-blue-950/50',
+      cardBorderClass: 'border-sky-300/90 dark:border-sky-700/80',
+      barGradientClass: 'from-sky-300 via-cyan-400 to-blue-600',
+      accentTextClass: 'text-sky-700 dark:text-sky-300',
+      pillBgClass: 'bg-sky-100 dark:bg-sky-950/80 text-sky-900 dark:text-sky-200',
+      stepActiveClass: 'bg-sky-600 text-white',
+    },
+  },
+  {
+    levelNumber: 13,
+    nameFa: 'کربونادو',
+    nameEn: 'Black Diamond',
+    honoraryTitle: 'اسطوره',
+    palette: {
+      primaryHex: '#18181b',
+      secondaryHex: '#09090b',
+      glowHex: 'rgba(168, 85, 247, 0.34)',
+      badgeTextHex: '#f8fafc',
+      cardBgClass:
+        'from-zinc-900 via-slate-900 to-indigo-950 text-white',
+      cardBorderClass: 'border-violet-400/60 dark:border-violet-500/60',
+      barGradientClass: 'from-fuchsia-400 via-violet-400 to-sky-300',
+      accentTextClass: 'text-violet-300',
+      pillBgClass: 'bg-white/15 text-violet-100',
+      stepActiveClass: 'bg-violet-500 text-white',
+      isDarkLuxury: true,
+    },
+  },
+] as const;
 
-export function getLevelRankMeta(level: number): { title: string; emoji: string } {
-  const idx = Math.max(0, Math.min(LEVEL_RANK_TITLES.length - 1, level - 1));
-  return LEVEL_RANK_TITLES[idx];
+/**
+ * 39-Stage Global XP Thresholds (13 Levels × 3 Steps, calibrated for 1/10th XP scale):
+ * Step deltas strictly monotonically increase across all 38 transitions (+20 .. +945),
+ * placing early onboarding steps within Day 1 and culminating at Black Diamond Star (15,000 XP).
+ */
+export const GLOBAL_STAGE_THRESHOLDS: readonly number[] = [
+  0, 20, 45,
+  80, 125, 180,
+  250, 335, 435,
+  550, 685, 835,
+  1005, 1200, 1415,
+  1650, 1910, 2195,
+  2505, 2840, 3200,
+  3590, 4005, 4450,
+  4925, 5430, 5965,
+  6530, 7130, 7760,
+  8425, 9125, 9860,
+  10630, 11435, 12275,
+  13145, 14055, 15000,
+] as const;
+
+/**
+ * 39-Stage Subject XP Thresholds (Independent Subject Progression, calibrated to single-subject study scale):
+ * Step deltas monotonically increase (+6 .. +117) from Stone (0) to Black Diamond Star (2,000 Subject XP).
+ */
+export const SUBJECT_STAGE_THRESHOLDS: readonly number[] = [
+  0, 6, 13,
+  21, 30, 41,
+  54, 69, 86,
+  105, 126, 150,
+  176, 205, 237,
+  271, 308, 348,
+  391, 437, 487,
+  540, 596, 656,
+  719, 786, 856,
+  930, 1008, 1089,
+  1174, 1263, 1356,
+  1453, 1554, 1659,
+  1769, 1883, 2000,
+] as const;
+
+function buildStageMetaList(thresholds: readonly number[]): ProgressionStageMeta[] {
+  const stages: ProgressionStageMeta[] = [];
+  for (let i = 0; i < 39; i++) {
+    const levelIndex = Math.floor(i / 3);
+    const stepIndex = (i % 3) + 1; // 1 | 2 | 3
+    const levelEntry = PROGRESSION_LEVELS_13[levelIndex];
+    const stepNumber = stepIndex as StepTierNumber;
+
+    const stepSuffixEn: '' | 'Plus' | 'Star' =
+      stepNumber === 1 ? '' : stepNumber === 2 ? 'Plus' : 'Star';
+    const stepSuffixFa: '' | 'پلاس' | 'استار' =
+      stepNumber === 1 ? '' : stepNumber === 2 ? 'پلاس' : 'استار';
+
+    const stageNameEn = stepSuffixEn ? `${levelEntry.nameEn} ${stepSuffixEn}` : levelEntry.nameEn;
+    const stageNameFa = stepSuffixFa ? `${levelEntry.nameFa} ${stepSuffixFa}` : levelEntry.nameFa;
+    const stepLabelFa =
+      stepNumber === 1 ? 'پله ۱ از ۳' : stepNumber === 2 ? 'پله ۲ از ۳' : 'پله ۳ از ۳';
+    const stepOrdinalFa =
+      stepNumber === 1
+        ? 'پله اول از سه پله'
+        : stepNumber === 2
+        ? 'پله دوم از سه پله'
+        : 'پله سوم از سه پله';
+
+    stages.push({
+      stageNumber: i + 1,
+      levelNumber: levelEntry.levelNumber,
+      stepNumber,
+      levelNameFa: levelEntry.nameFa,
+      levelNameEn: levelEntry.nameEn,
+      honoraryTitle: levelEntry.honoraryTitle,
+      stageNameEn,
+      stageNameFa,
+      stepSuffixEn,
+      stepSuffixFa,
+      stepLabelFa,
+      stepOrdinalFa,
+      minXp: thresholds[i],
+      nextStageMinXp: i < 38 ? thresholds[i + 1] : null,
+      palette: levelEntry.palette,
+    });
+  }
+  return stages;
+}
+
+const GLOBAL_STAGES_CATALOG: readonly ProgressionStageMeta[] =
+  buildStageMetaList(GLOBAL_STAGE_THRESHOLDS);
+const SUBJECT_STAGES_CATALOG: readonly ProgressionStageMeta[] =
+  buildStageMetaList(SUBJECT_STAGE_THRESHOLDS);
+
+export function getAllGlobalStages(): readonly ProgressionStageMeta[] {
+  return GLOBAL_STAGES_CATALOG;
+}
+
+export function getAllSubjectStages(): readonly ProgressionStageMeta[] {
+  return SUBJECT_STAGES_CATALOG;
+}
+
+export function getLevelRankMeta(level: number): {
+  title: string;
+  emoji: string;
+  levelEntry: LevelCatalogEntry;
+} {
+  const idx = Math.max(0, Math.min(PROGRESSION_LEVELS_13.length - 1, level - 1));
+  const levelEntry = PROGRESSION_LEVELS_13[idx];
+  return {
+    title: `${levelEntry.nameFa} (${levelEntry.nameEn})`,
+    emoji: level >= 12 ? '💎' : level >= 8 ? '🏅' : '⚡',
+    levelEntry,
+  };
 }
 
 /**
- * Calculates the enhanced XP breakdown for a list of plans:
- * - Completed activity: +50 XP
- * - Partial activity: +25 XP
- * - Actual study time: +1 XP per 5 minutes of actual study (Math.floor(totalActualStudyMinutes / 5))
- * - Solved exercises/tests: +2 XP per exercise
- * - Learning quality bonus: +2 XP per quality score point (0..10) on each evaluated study session
+ * Unified 1/10th XP Calculator:
+ * - Completed activity: +5 XP
+ * - Partial activity: +2.5 XP
+ * - Actual study time: actualStudyMinutes / 50 XP (0.02 XP per minute)
+ * - Solved exercises/tests: +0.2 XP per exercise
+ * - Learning quality bonus: +(quality * 0.2) XP on each evaluated study session (max 2 XP/session)
  */
 export function calculateXpFromPlans(plans: DailyPlanItem[]): XpBreakdown {
   let completedCount = 0;
   let partialCount = 0;
   let actualStudyMinutes = 0;
   let exercisesCount = 0;
-  let qualityBonusXp = 0;
+  let rawQualityBonusXp = 0;
   let qualityEvaluatedCount = 0;
 
   for (const plan of plans) {
@@ -1356,23 +1788,33 @@ export function calculateXpFromPlans(plans: DailyPlanItem[]): XpBreakdown {
 
       const q = parseLearningQuality0To10(plan.performance.learning_quality);
       if (q !== null && mins > 0) {
-        qualityBonusXp += Math.round(q * 2);
+        rawQualityBonusXp += q * XP_SCALE_WEIGHTS.QUALITY_POINT_MULTIPLIER;
         qualityEvaluatedCount += 1;
       }
     }
   }
 
-  const completedActivitiesXp = completedCount * 50;
-  const partialActivitiesXp = partialCount * 25;
-  const studyMinutesXp = Math.floor(actualStudyMinutes / 5);
-  const exercisesXp = exercisesCount * 2;
+  const completedActivitiesXp = roundXp2(
+    completedCount * XP_SCALE_WEIGHTS.COMPLETED_ACTIVITY
+  );
+  const partialActivitiesXp = roundXp2(
+    partialCount * XP_SCALE_WEIGHTS.PARTIAL_ACTIVITY
+  );
+  const studyMinutesXp = roundXp2(
+    actualStudyMinutes / XP_SCALE_WEIGHTS.STUDY_MINUTES_DIVISOR
+  );
+  const exercisesXp = roundXp2(
+    exercisesCount * XP_SCALE_WEIGHTS.EXERCISE_UNIT
+  );
+  const qualityBonusXp = roundXp2(rawQualityBonusXp);
 
-  const totalXp =
+  const totalXp = roundXp2(
     completedActivitiesXp +
-    partialActivitiesXp +
-    studyMinutesXp +
-    exercisesXp +
-    qualityBonusXp;
+      partialActivitiesXp +
+      studyMinutesXp +
+      exercisesXp +
+      qualityBonusXp
+  );
 
   return {
     totalXp,
@@ -1390,64 +1832,312 @@ export function calculateXpFromPlans(plans: DailyPlanItem[]): XpBreakdown {
 }
 
 /**
- * Progressive level step formula:
- * Required XP to advance from Level L to L+1 = 250 + (L - 1) * 150
- * L1 -> L2: 250 XP (0..250)
- * L2 -> L3: 400 XP (250..650)
- * L3 -> L4: 550 XP (650..1200)
- * L4 -> L5: 700 XP (1200..1900)
- * L5 -> L6: 850 XP (1900..2750)
- * L6 -> L7: 1000 XP (2750..3750)
+ * Resolves any non-negative XP total against a 39-stage catalog.
  */
-export function calculateUserLevelProgress(allTimeXpInput: number): UserLevelProgress {
-  const allTimeXp = Math.max(0, Math.round(allTimeXpInput || 0));
-  let level = 1;
-  let currentLevelStartXp = 0;
-  let stepRequired = 250;
+function resolve39StageProgress(
+  xpInput: number,
+  catalog: readonly ProgressionStageMeta[]
+): UserLevelProgress {
+  const allTimeXp = roundXp2(Math.max(0, Number.isFinite(xpInput) ? xpInput : 0));
 
-  while (allTimeXp >= currentLevelStartXp + stepRequired) {
-    currentLevelStartXp += stepRequired;
-    level += 1;
-    stepRequired = 250 + (level - 1) * 150;
+  let activeIdx = 0;
+  for (let i = 0; i < catalog.length; i++) {
+    if (allTimeXp >= catalog[i].minXp) {
+      activeIdx = i;
+    } else {
+      break;
+    }
   }
 
-  const nextLevelTargetXp = currentLevelStartXp + stepRequired;
-  const xpInCurrentLevel = allTimeXp - currentLevelStartXp;
-  const xpRemainingToNextLevel = Math.max(0, nextLevelTargetXp - allTimeXp);
-  const progressPercentage = Math.min(
-    100,
-    Math.max(0, Math.round((xpInCurrentLevel / stepRequired) * 100))
-  );
+  const currentStage = catalog[activeIdx];
+  const isMaxStage = activeIdx === catalog.length - 1;
+  const nextStage = isMaxStage ? null : catalog[activeIdx + 1];
 
-  const currentRank = getLevelRankMeta(level);
-  const nextRank = getLevelRankMeta(level + 1);
+  const currentLevelStartXp = currentStage.minXp;
+  const nextLevelTargetXp = nextStage ? nextStage.minXp : currentStage.minXp;
+  const xpRequiredForCurrentStep = nextStage
+    ? roundXp2(nextStage.minXp - currentStage.minXp)
+    : 0;
+  const xpInCurrentLevel = roundXp2(Math.max(0, allTimeXp - currentLevelStartXp));
+  const xpRemainingToNextLevel = nextStage
+    ? roundXp2(Math.max(0, nextStage.minXp - allTimeXp))
+    : 0;
+
+  const progressPercentage = isMaxStage
+    ? 100
+    : xpRequiredForCurrentStep > 0
+    ? Math.min(
+        100,
+        Math.max(0, Math.round((xpInCurrentLevel / xpRequiredForCurrentStep) * 100))
+      )
+    : 100;
 
   return {
-    level,
-    rankTitle: currentRank.title,
-    nextRankTitle: nextRank.title,
-    rankBadgeEmoji: currentRank.emoji,
+    stageNumber: currentStage.stageNumber,
+    totalStages: 39,
+    level: currentStage.levelNumber,
+    stepNumber: currentStage.stepNumber,
+    levelNameFa: currentStage.levelNameFa,
+    levelNameEn: currentStage.levelNameEn,
+    honoraryTitle: currentStage.honoraryTitle,
+    stageNameEn: currentStage.stageNameEn,
+    stageNameFa: currentStage.stageNameFa,
+    stepSuffixEn: currentStage.stepSuffixEn,
+    stepLabelFa: currentStage.stepLabelFa,
+    stepOrdinalFa: currentStage.stepOrdinalFa,
+    palette: currentStage.palette,
+
+    isMaxStage,
+    nextStageNumber: nextStage ? nextStage.stageNumber : null,
+    nextLevel: nextStage ? nextStage.levelNumber : null,
+    nextStageNameEn: nextStage ? nextStage.stageNameEn : null,
+    nextStageNameFa: nextStage ? nextStage.stageNameFa : null,
+    nextStepLabelFa: nextStage ? nextStage.stepLabelFa : null,
+
+    rankTitle: `${currentStage.stageNameFa} (${currentStage.honoraryTitle})`,
+    nextRankTitle: nextStage
+      ? `${nextStage.stageNameEn} (${nextStage.stageNameFa})`
+      : 'تکمیل اوج اسطوره‌ای',
+    rankBadgeEmoji:
+      currentStage.stepNumber === 3
+        ? '★'
+        : currentStage.stepNumber === 2
+        ? '+'
+        : '◆',
     allTimeXp,
     currentLevelStartXp,
     nextLevelTargetXp,
     xpInCurrentLevel,
-    xpRequiredForCurrentStep: stepRequired,
+    xpRequiredForCurrentStep,
     xpRemainingToNextLevel,
     progressPercentage,
   };
 }
 
+export function calculateUserLevelProgress(allTimeXpInput: number): UserLevelProgress {
+  return resolve39StageProgress(allTimeXpInput, GLOBAL_STAGES_CATALOG);
+}
+
 // ============================================================================
-// 10. XP VELOCITY, TREND & REAL EDUCATIONAL PROGRESS ENGINE (Sections 11-18)
+// 9B. INDEPENDENT SUBJECT-SPECIFIC XP & 39-STAGE LEVEL PROGRESSION
+// ============================================================================
+export interface SubjectLevelProgress {
+  subjectId: string;
+  subjectName: string;
+  gradeLevel: string;
+  subjectXp: number;
+  rawEffortXp: number;
+  effectivenessMultiplier: number; // Quality + Adherence + Consistency balance
+  distinctActiveDays: number;
+  plansCount: number;
+  completedCount: number;
+  totalStudyMinutes: number;
+  totalExercises: number;
+  weightedQuality0To10: number | null;
+  timeAdherencePct: number;
+  educationalScoreE: number | null;
+  taskCompletionPct: number;
+  stageProgress: UserLevelProgress;
+}
+
+/**
+ * Computes an individual subject's dedicated XP and 39-Stage Level strictly from
+ * that subject's own plans & performance records. Completely isolated from Global Level
+ * and from all other subjects so modifying one subject never alters any other.
+ *
+ * Anti-cramming / Balanced Design:
+ * Raw effort points (1/10th weights + active day continuity) are modulated by
+ * a Mastery Multiplier combining weighted learning quality (45%), Educational Score E (35%),
+ * plan completion ratio (10%), and distinct active-day consistency (10%), with an
+ * additional safeguard dampener when learning quality falls below 4/10.
+ */
+export function calculateSubjectProgression(params: {
+  subjectId: string;
+  subjectName: string;
+  gradeLevel?: string;
+  allTimePlans: DailyPlanItem[];
+}): SubjectLevelProgress {
+  const { subjectId, subjectName, gradeLevel = 'هشتم', allTimePlans } = params;
+
+  const subjectPlans = allTimePlans.filter(
+    (p) =>
+      Number(p.is_study) === 1 &&
+      (p.subject_id === subjectId ||
+        (!p.subject_id && p.subject_name_snapshot === subjectName) ||
+        (subjectId.startsWith('hist-') && p.subject_name_snapshot === subjectName))
+  );
+
+  let completedCount = 0;
+  let partialCount = 0;
+  let predictedMinutes = 0;
+  let totalStudyMinutes = 0;
+  let targetExercises = 0;
+  let totalExercises = 0;
+  let rawQualityXp = 0;
+  let loggedCount = 0;
+  const activeDaysSet = new Set<string>();
+
+  for (const p of subjectPlans) {
+    if (p.status === 'completed') completedCount += 1;
+    else if (p.status === 'partial') partialCount += 1;
+
+    predictedMinutes += Math.max(
+      0,
+      Number(p.initial_predicted_minutes || p.predicted_minutes || 0)
+    );
+    targetExercises += Math.max(0, Number(p.target_exercises || 0));
+
+    if (p.performance) {
+      loggedCount += 1;
+      const mins = Math.max(0, Number(p.performance.actual_minutes || 0));
+      const ex = Math.max(0, Number(p.performance.exercises_count || 0));
+      totalStudyMinutes += mins;
+      totalExercises += ex;
+
+      if (mins > 0 || ex > 0 || p.status !== 'pending') {
+        activeDaysSet.add(p.plan_date);
+      }
+
+      const q = parseLearningQuality0To10(p.performance.learning_quality);
+      if (q !== null && mins > 0) {
+        rawQualityXp += q * XP_SCALE_WEIGHTS.QUALITY_POINT_MULTIPLIER;
+      }
+    } else if (p.status !== 'pending') {
+      activeDaysSet.add(p.plan_date);
+    }
+  }
+
+  const distinctActiveDays = activeDaysSet.size;
+  const rawBase =
+    completedCount * XP_SCALE_WEIGHTS.COMPLETED_ACTIVITY +
+    partialCount * XP_SCALE_WEIGHTS.PARTIAL_ACTIVITY +
+    totalStudyMinutes / XP_SCALE_WEIGHTS.STUDY_MINUTES_DIVISOR +
+    totalExercises * XP_SCALE_WEIGHTS.EXERCISE_UNIT +
+    rawQualityXp +
+    distinctActiveDays * 1.0;
+
+  const rawEffortXp = roundXp2(rawBase);
+
+  const hasLogged = loggedCount > 0;
+  const T = hasLogged
+    ? predictedMinutes > 0
+      ? calculateStudyTimeIndexT(totalStudyMinutes, predictedMinutes)
+      : 65
+    : 0;
+  const Q = hasLogged
+    ? calculateExercisesIndexQ(totalExercises, targetExercises > 0 ? targetExercises : null)
+    : null;
+  const qualEval = calculateWeightedLearningQualityL(subjectPlans);
+  const educationalScoreE = hasLogged
+    ? calculateEducationalCompositeScoreE(T, Q, qualEval.scoreL0To100, true)
+    : null;
+
+  const taskCompletionRatio =
+    subjectPlans.length > 0
+      ? (completedCount + partialCount * 0.5) / subjectPlans.length
+      : 0;
+  const timeAdherencePct =
+    predictedMinutes > 0 ? Math.round((totalStudyMinutes / predictedMinutes) * 100) : 0;
+
+  let effectivenessMultiplier = 0.5;
+  let subjectXp = 0;
+
+  if (rawEffortXp > 0) {
+    const qualityNorm =
+      qualEval.weightedAverage0To10 !== null ? qualEval.weightedAverage0To10 / 10 : 0.55;
+    const adherenceNorm = educationalScoreE !== null ? educationalScoreE / 100 : 0.5;
+    const consistencyNorm = Math.min(1, distinctActiveDays / 25);
+
+    const masteryIndex =
+      0.45 * qualityNorm +
+      0.35 * adherenceNorm +
+      0.1 * taskCompletionRatio +
+      0.1 * consistencyNorm;
+
+    effectivenessMultiplier = 0.28 + 0.97 * masteryIndex;
+    if (qualEval.weightedAverage0To10 !== null && qualEval.weightedAverage0To10 < 4) {
+      effectivenessMultiplier *= 0.65;
+    }
+    effectivenessMultiplier = roundXp2(effectivenessMultiplier);
+    subjectXp = roundXp2(rawEffortXp * effectivenessMultiplier);
+  }
+
+  const stageProgress = resolve39StageProgress(subjectXp, SUBJECT_STAGES_CATALOG);
+
+  return {
+    subjectId,
+    subjectName,
+    gradeLevel,
+    subjectXp,
+    rawEffortXp,
+    effectivenessMultiplier,
+    distinctActiveDays,
+    plansCount: subjectPlans.length,
+    completedCount,
+    totalStudyMinutes,
+    totalExercises,
+    weightedQuality0To10: qualEval.weightedAverage0To10,
+    timeAdherencePct,
+    educationalScoreE,
+    taskCompletionPct: Math.round(taskCompletionRatio * 100),
+    stageProgress,
+  };
+}
+
+export function calculateAllSubjectsProgressions(params: {
+  subjects: Array<{ id: string; name: string; grade_level?: string; is_archived?: number }>;
+  allTimePlans: DailyPlanItem[];
+}): SubjectLevelProgress[] {
+  const { subjects, allTimePlans } = params;
+  const entries = new Map<string, { id: string; name: string; gradeLevel: string }>();
+
+  for (const s of subjects) {
+    if (Number(s.is_archived ?? 0) === 0) {
+      entries.set(s.id, {
+        id: s.id,
+        name: s.name,
+        gradeLevel: s.grade_level || 'هشتم',
+      });
+    }
+  }
+
+  for (const p of allTimePlans) {
+    if (Number(p.is_study) !== 1) continue;
+    const sid = p.subject_id || `hist-${p.subject_name_snapshot || 'نامشخص'}`;
+    if (!entries.has(sid)) {
+      entries.set(sid, {
+        id: sid,
+        name: p.subject_name_snapshot || 'درس ثبت‌شده',
+        gradeLevel: 'هشتم',
+      });
+    }
+  }
+
+  const results: SubjectLevelProgress[] = [];
+  for (const e of entries.values()) {
+    results.push(
+      calculateSubjectProgression({
+        subjectId: e.id,
+        subjectName: e.name,
+        gradeLevel: e.gradeLevel,
+        allTimePlans,
+      })
+    );
+  }
+  return results;
+}
+
+// ============================================================================
+// 10. XP VELOCITY, TREND & REAL EDUCATIONAL PROGRESS ENGINE (1/10th Scale)
 // ============================================================================
 export type XpTrendDirection = 'ascending' | 'stable' | 'descending' | 'insufficient_data';
 
 export type XpEducationalAlignment =
-  | 'synergistic_growth' // رشد هماهنگ XP و پیشرفت واقعی تحصیلی
-  | 'superficial_xp_warning' // افزایش XP صوری با کیفیت یا تحقق واقعی پایین
-  | 'quality_steady_low_volume' // کیفیت یادگیری بالا اما حجم فعالیت کمتر از پتانسیل
-  | 'simultaneous_drop' // افت هم‌زمان سرعت XP و شاخص آموزشی
-  | 'building_baseline'; // در حال شکل‌گیری خط پایه تحلیلی
+  | 'synergistic_growth'
+  | 'superficial_xp_warning'
+  | 'quality_steady_low_volume'
+  | 'simultaneous_drop'
+  | 'building_baseline';
 
 export interface DailyHistoricalXpRecord {
   dateIso: string;
@@ -1463,52 +2153,44 @@ export interface DailyHistoricalXpRecord {
 }
 
 export interface XpVelocityAndProgressAnalysis {
-  // Today & Window Totals
   todayXp: number;
   xp7dTotal: number;
   xp14dTotal: number;
   xp30dTotal: number;
   prev7dTotal: number;
 
-  // Daily Velocities (Calendar & Active/Planned-adjusted)
-  dailyRate7dCalendar: number; // XP_7d / 7
-  dailyRate7dEffective: number; // Outlier-stabilized effective daily XP rate
-  dailyRate14dCalendar: number; // XP_14d / 14
-  dailyRate30dCalendar: number; // XP_30d / 30
+  dailyRate7dCalendar: number;
+  dailyRate7dEffective: number;
+  dailyRate14dCalendar: number;
+  dailyRate30dCalendar: number;
   prev7dDailyRate: number;
 
-  // Day Classification in 7d & 14d windows
   activeDays7d: number;
   missedPlannedDays7d: number;
   unrecordedDays7d: number;
   activeDays14d: number;
 
-  // Period-over-Period Trend (Last 7d vs Previous 7d)
   velocityDeltaAbsolute: number;
-  velocityDeltaPercent: number | null; // null if prev7d is 0 or insufficient baseline
+  velocityDeltaPercent: number | null;
   trendDirection: XpTrendDirection;
   trendLabelPersian: string;
   trendBadgeTone: 'emerald' | 'indigo' | 'amber' | 'slate';
 
-  // Real Educational Progress vs XP Alignment (Section 12.2 & Q7)
-  avgEducationalScore7d: number | null; // Average E (0..100)
+  avgEducationalScore7d: number | null;
   prevAvgEducationalScore7d: number | null;
-  avgFinalScore7d: number | null; // Average DS/S (0..100)
-  avgLearningQuality7d: number | null; // 0..10
+  avgFinalScore7d: number | null;
+  avgLearningQuality7d: number | null;
   alignmentStatus: XpEducationalAlignment;
   alignmentTitlePersian: string;
   alignmentDescriptionPersian: string;
 
-  // Level-Up Pace Estimation (Section 14)
   estimatedDaysToNextLevel: number | null;
   estimatedNextLevelTextPersian: string;
 
-  // Non-Punitive Constructive Feedback & Recovery Challenge (Sections 13 & 15)
   hasPerformanceDropWarning: boolean;
   warningHeadlinePersian: string | null;
   recoveryChallengeTextPersian: string;
 
-  // 7-day sparkline series
   recent7DaysSeries: DailyHistoricalXpRecord[];
 }
 
@@ -1519,7 +2201,6 @@ export function analyzeXpVelocityAndProgress(params: {
 }): XpVelocityAndProgressAnalysis {
   const { allTimePlans, todayIso, levelProgress } = params;
 
-  // Group plans by date for O(1) lookup
   const plansByDate = new Map<string, DailyPlanItem[]>();
   for (const plan of allTimePlans) {
     const list = plansByDate.get(plan.plan_date);
@@ -1545,7 +2226,6 @@ export function analyzeXpVelocityAndProgress(params: {
       dayState = 'missed_planned';
     }
 
-    // Educational-only XP (study minutes + exercises + quality + completed study tasks)
     const studyPlans = dayPlans.filter((p) => Number(p.is_study) === 1);
     const educationalXp = calculateXpFromPlans(studyPlans).totalXp;
 
@@ -1570,12 +2250,12 @@ export function analyzeXpVelocityAndProgress(params: {
   const prev7dRecords = records14d.slice(0, 7);
 
   const todayRecord = records7d[records7d.length - 1] || buildDayRecord(todayIso);
-  const todayXp = todayRecord.totalXp;
+  const todayXp = roundXp2(todayRecord.totalXp);
 
-  const xp7dTotal = records7d.reduce((s, r) => s + r.totalXp, 0);
-  const xp14dTotal = records14d.reduce((s, r) => s + r.totalXp, 0);
-  const xp30dTotal = records30d.reduce((s, r) => s + r.totalXp, 0);
-  const prev7dTotal = prev7dRecords.reduce((s, r) => s + r.totalXp, 0);
+  const xp7dTotal = roundXp2(records7d.reduce((s, r) => s + r.totalXp, 0));
+  const xp14dTotal = roundXp2(records14d.reduce((s, r) => s + r.totalXp, 0));
+  const xp30dTotal = roundXp2(records30d.reduce((s, r) => s + r.totalXp, 0));
+  const prev7dTotal = roundXp2(prev7dRecords.reduce((s, r) => s + r.totalXp, 0));
 
   const activeDays7d = records7d.filter((r) => r.dayState === 'active').length;
   const missedPlannedDays7d = records7d.filter((r) => r.dayState === 'missed_planned').length;
@@ -1583,33 +2263,41 @@ export function analyzeXpVelocityAndProgress(params: {
   const activeDays14d = records14d.filter((r) => r.dayState === 'active').length;
   const prevActiveDays7d = prev7dRecords.filter((r) => r.dayState === 'active').length;
 
-  // Denominator that respects unrecorded days vs active/missed planned days
   const accountableDays7d = Math.max(1, activeDays7d + missedPlannedDays7d);
-  const prevAccountableDays7d = Math.max(1, prevActiveDays7d + prev7dRecords.filter((r) => r.dayState === 'missed_planned').length);
+  const prevAccountableDays7d = Math.max(
+    1,
+    prevActiveDays7d + prev7dRecords.filter((r) => r.dayState === 'missed_planned').length
+  );
 
-  const dailyRate7dCalendar = Math.round(xp7dTotal / 7);
-  const dailyRate14dCalendar = Math.round(xp14dTotal / 14);
-  const dailyRate30dCalendar = Math.round(xp30dTotal / 30);
+  const dailyRate7dCalendar = roundRate1(xp7dTotal / 7);
+  const dailyRate14dCalendar = roundRate1(xp14dTotal / 14);
+  const dailyRate30dCalendar = roundRate1(xp30dTotal / 30);
 
-  // Outlier-stabilized effective daily rate (winsorized blend of calendar 7d and accountable-day rate)
   const accountableRate7d = xp7dTotal / accountableDays7d;
   const sorted7dXp = [...records7d.map((r) => r.totalXp)].sort((a, b) => a - b);
   const trimmedSum7d =
     sorted7dXp.length >= 7
       ? sorted7dXp.slice(1, 6).reduce((s, v) => s + v, 0) / 5
       : dailyRate7dCalendar;
-  const dailyRate7dEffective = Math.max(
-    1,
-    Math.round(dailyRate7dCalendar * 0.45 + accountableRate7d * 0.35 + trimmedSum7d * 0.2)
-  );
+
+  const dailyRate7dEffective =
+    xp7dTotal > 0
+      ? Math.max(
+          0.1,
+          roundRate1(
+            dailyRate7dCalendar * 0.45 + accountableRate7d * 0.35 + trimmedSum7d * 0.2
+          )
+        )
+      : 0;
 
   const prev7dDailyRate =
-    prevActiveDays7d > 0 ? Math.round(prev7dTotal / Math.max(3, prevAccountableDays7d)) : 0;
+    prevActiveDays7d > 0
+      ? roundRate1(prev7dTotal / Math.max(3, prevAccountableDays7d))
+      : 0;
 
-  // Velocity comparison (Last 7d vs Previous 7d)
   const currentComparableRate =
-    activeDays7d > 0 ? Math.round(xp7dTotal / Math.max(3, accountableDays7d)) : 0;
-  const velocityDeltaAbsolute = currentComparableRate - prev7dDailyRate;
+    activeDays7d > 0 ? roundRate1(xp7dTotal / Math.max(3, accountableDays7d)) : 0;
+  const velocityDeltaAbsolute = roundRate1(currentComparableRate - prev7dDailyRate);
 
   let velocityDeltaPercent: number | null = null;
   let trendDirection: XpTrendDirection = 'insufficient_data';
@@ -1620,16 +2308,18 @@ export function analyzeXpVelocityAndProgress(params: {
     trendDirection = 'insufficient_data';
     trendLabelPersian = 'در انتظار ثبت فعالیت';
     trendBadgeTone = 'slate';
-  } else if (prevActiveDays7d === 0 || prev7dTotal < 50) {
-    // New user or first active week — avoid division by zero or 999% spikes
-    trendDirection = activeDays7d >= 2 || xp7dTotal >= 120 ? 'ascending' : 'stable';
+  } else if (prevActiveDays7d === 0 || prev7dTotal < 5) {
+    trendDirection = activeDays7d >= 2 || xp7dTotal >= 12 ? 'ascending' : 'stable';
     trendLabelPersian =
       trendDirection === 'ascending' ? 'شروع پرقدرت و صعودی 🚀' : 'پایدار (هفته اول ثبت)';
     trendBadgeTone = trendDirection === 'ascending' ? 'emerald' : 'indigo';
   } else {
     velocityDeltaPercent = Math.max(
       -100,
-      Math.min(250, Math.round(((currentComparableRate - prev7dDailyRate) / prev7dDailyRate) * 100))
+      Math.min(
+        250,
+        Math.round(((currentComparableRate - prev7dDailyRate) / prev7dDailyRate) * 100)
+      )
     );
     if (velocityDeltaPercent >= 12) {
       trendDirection = 'ascending';
@@ -1647,7 +2337,6 @@ export function analyzeXpVelocityAndProgress(params: {
     }
   }
 
-  // Real Educational Progress averages in 7d
   const validEDays7d = records7d
     .map((r) => r.educationalScoreE)
     .filter((v): v is number => v !== null);
@@ -1677,14 +2366,14 @@ export function analyzeXpVelocityAndProgress(params: {
     .filter((v): v is number => v !== null);
   const avgLearningQuality7d =
     validQDays7d.length > 0
-      ? Math.round((validQDays7d.reduce((a, b) => a + b, 0) / validQDays7d.length) * 10) / 10
+      ? roundRate1(validQDays7d.reduce((a, b) => a + b, 0) / validQDays7d.length)
       : null;
 
-  // Alignment between XP Growth and Real Educational Progress (Section 12.2 & Q7)
   const educationalXpSharePct =
     xp7dTotal > 0
       ? Math.round(
-          (records7d.reduce((s, r) => s + r.educationalXp, 0) / Math.max(1, xp7dTotal)) * 100
+          (records7d.reduce((s, r) => s + r.educationalXp, 0) / Math.max(0.1, xp7dTotal)) *
+            100
         )
       : 100;
 
@@ -1698,7 +2387,7 @@ export function analyzeXpVelocityAndProgress(params: {
     const isScoreELow = avgEducationalScore7d < 68;
     const isNonStudyHeavy = educationalXpSharePct < 55;
 
-    if ((isQualityLow || isScoreELow || isNonStudyHeavy) && xp7dTotal >= 150) {
+    if ((isQualityLow || isScoreELow || isNonStudyHeavy) && xp7dTotal >= 15) {
       alignmentStatus = 'superficial_xp_warning';
       alignmentTitlePersian = 'هشدار رشد ظاهری XP بدون عمق کافی یادگیری';
       alignmentDescriptionPersian = `با وجود کسب ${toPersianDigits(
@@ -1725,7 +2414,7 @@ export function analyzeXpVelocityAndProgress(params: {
       alignmentTitlePersian = 'کیفیت یادگیری عالی، نیازمند پیوستگی روزانه بیشتر';
       alignmentDescriptionPersian = `کیفیت مطالعه شما در روزهای فعال بسیار مطلوب است (شاخص آموزشی ${toPersianDigits(
         avgEducationalScore7d
-      )} از ۱۰۰)، اما افزایش تعداد روزهای فعال هفته، سرعت صعود شما به سطح بعدی را دوچندان می‌کند.`;
+      )} از ۱۰۰)، اما افزایش تعداد روزهای فعال هفته، سرعت صعود شما به مرحله بعدی را دوچندان می‌کند.`;
     } else {
       alignmentStatus = 'synergistic_growth';
       alignmentTitlePersian = 'رشد اصیل و هم‌راستای XP با پیشرفت واقعی تحصیلی';
@@ -1739,27 +2428,33 @@ export function analyzeXpVelocityAndProgress(params: {
     }
   }
 
-  // Estimated days to next permanent level based on effective recent pace
   const effectivePaceForPrediction = Math.max(
     dailyRate7dEffective,
     dailyRate14dCalendar,
-    todayXp > 0 ? Math.round(todayXp * 0.75) : 0
+    todayXp > 0 ? roundRate1(todayXp * 0.75) : 0
   );
 
   let estimatedDaysToNextLevel: number | null = null;
-  let estimatedNextLevelTextPersian = 'با ثبت اولین فعالیت امروز، زمان رسیدن به سطح بعد محاسبه می‌شود';
+  let estimatedNextLevelTextPersian =
+    'با ثبت اولین فعالیت امروز، زمان رسیدن به پله بعد محاسبه می‌شود';
 
-  if (effectivePaceForPrediction >= 15) {
+  if (levelProgress.isMaxStage) {
+    estimatedDaysToNextLevel = 0;
+    estimatedNextLevelTextPersian =
+      'بالاترین مرحله سیستم (Black Diamond Star) تکمیل شده است 🏆';
+  } else if (effectivePaceForPrediction >= 1.5) {
     estimatedDaysToNextLevel = Math.max(
       1,
       Math.ceil(levelProgress.xpRemainingToNextLevel / effectivePaceForPrediction)
     );
+    const nextLabel = levelProgress.nextStageNameEn
+      ? `${levelProgress.nextStageNameEn} (${levelProgress.nextStageNameFa})`
+      : 'مرحله بعد';
     estimatedNextLevelTextPersian = `با ریتم فعلی: حدود ${toPersianDigits(
       estimatedDaysToNextLevel
-    )} روز تا سطح ${toPersianDigits(levelProgress.level + 1)} (${levelProgress.nextRankTitle})`;
+    )} روز تا ${nextLabel}`;
   }
 
-  // Non-Punitive Constructive Diagnostic & Recovery Challenge (Sections 13 & 15)
   const hasPerformanceDropWarning =
     trendDirection === 'descending' ||
     alignmentStatus === 'superficial_xp_warning' ||
@@ -1778,8 +2473,14 @@ export function analyzeXpVelocityAndProgress(params: {
 
   const targetRecoveryStudyMins = 60;
   const targetRecoveryTests = 15;
-  const recoveryChallengeXp =
-    50 + Math.floor(targetRecoveryStudyMins / 5) + targetRecoveryTests * 2 + 16; // ~108 XP
+  const recoveryChallengeXp = roundXp2(
+    XP_SCALE_WEIGHTS.COMPLETED_ACTIVITY +
+      targetRecoveryStudyMins / XP_SCALE_WEIGHTS.STUDY_MINUTES_DIVISOR +
+      targetRecoveryTests * XP_SCALE_WEIGHTS.EXERCISE_UNIT +
+      8 * XP_SCALE_WEIGHTS.QUALITY_POINT_MULTIPLIER
+  ); // 5 + 1.2 + 3 + 1.6 = 10.8 XP
+  const nextGoalName =
+    levelProgress.nextStageNameEn || levelProgress.stageNameEn;
   const recoveryChallengeTextPersian = hasPerformanceDropWarning
     ? `چالش احیای ریتم (بدون جریمه): با تکمیل ۱ باکس مطالعه ${toPersianDigits(
         targetRecoveryStudyMins
@@ -1788,7 +2489,7 @@ export function analyzeXpVelocityAndProgress(params: {
       )} تست، حدود +${toPersianDigits(
         recoveryChallengeXp
       )} XP کسب کرده و منحنی پیشرفت خود را دوباره صعودی کنید.`
-    : `گام طلایی ادامه مسیر: حفظ پیوستگی روزانه و ثبت حداقل ۱ باکس مطالعه عمیق برای صعود سریع‌تر به «${levelProgress.nextRankTitle}».`;
+    : `گام طلایی ادامه مسیر: حفظ پیوستگی روزانه و ثبت حداقل ۱ باکس مطالعه عمیق برای صعود سریع‌تر به «${nextGoalName}».`;
 
   return {
     todayXp,
@@ -1825,5 +2526,6 @@ export function analyzeXpVelocityAndProgress(params: {
     recent7DaysSeries: records7d,
   };
 }
+
 
 

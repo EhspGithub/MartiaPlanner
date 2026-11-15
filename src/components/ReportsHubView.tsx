@@ -57,12 +57,15 @@ import {
   calculateEducationalCompositeScoreE,
   evaluatePeriodPerformance,
   getCardGradientTheme,
+  calculateAllSubjectsProgressions,
 } from '../utils/analyticsEngine.ts';
 import {
   ShamsiDateField,
   type AnalyticsFilterMode,
   type ChartDisplayMode,
 } from './PerformanceAnalyticsView.tsx';
+import { SubjectLevelCard } from './LevelIdentityCard.tsx';
+import { SubjectsLevelMap } from './SubjectsLevelMap.tsx';
 
 interface ReportsHubViewProps {
   subjects: Subject[];
@@ -160,9 +163,10 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
   const [singleTimeChartMode, setSingleTimeChartMode] = useState<ChartDisplayMode>('aggregate');
   const [singleScoreChartMode, setSingleScoreChartMode] = useState<ChartDisplayMode>('aggregate');
 
-  const [plans, setPlans] = useState<DailyPlanItem[]>([]);
+  const [allTimePlans, setAllTimePlans] = useState<DailyPlanItem[]>([]);
   const [budgets, setBudgets] = useState<DailyTimeBudgetConfig[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const singleReportSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Sync selectedSingleSubjectId & comparedSubjectIds when subjects list changes
   useEffect(() => {
@@ -253,17 +257,18 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
     [activeDateRange.start, activeDateRange.end]
   );
 
-  // Fetch plans and budgets for selected range
+  // Fetch all-time plans (for independent permanent Subject Levels & Staircase Map)
+  // plus budgets for the active timeframe
   useEffect(() => {
     let active = true;
     setLoading(true);
     Promise.all([
-      api.getPlansByRange(activeDateRange.start, activeDateRange.end),
+      api.getPlansByRange('2020-01-01', '2099-12-31'),
       api.getTimeBudgetsByRange(activeDateRange.start, activeDateRange.end),
     ])
-      .then(([plansRes, budgetsRes]) => {
+      .then(([allPlansRes, budgetsRes]) => {
         if (!active) return;
-        setPlans(plansRes);
+        setAllTimePlans(allPlansRes);
         setBudgets(budgetsRes);
         setLoading(false);
       })
@@ -274,6 +279,33 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
       active = false;
     };
   }, [activeDateRange.start, activeDateRange.end]);
+
+  // Slice plans cleanly to the active timeframe for interval reports & charts
+  const plans = useMemo(
+    () =>
+      allTimePlans.filter(
+        (p) => p.plan_date >= activeDateRange.start && p.plan_date <= activeDateRange.end
+      ),
+    [allTimePlans, activeDateRange.start, activeDateRange.end]
+  );
+
+  // Compute independent 39-Stage Subject Progressions across each subject's own full history
+  const allSubjectsProgressions = useMemo(
+    () =>
+      calculateAllSubjectsProgressions({
+        subjects: activeSubjectsList,
+        allTimePlans,
+      }),
+    [activeSubjectsList, allTimePlans]
+  );
+
+  const selectedSubjectProgression = useMemo(
+    () =>
+      allSubjectsProgressions.find((s) => s.subjectId === selectedSingleSubjectId) ||
+      allSubjectsProgressions[0] ||
+      null,
+    [allSubjectsProgressions, selectedSingleSubjectId]
+  );
 
   // Evaluate all subjects across the selected timeframe
   const allSubjectsAnalytics: SubjectAnalyticalSummary[] = useMemo(() => {
@@ -816,11 +848,12 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
           ))}
         </div>
       ) : reportCategory === 'subjects' ? (
-        subjectSubMode === 'comparison' ? (
-          /* =================================================================
-             MULTI-SUBJECT COMPARISON VIEW (مقایسه درس‌ها — ۲ تا ۵ درس)
-          ================================================================= */
-          <div className="space-y-6 min-w-0">
+        <div className="space-y-6 min-w-0">
+          {subjectSubMode === 'comparison' ? (
+            /* =================================================================
+               MULTI-SUBJECT COMPARISON VIEW (مقایسه درس‌ها — ۲ تا ۵ درس)
+            ================================================================= */
+            <div className="space-y-6 min-w-0">
             {/* Multi-Select Dropdown Bar (Min 2, Max 5 Subjects) */}
             <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 shadow-xs space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1316,7 +1349,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
           /* =================================================================
              SINGLE-SUBJECT DEDICATED REPORT («گزارش هر درس»)
           ================================================================= */
-          <div className="space-y-6 min-w-0">
+          <div ref={singleReportSectionRef} className="space-y-6 min-w-0">
             {/* Subject Selector Bar */}
             <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-900 dark:text-white">
@@ -1336,6 +1369,11 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                 ))}
               </select>
             </div>
+
+            {/* Independent Dedicated Subject Level Card */}
+            {selectedSubjectProgression && (
+              <SubjectLevelCard progression={selectedSubjectProgression} />
+            )}
 
             {singleSubjectSummary && (
               <>
@@ -1975,7 +2013,25 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
               </>
             )}
           </div>
-        )
+          )}
+
+          {/* =================================================================
+              ALL-TIME SUBJECTS STAIRCASE PROGRESSION MAP («نقشه سطح و پیشرفت دروس»)
+          ================================================================= */}
+          <SubjectsLevelMap
+            subjectProgressions={allSubjectsProgressions}
+            onInspectSubjectReport={(subjectId) => {
+              setSelectedSingleSubjectId(subjectId);
+              setSubjectSubMode('single');
+              setTimeout(() => {
+                singleReportSectionRef.current?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                });
+              }, 60);
+            }}
+          />
+        </div>
       ) : (
         /* ===================================================================
            RECREATIONAL & ENTERTAINMENT ACTIVITIES REPORT TAB («فعالیت‌های تفریحی»)
