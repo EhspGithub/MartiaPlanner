@@ -88,25 +88,13 @@ export const SubjectsLevelMap: React.FC<SubjectsLevelMapProps> = ({
               نقشه سطح و پیشرفت دروس
             </h2>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium text-justify leading-relaxed">
             نمایش پلکانی جایگاه فعلی تمام دروس در ساختار ۱۳ Level (از Stone تا Black Diamond) و ۳۹ مرحله پیشرفت اختصاصی
           </p>
         </div>
 
-        {/* Step Tier Legend + Interaction Hint */}
-        <div className="flex flex-wrap items-center gap-2 text-[11px] font-extrabold shrink-0">
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/70 dark:border-slate-700">
-            <span className="w-2 h-2 rounded-full bg-slate-500" />
-            <span>پله ۱: ساده</span>
-          </span>
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800">
-            <Plus className="w-3 h-3 stroke-[3]" />
-            <span>پله ۲: Plus</span>
-          </span>
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800">
-            <Star className="w-3 h-3 fill-current" />
-            <span>پله ۳: Star</span>
-          </span>
+        {/* Interaction Hint */}
+        <div className="flex items-center gap-2 text-[11px] font-extrabold shrink-0">
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300">
             <MousePointerClick className="w-3.5 h-3.5" />
             <span>برای جزئیات روی نشان درس کلیک کنید</span>
@@ -278,7 +266,7 @@ export const SubjectsLevelMap: React.FC<SubjectsLevelMapProps> = ({
               className={`rounded-2xl border bg-gradient-to-l ${activeSelectedSubject.stageProgress.palette.cardBgClass} ${activeSelectedSubject.stageProgress.palette.cardBorderClass} p-4 transition-all`}
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-3.5 min-w-0">
+                <div className="flex items-start sm:items-center gap-3.5 min-w-0">
                   <LevelEmblemBadge
                     level={activeSelectedSubject.stageProgress.level}
                     stepNumber={activeSelectedSubject.stageProgress.stepNumber}
@@ -286,26 +274,36 @@ export const SubjectsLevelMap: React.FC<SubjectsLevelMapProps> = ({
                     size="md"
                   />
 
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`text-sm sm:text-base font-black ${
-                          activeSelectedSubject.stageProgress.palette.isDarkLuxury
-                            ? 'text-white'
-                            : 'text-slate-900 dark:text-white'
-                        }`}
-                      >
-                        درس {activeSelectedSubject.subjectName}
-                      </span>
+                  {/* 7-Line Structured Subject Detail Block (Section 10-4) */}
+                  <div
+                    className={`min-w-0 space-y-1 text-xs font-bold tabular-nums ${
+                      activeSelectedSubject.stageProgress.palette.isDarkLuxury
+                        ? 'text-slate-200'
+                        : 'text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {/* خط اول: نام درس */}
+                    <div
+                      className={`text-sm sm:text-base font-black ${
+                        activeSelectedSubject.stageProgress.palette.isDarkLuxury
+                          ? 'text-white'
+                          : 'text-slate-900 dark:text-white'
+                      }`}
+                    >
+                      درس {activeSelectedSubject.subjectName}
+                    </div>
+
+                    {/* خط دوم: شماره Level و عنوان فارسی آن + وضعیت استمرار */}
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <span
                         className={`text-xs font-extrabold px-2.5 py-0.5 rounded-lg ${activeSelectedSubject.stageProgress.palette.pillBgClass}`}
                       >
-                        Level {toPersianDigits(activeSelectedSubject.stageProgress.level)} —{' '}
+                        Level {toPersianDigits(activeSelectedSubject.stageProgress.level)} –{' '}
                         {activeSelectedSubject.stageProgress.stageNameFa}
                       </span>
                       <span
                         dir="ltr"
-                        className={`text-xs font-black ${activeSelectedSubject.stageProgress.palette.accentTextClass}`}
+                        className={`text-[11px] font-black ${activeSelectedSubject.stageProgress.palette.accentTextClass}`}
                       >
                         {activeSelectedSubject.stageProgress.stageNameEn}
                       </span>
@@ -324,42 +322,60 @@ export const SubjectsLevelMap: React.FC<SubjectsLevelMapProps> = ({
                       </span>
                     </div>
 
-                    <div
-                      className={`flex flex-wrap items-center gap-2 text-xs font-bold tabular-nums ${
-                        activeSelectedSubject.stageProgress.palette.isDarkLuxury
-                          ? 'text-slate-200'
-                          : 'text-slate-600 dark:text-slate-300'
-                      }`}
-                    >
-                      <span>
-                        عنوان افتخاری:{' '}
-                        <strong>{activeSelectedSubject.stageProgress.honoraryTitle}</strong>
-                      </span>
-                      <span>•</span>
-                      <span>{activeSelectedSubject.stageProgress.stepLabelFa}</span>
-                      <span>•</span>
-                      <span className="inline-flex items-center gap-1">
-                        <span>XP خالص درس:</span>
-                        <strong>{toPersianDigits(activeSelectedSubject.subjectXp)}</strong>
-                        <XpCoinBadge size="xs" />
-                        {activeSelectedSubject.subjectPenaltyXp > 0 && (
-                          <span className="text-rose-500 dark:text-rose-400 font-extrabold">
-                            (کسرشده: {toPersianDigits(activeSelectedSubject.subjectPenaltyXp)}-)
-                          </span>
-                        )}
-                      </span>
-                      <span>•</span>
-                      <span>آخرین مطالعه: {activeSelectedSubject.lastEffectiveStudyJalali}</span>
-                      <span>•</span>
+                    {/* خط سوم: عنوان افتخاری و پله فعلی */}
+                    <div>
+                      عنوان افتخاری:{' '}
+                      <strong className={activeSelectedSubject.stageProgress.palette.accentTextClass}>
+                        {activeSelectedSubject.stageProgress.honoraryTitle}
+                      </strong>{' '}
+                      • {activeSelectedSubject.stageProgress.stepLabelFa}
+                    </div>
+
+                    {/* خط چهارم: مقدار XP خالص درس */}
+                    <div className="inline-flex items-center gap-1">
+                      <span>XP خالص درس:</span>
+                      <strong
+                        className={
+                          activeSelectedSubject.stageProgress.palette.isDarkLuxury
+                            ? 'text-white font-black'
+                            : 'text-slate-900 dark:text-white font-black'
+                        }
+                      >
+                        {toPersianDigits(activeSelectedSubject.subjectXp)}
+                      </strong>
+                      <XpCoinBadge size="xs" />
+                    </div>
+
+                    {/* خط پنجم: مقدار XP کسرشده (در صورت وجود، داخل پرانتز در خط جداگانه) */}
+                    {activeSelectedSubject.subjectPenaltyXp > 0 && (
+                      <div className="text-rose-500 dark:text-rose-400 font-extrabold">
+                        (XP کسرشده: {toPersianDigits(activeSelectedSubject.subjectPenaltyXp)}- XP)
+                      </div>
+                    )}
+
+                    {/* خط ششم: تاریخ آخرین مطالعه */}
+                    <div>
+                      آخرین مطالعه: <strong>{activeSelectedSubject.lastEffectiveStudyJalali}</strong>
+                    </div>
+
+                    {/* خط هفتم: درصد پیشرفت پله و مقدار XP موردنیاز تا پله بعد */}
+                    <div>
                       {activeSelectedSubject.stageProgress.isMaxStage ? (
                         <span className="inline-flex items-center gap-1 text-emerald-400 font-black">
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>تکمیل نهایی (۱۰۰٪)</span>
+                          <span>تکمیل نهایی (۱۰۰٪ تمام ۳۹ مرحله)</span>
                         </span>
                       ) : (
                         <span>
-                          پیشرفت پله: {toPersianDigits(activeSelectedSubject.stageProgress.progressPercentage)}٪ (
-                          {toPersianDigits(activeSelectedSubject.stageProgress.xpRemainingToNextLevel)} XP تا{' '}
+                          پیشرفت پله:{' '}
+                          <strong>
+                            {toPersianDigits(activeSelectedSubject.stageProgress.progressPercentage)}٪
+                          </strong>{' '}
+                          •{' '}
+                          <strong>
+                            {toPersianDigits(activeSelectedSubject.stageProgress.xpRemainingToNextLevel)} XP
+                          </strong>{' '}
+                          موردنیاز تا پله بعد (
                           <span dir="ltr" className="inline-block font-extrabold">
                             {activeSelectedSubject.stageProgress.nextStageNameEn}
                           </span>
@@ -370,7 +386,8 @@ export const SubjectsLevelMap: React.FC<SubjectsLevelMapProps> = ({
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                {/* Step Indicators on Independent Line + Direct Action Button to Subject Report */}
+                <div className="flex flex-col items-start md:items-end gap-2.5 shrink-0">
                   <StepSegmentDots
                     stepNumber={activeSelectedSubject.stageProgress.stepNumber}
                     palette={activeSelectedSubject.stageProgress.palette}
@@ -394,43 +411,6 @@ export const SubjectsLevelMap: React.FC<SubjectsLevelMapProps> = ({
               </div>
             </div>
           )}
-
-          {/* Quick Select Strip for All Subjects */}
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            {sortedProgressions.map((sp) => {
-              const isSelected = activeSelectedSubject?.subjectId === sp.subjectId;
-              return (
-                <button
-                  key={sp.subjectId}
-                  type="button"
-                  onClick={() => setSelectedSubjectId(sp.subjectId)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                      : 'bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
-                  }`}
-                >
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{
-                      backgroundColor: isSelected
-                        ? '#fde047'
-                        : sp.stageProgress.palette.primaryHex,
-                    }}
-                  />
-                  <span>{sp.subjectName}</span>
-                  <span
-                    dir="ltr"
-                    className={`text-[10px] font-black ${
-                      isSelected ? 'text-amber-200' : 'text-slate-500 dark:text-slate-400'
-                    }`}
-                  >
-                    {sp.stageProgress.stageNameEn}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
         </>
       )}
     </section>

@@ -40,6 +40,7 @@ import {
   getPersianWeekDays,
   getDateRangeISOList,
   formatJalaliCompact,
+  formatJalaliShortMonthDay,
   formatJalaliFull,
   formatJalaliWeekdaySlash,
   isoToJalali,
@@ -56,7 +57,6 @@ import {
   type PeriodPerformanceSummary,
   type MetricComparisonDelta,
 } from '../utils/analyticsEngine.ts';
-import { WeeklyStudyChart } from './WeeklyStudyChart.tsx';
 
 export type AnalyticsFilterMode = 'daily' | 'weekly' | 'monthly' | 'custom';
 export type ChartDisplayMode = 'aggregate' | 'daily';
@@ -553,12 +553,12 @@ export const PerformanceAnalyticsView: React.FC = () => {
     };
   }, [activeDateRange.start, activeDateRange.end, showComparison, compStartA, compEndA]);
 
-  // Daily Chart data preparation
+  // Daily Chart data preparation (Short MM/DD format e.g. ۰۸/۲۳ on X-axis per Section 6-1)
   const chartData = useMemo(() => {
     if (!periodSummary) return [];
     return periodSummary.dailyEvaluations.map((d) => ({
       date: d.dateIso,
-      label: d.jalaliCompact,
+      label: formatJalaliShortMonthDay(d.dateIso),
       fullLabel: d.jalaliFull,
       plannedStudyMins: d.predictedStudyMinutes,
       actualStudyMins: d.actualStudyMinutes,
@@ -579,16 +579,16 @@ export const PerformanceAnalyticsView: React.FC = () => {
     }));
   }, [periodSummary]);
 
-  // Section 4.5: Smart XAxis orientation based on column count in daily mode
-  const isDailyXAxisRotated = chartData.length > 4;
+  // Section 4.5 & 6-1: Smart XAxis orientation based on column count in daily mode (short ۰۸/۲۳ dates)
+  const isDailyXAxisRotated = chartData.length > 7;
   const dailyXAxisProps = isDailyXAxisRotated
     ? {
-        angle: -90,
+        angle: -45,
         textAnchor: 'end' as const,
-        height: 62,
+        height: 44,
         tickMargin: 6,
         interval: 0,
-        tick: { fontSize: 10 },
+        tick: { fontSize: 10, fontWeight: 700 },
       }
     : {
         angle: 0,
@@ -1864,11 +1864,6 @@ export const PerformanceAnalyticsView: React.FC = () => {
                   </ResponsiveContainer>
                 </div>
               </div>
-            </div>
-
-            {/* Chart 7 (Section 8): روند مطالعه در هفت روز گذشته (integrated into analytical charts grid) */}
-            <div className="lg:col-span-2">
-              <WeeklyStudyChart />
             </div>
           </div>
         </>

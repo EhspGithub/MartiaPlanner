@@ -32,6 +32,7 @@ type ActiveMenu = 'dashboard' | 'planner' | 'reports' | 'guide' | 'settings' | '
 
 export default function App() {
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>('planner');
+  const [initialReportSubjectId, setInitialReportSubjectId] = useState<string | null>(null);
   const [isMorePopoverOpen, setIsMorePopoverOpen] = useState<boolean>(false);
   const moreDesktopRef = useRef<HTMLDivElement | null>(null);
   const moreMobileRef = useRef<HTMLDivElement | null>(null);
@@ -92,6 +93,12 @@ export default function App() {
     setIsMorePopoverOpen(false);
   };
 
+  const handleInspectSubjectFromPlanner = useCallback((subjectId: string) => {
+    setInitialReportSubjectId(subjectId);
+    setActiveMenu('reports');
+    setIsMorePopoverOpen(false);
+  }, []);
+
   const isMoreSectionActive = activeMenu === 'settings' || activeMenu === 'subjects';
 
   return (
@@ -100,12 +107,12 @@ export default function App() {
       className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 bg-student-canvas text-slate-900 dark:text-slate-100"
     >
       {/* =====================================================================
-          STRICT 3-ZONE TOP BAR CONTRACT
+          STRICT 3-ZONE TOP BAR CONTRACT (Section 1-1 & 1-3)
           Zone 1: Single text element wordmark
-          Zone 2: 5 Main Navigation Items (۱. عملکرد | ۲. برنامه‌ریزی | ۳. دروس | ۴. راهنما | ۵. سایر)
+          Zone 2: 5 Main Navigation Items (۱. عملکرد | ۲. دروس | ۳. برنامه‌ریزی | ۴. راهنما | ۵. سایر)
           Zone 3: Primary action / theme control
       ===================================================================== */}
-      <header className="mobile-safe-header sticky top-0 z-30 relative flex items-center justify-between gap-4 px-4 sm:px-8 h-16 bg-gradient-to-l from-indigo-50/85 via-sky-50/80 to-white/90 md:bg-none md:bg-white/90 dark:from-slate-900/90 dark:via-indigo-950/80 dark:to-slate-900/90 dark:md:bg-slate-900/90 backdrop-blur-md border-b border-indigo-100/80 md:border-slate-200/80 dark:border-slate-800">
+      <header className="mobile-safe-header sticky top-0 z-30 relative flex items-center justify-between gap-4 px-4 sm:px-8 h-16 bg-gradient-to-l from-indigo-100/90 via-sky-50/90 to-violet-100/85 dark:from-slate-900/95 dark:via-indigo-950/90 dark:to-slate-900/95 backdrop-blur-md border-b border-indigo-200/80 dark:border-indigo-900/70 shadow-2xs">
         {/* Spacer on mobile to balance right side so centered title never collides */}
         <div className="w-10 md:hidden shrink-0" aria-hidden="true" />
 
@@ -120,7 +127,7 @@ export default function App() {
                 setIsMorePopoverOpen(false);
               }}
               title={`Martia Planner — نسخه ${toPersianDigits(APP_VERSION)} (v${APP_VERSION})`}
-              className="text-lg sm:text-xl font-black tracking-tight bg-gradient-to-l from-indigo-600 via-violet-600 to-purple-600 bg-clip-text text-transparent whitespace-nowrap text-center cursor-pointer"
+              className="text-lg sm:text-xl font-black tracking-tight bg-gradient-to-l from-indigo-700 via-violet-600 to-purple-700 dark:from-indigo-300 dark:via-violet-300 dark:to-purple-300 bg-clip-text text-transparent whitespace-nowrap text-center cursor-pointer"
             >
               Martia Planner
             </a>
@@ -136,8 +143,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* Zone 2: 5 Desktop Navigation Links (Right-to-Left) */}
-        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600 dark:text-slate-300">
+        {/* Zone 2: 5 Desktop Navigation Links (Right-to-Left: ۱. عملکرد | ۲. دروس | ۳. برنامه‌ریزی | ۴. راهنما | ۵. سایر) */}
+        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-700 dark:text-slate-300">
           {/* ۱. عملکرد */}
           <button
             type="button"
@@ -147,43 +154,44 @@ export default function App() {
             }}
             className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
               activeMenu === 'dashboard'
-                ? 'text-indigo-600 dark:text-indigo-400 font-bold underline underline-offset-8 decoration-2'
-                : 'hover:text-slate-900 dark:hover:text-white'
+                ? 'text-indigo-700 dark:text-indigo-300 font-extrabold underline underline-offset-8 decoration-2'
+                : 'hover:text-slate-950 dark:hover:text-white'
             }`}
           >
             عملکرد
           </button>
 
-          {/* ۲. برنامه‌ریزی */}
+          {/* ۲. دروس */}
+          <button
+            type="button"
+            onClick={() => {
+              setInitialReportSubjectId(null);
+              setActiveMenu('reports');
+              setIsMorePopoverOpen(false);
+            }}
+            className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              activeMenu === 'reports'
+                ? 'text-indigo-700 dark:text-indigo-300 font-extrabold underline underline-offset-8 decoration-2'
+                : 'hover:text-slate-950 dark:hover:text-white'
+            }`}
+          >
+            دروس
+          </button>
+
+          {/* ۳. برنامه‌ریزی (در مرکز نوار ناوبری) */}
           <button
             type="button"
             onClick={() => {
               setActiveMenu('planner');
               setIsMorePopoverOpen(false);
             }}
-            className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-full transition-all whitespace-nowrap shrink-0 cursor-pointer ${
               activeMenu === 'planner'
-                ? 'text-indigo-600 dark:text-indigo-400 font-bold underline underline-offset-8 decoration-2'
-                : 'hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-indigo-600 text-white font-extrabold shadow-sm shadow-indigo-600/25'
+                : 'bg-white/75 dark:bg-slate-800/80 text-indigo-700 dark:text-indigo-300 font-bold hover:bg-white dark:hover:bg-slate-800 border border-indigo-200/70 dark:border-indigo-800/60'
             }`}
           >
             برنامه‌ریزی
-          </button>
-
-          {/* ۳. دروس */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveMenu('reports');
-              setIsMorePopoverOpen(false);
-            }}
-            className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeMenu === 'reports'
-                ? 'text-indigo-600 dark:text-indigo-400 font-bold underline underline-offset-8 decoration-2'
-                : 'hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            دروس
           </button>
 
           {/* ۴. راهنما */}
@@ -195,14 +203,14 @@ export default function App() {
             }}
             className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
               activeMenu === 'guide'
-                ? 'text-indigo-600 dark:text-indigo-400 font-bold underline underline-offset-8 decoration-2'
-                : 'hover:text-slate-900 dark:hover:text-white'
+                ? 'text-indigo-700 dark:text-indigo-300 font-extrabold underline underline-offset-8 decoration-2'
+                : 'hover:text-slate-950 dark:hover:text-white'
             }`}
           >
             راهنما
           </button>
 
-          {/* ۵. سایر (Pure Dropdown Submenu — Does NOT auto-navigate on click per Section 2) */}
+          {/* ۵. سایر (Pure Dropdown Submenu) */}
           <div className="relative" ref={moreDesktopRef}>
             <button
               type="button"
@@ -210,8 +218,8 @@ export default function App() {
               aria-expanded={isMorePopoverOpen}
               className={`inline-flex items-center gap-1 py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 isMoreSectionActive
-                  ? 'text-indigo-600 dark:text-indigo-400 font-bold underline underline-offset-8 decoration-2'
-                  : 'hover:text-slate-900 dark:hover:text-white'
+                  ? 'text-indigo-700 dark:text-indigo-300 font-extrabold underline underline-offset-8 decoration-2'
+                  : 'hover:text-slate-950 dark:hover:text-white'
               }`}
             >
               <span>سایر</span>
@@ -260,7 +268,7 @@ export default function App() {
             type="button"
             onClick={() => setIsDark(!isDark)}
             aria-label="تغییر پوسته روز و شب"
-            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center"
+            className="p-2.5 rounded-xl border border-indigo-200/80 dark:border-slate-700 bg-white/75 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center"
           >
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
@@ -270,7 +278,7 @@ export default function App() {
       {/* =====================================================================
           MAIN VIEWPORT CONTAINER
       ===================================================================== */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-8 py-6 pb-24 md:pb-12">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-8 py-6 pb-28 md:pb-12">
         {loading && (
           <div className="space-y-4 py-8">
             <div className="h-8 w-64 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse" />
@@ -306,6 +314,7 @@ export default function App() {
                 subjects={bootstrapData.subjects}
                 onDataMutated={handlePlanMutated}
                 onNavigateToDefinitions={() => setActiveMenu('guide')}
+                onInspectSubject={handleInspectSubjectFromPlanner}
               />
             )}
 
@@ -314,6 +323,7 @@ export default function App() {
                 subjects={bootstrapData.subjects}
                 categories={bootstrapData.categories}
                 onNavigateToPlanner={() => setActiveMenu('planner')}
+                initialSubjectId={initialReportSubjectId}
               />
             )}
 
@@ -339,24 +349,27 @@ export default function App() {
       </main>
 
       {/* =====================================================================
-          SECTION 2: 5-ITEM MOBILE BOTTOM NAVIGATION BAR (RIGHT-TO-LEFT)
-          ۱. عملکرد | ۲. برنامه‌ریزی | ۳. دروس | ۴. راهنما | ۵. سایر
+          SECTION 1: 5-ITEM MOBILE BOTTOM NAVIGATION BAR (RIGHT-TO-LEFT)
+          ۱. عملکرد | ۲. دروس | ۳. برنامه‌ریزی (مرکز - برجسته) | ۴. راهنما | ۵. سایر
+          - Circular buttons (rounded-full)
+          - Center «برنامه‌ریزی» button elevated above the bar with a curved arch
+          - Harmonized soft tinted background matching the top header
       ===================================================================== */}
       <div
         ref={moreMobileRef}
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 pointer-events-none mobile-bottom-nav-shell bg-gradient-to-t from-slate-950/15 via-slate-950/5 to-transparent dark:from-black/50 dark:via-black/20 px-2 pt-1.5"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 pointer-events-none mobile-bottom-nav-shell bg-gradient-to-t from-indigo-950/15 via-indigo-950/5 to-transparent dark:from-black/60 dark:via-black/25 px-2.5 pt-3"
       >
-        {/* Floating Sub-menu Popover above "سایر" when tapped on mobile (only opens submenu, no auto-redirect) */}
+        {/* Floating Sub-menu Popover above "سایر" when tapped on mobile */}
         {isMorePopoverOpen && (
-          <div className="pointer-events-auto mx-auto max-w-md mb-2 flex justify-end px-1">
-            <div className="w-48 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl p-1.5 shadow-xl shadow-indigo-950/20 space-y-1">
+          <div className="pointer-events-auto mx-auto max-w-md mb-2.5 flex justify-end px-1">
+            <div className="w-48 rounded-2xl border border-indigo-200 dark:border-slate-700 bg-gradient-to-b from-indigo-50/95 to-white/95 dark:from-slate-900/95 dark:to-slate-900/95 backdrop-blur-xl p-1.5 shadow-xl shadow-indigo-950/20 space-y-1">
               <button
                 type="button"
                 onClick={() => handleSelectMoreItem('settings')}
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-extrabold transition-colors cursor-pointer ${
                   activeMenu === 'settings'
                     ? 'bg-indigo-600 text-white'
-                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    : 'text-slate-700 dark:text-slate-200 hover:bg-indigo-100/60 dark:hover:bg-slate-800'
                 }`}
               >
                 <Settings className="w-4 h-4 shrink-0" />
@@ -368,7 +381,7 @@ export default function App() {
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-extrabold transition-colors cursor-pointer ${
                   activeMenu === 'subjects'
                     ? 'bg-indigo-600 text-white'
-                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    : 'text-slate-700 dark:text-slate-200 hover:bg-indigo-100/60 dark:hover:bg-slate-800'
                 }`}
               >
                 <BookOpen className="w-4 h-4 shrink-0" />
@@ -380,58 +393,61 @@ export default function App() {
 
         <nav
           aria-label="ناوبری پایین صفحه موبایل"
-          className="pointer-events-auto mx-auto max-w-md rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-700/90 shadow-lg shadow-indigo-950/15 grid grid-cols-5 items-center h-15 p-1 gap-0.5"
+          className="pointer-events-auto relative mx-auto max-w-md rounded-3xl bg-gradient-to-l from-indigo-100/95 via-sky-50/95 to-violet-100/95 dark:from-slate-900/95 dark:via-indigo-950/95 dark:to-slate-900/95 backdrop-blur-xl border border-indigo-200/90 dark:border-indigo-800/80 shadow-lg shadow-indigo-950/15 grid grid-cols-5 items-center justify-items-center h-16 px-2 py-1"
         >
-          {/* ۱. عملکرد */}
+          {/* ۱. عملکرد (راست‌ترین دکمه دایره‌ای) */}
           <button
             type="button"
             onClick={() => {
               setActiveMenu('dashboard');
               setIsMorePopoverOpen(false);
             }}
-            className={`flex flex-col items-center justify-center h-full rounded-xl transition-all cursor-pointer ${
+            className={`w-12 h-12 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer ${
               activeMenu === 'dashboard'
-                ? 'bg-indigo-600 text-white font-extrabold shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold'
+                ? 'bg-indigo-600 text-white font-extrabold shadow-md shadow-indigo-600/30 ring-2 ring-white/80 dark:ring-slate-800'
+                : 'bg-white/75 dark:bg-slate-800/75 text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 font-bold border border-indigo-200/60 dark:border-slate-700/80'
             }`}
           >
-            <LayoutDashboard className="w-4 h-4" />
-            <span className="text-[10px] mt-1 whitespace-nowrap">عملکرد</span>
+            <LayoutDashboard className="w-4 h-4 shrink-0" />
+            <span className="text-[9.5px] mt-0.5 whitespace-nowrap leading-tight">عملکرد</span>
           </button>
 
-          {/* ۲. برنامه‌ریزی */}
+          {/* ۲. دروس */}
           <button
             type="button"
             onClick={() => {
-              setActiveMenu('planner');
-              setIsMorePopoverOpen(false);
-            }}
-            className={`flex flex-col items-center justify-center h-full rounded-xl transition-all cursor-pointer ${
-              activeMenu === 'planner'
-                ? 'bg-indigo-600 text-white font-extrabold shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold'
-            }`}
-          >
-            <CalendarCheck2 className="w-4 h-4" />
-            <span className="text-[10px] mt-1 whitespace-nowrap">برنامه‌ریزی</span>
-          </button>
-
-          {/* ۳. دروس */}
-          <button
-            type="button"
-            onClick={() => {
+              setInitialReportSubjectId(null);
               setActiveMenu('reports');
               setIsMorePopoverOpen(false);
             }}
-            className={`flex flex-col items-center justify-center h-full rounded-xl transition-all cursor-pointer ${
+            className={`w-12 h-12 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer ${
               activeMenu === 'reports'
-                ? 'bg-indigo-600 text-white font-extrabold shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold'
+                ? 'bg-indigo-600 text-white font-extrabold shadow-md shadow-indigo-600/30 ring-2 ring-white/80 dark:ring-slate-800'
+                : 'bg-white/75 dark:bg-slate-800/75 text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 font-bold border border-indigo-200/60 dark:border-slate-700/80'
             }`}
           >
-            <BarChart3 className="w-4 h-4" />
-            <span className="text-[10px] mt-1 whitespace-nowrap">دروس</span>
+            <BarChart3 className="w-4 h-4 shrink-0" />
+            <span className="text-[9.5px] mt-0.5 whitespace-nowrap leading-tight">دروس</span>
           </button>
+
+          {/* ۳. برنامه‌ریزی (دکمه مرکزی، کمی بالاتر و برجسته از کادر منوی پایین) */}
+          <div className="relative flex items-center justify-center -mt-6">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveMenu('planner');
+                setIsMorePopoverOpen(false);
+              }}
+              className={`w-15 h-15 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer ring-4 ring-indigo-100/95 dark:ring-slate-900 shadow-xl ${
+                activeMenu === 'planner'
+                  ? 'bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-600 text-white font-black shadow-indigo-600/40 scale-105'
+                  : 'bg-gradient-to-br from-white via-indigo-50 to-sky-100 dark:from-slate-800 dark:via-indigo-950 dark:to-slate-800 text-indigo-700 dark:text-indigo-300 font-extrabold border border-indigo-300 dark:border-indigo-700 hover:scale-105'
+              }`}
+            >
+              <CalendarCheck2 className="w-5 h-5 shrink-0" />
+              <span className="text-[10px] mt-0.5 whitespace-nowrap leading-tight">برنامه‌ریزی</span>
+            </button>
+          </div>
 
           {/* ۴. راهنما */}
           <button
@@ -440,29 +456,29 @@ export default function App() {
               setActiveMenu('guide');
               setIsMorePopoverOpen(false);
             }}
-            className={`flex flex-col items-center justify-center h-full rounded-xl transition-all cursor-pointer ${
+            className={`w-12 h-12 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer ${
               activeMenu === 'guide'
-                ? 'bg-indigo-600 text-white font-extrabold shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold'
+                ? 'bg-indigo-600 text-white font-extrabold shadow-md shadow-indigo-600/30 ring-2 ring-white/80 dark:ring-slate-800'
+                : 'bg-white/75 dark:bg-slate-800/75 text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 font-bold border border-indigo-200/60 dark:border-slate-700/80'
             }`}
           >
-            <HelpCircle className="w-4 h-4" />
-            <span className="text-[10px] mt-1 whitespace-nowrap">راهنما</span>
+            <HelpCircle className="w-4 h-4 shrink-0" />
+            <span className="text-[9.5px] mt-0.5 whitespace-nowrap leading-tight">راهنما</span>
           </button>
 
-          {/* ۵. سایر (Pure Submenu Toggle — Never auto-navigates) */}
+          {/* ۵. سایر (چپ‌ترین دکمه دایره‌ای) */}
           <button
             type="button"
             onClick={() => setIsMorePopoverOpen((prev) => !prev)}
             aria-expanded={isMorePopoverOpen}
-            className={`flex flex-col items-center justify-center h-full rounded-xl transition-all cursor-pointer ${
+            className={`w-12 h-12 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer ${
               isMoreSectionActive || isMorePopoverOpen
-                ? 'bg-indigo-600 text-white font-extrabold shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold'
+                ? 'bg-indigo-600 text-white font-extrabold shadow-md shadow-indigo-600/30 ring-2 ring-white/80 dark:ring-slate-800'
+                : 'bg-white/75 dark:bg-slate-800/75 text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 font-bold border border-indigo-200/60 dark:border-slate-700/80'
             }`}
           >
-            <MoreHorizontal className="w-4 h-4" />
-            <span className="text-[10px] mt-1 whitespace-nowrap">سایر</span>
+            <MoreHorizontal className="w-4 h-4 shrink-0" />
+            <span className="text-[9.5px] mt-0.5 whitespace-nowrap leading-tight">سایر</span>
           </button>
         </nav>
       </div>

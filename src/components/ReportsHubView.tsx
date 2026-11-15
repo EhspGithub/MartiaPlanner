@@ -44,6 +44,7 @@ import {
   getPersianWeekDays,
   getDateRangeISOList,
   formatJalaliCompact,
+  formatJalaliShortMonthDay,
   formatJalaliFull,
   toPersianDigits,
   formatMinutesPersian,
@@ -71,6 +72,7 @@ interface ReportsHubViewProps {
   subjects: Subject[];
   categories: ActivityCategory[];
   onNavigateToPlanner?: () => void;
+  initialSubjectId?: string | null;
 }
 
 type ReportCategoryTab = 'subjects' | 'recreation';
@@ -124,6 +126,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
   subjects,
   categories,
   onNavigateToPlanner,
+  initialSubjectId,
 }) => {
   const todayIso = getTodayISO();
 
@@ -148,8 +151,17 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
     [subjects]
   );
   const [selectedSingleSubjectId, setSelectedSingleSubjectId] = useState<string>(
-    () => activeSubjectsList[0]?.id || ''
+    () => initialSubjectId || activeSubjectsList[0]?.id || ''
   );
+
+  // Sync deep-linked subject from PlannerView («تحلیل درس»)
+  useEffect(() => {
+    if (initialSubjectId) {
+      setReportCategory('subjects');
+      setSubjectSubMode('single');
+      setSelectedSingleSubjectId(initialSubjectId);
+    }
+  }, [initialSubjectId]);
 
   // Minimum 2 and Maximum 5 subjects for simultaneous comparison
   const [comparedSubjectIds, setComparedSubjectIds] = useState<string[]>(() =>
@@ -463,13 +475,13 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
 
       const theme = getCardGradientTheme(entry.name, 'مطالعه درسی', true, 'educational');
 
-      // Daily trend for this subject using O(1) indexed lookup + empty-day short-circuit
+      // Daily trend for this subject using O(1) indexed lookup + empty-day short-circuit (Short MM/DD format e.g. ۰۸/۲۳)
       const dailyTrend = dateIsoList.map((dIso) => {
         const daySubjPlans = subjPlansByDate.get(dIso);
         if (!daySubjPlans || daySubjPlans.length === 0) {
           return {
             dateIso: dIso,
-            label: formatJalaliCompact(dIso),
+            label: formatJalaliShortMonthDay(dIso),
             predictedMinutes: 0,
             actualMinutes: 0,
             actualExercises: 0,
@@ -505,7 +517,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
 
         return {
           dateIso: dIso,
-          label: formatJalaliCompact(dIso),
+          label: formatJalaliShortMonthDay(dIso),
           predictedMinutes: dPred,
           actualMinutes: dAct,
           actualExercises: dAEx,
@@ -2169,7 +2181,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={periodOverview.dailyEvaluations.map((d) => ({
-                    label: d.jalaliCompact,
+                    label: formatJalaliShortMonthDay(d.dateIso),
                     allowed: d.restrictedAllowedLoggedMinutes || d.restrictedPlannedMinutes,
                     actual: d.restrictedActualMinutes,
                     overuse: d.restrictedOveruseMinutes,

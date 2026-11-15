@@ -78,6 +78,7 @@ interface PlannerViewProps {
   subjects: Subject[];
   onDataMutated: () => void;
   onNavigateToDefinitions?: () => void;
+  onInspectSubject?: (subjectId: string) => void;
 }
 
 const REMINDER_TIME_OPTIONS: string[] = [
@@ -137,6 +138,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   priorities,
   subjects,
   onDataMutated,
+  onInspectSubject,
 }) => {
   const todayIso = getTodayISO();
 
@@ -641,8 +643,8 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
               </div>
             </div>
 
-            {/* 2: 8 Compact Single-Line Cards in 2-Column × 4-Row Grid with Top-Border Icons */}
-            <div className="grid grid-cols-2 gap-x-2 gap-y-3 sm:gap-x-3 sm:gap-y-3.5 pt-1.5">
+            {/* 2: 8 Compact Single-Line Cards in 2-Column (Mobile) / 4-Column (Desktop) Grid with Top-Border Icons */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-2 gap-y-3 sm:gap-x-3 sm:gap-y-3.5 pt-1.5">
               {/* ROW 1 — Right Col #1: تست و تمرین */}
               <div className="relative rounded-xl bg-emerald-500/15 border border-emerald-300/30 backdrop-blur-xs px-2.5 pt-2.5 pb-1.5 text-center min-w-0">
                 <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-1.5 rounded-full bg-indigo-900 flex items-center justify-center">
@@ -1244,69 +1246,72 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                   >
                     <div>
                       {/* =========================================================
-                          SECTION 7: REDESIGNED GRADIENT HEADER
-                          - Line 1: Full-width Persian Title + Priority + 4 Action Buttons
-                          - Line 2: Subtle Yellow Activity Type Subtitle
+                          SECTION 4-1: REDESIGNED 2-ROW GRADIENT HEADER
+                          - Row 1: Full-width Persian Title + Priority (100% width)
+                          - Row 2: Subtle Yellow Activity Type Subtitle (Right) + 4 Action Buttons (Left)
                       ========================================================= */}
                       <div
-                        className={`px-3.5 py-2.5 ${gradTheme.headerGradient} flex items-start justify-between gap-2`}
+                        className={`px-3.5 py-2.5 ${gradTheme.headerGradient} space-y-1.5`}
                       >
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white shrink-0">
+                        {/* Row 1: Full-Width Activity Title */}
+                        <div className="flex items-center gap-2.5 min-w-0 w-full">
+                          <div className="w-7 h-7 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white shrink-0">
                             <ThemeIcon className="w-4 h-4" />
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <h3
-                              className="text-xs sm:text-sm font-extrabold text-white truncate whitespace-nowrap"
-                              title={singleLineTitle}
-                            >
-                              {singleLineTitle}
-                            </h3>
-                            <div className="text-[10px] sm:text-[11px] font-extrabold text-amber-200 truncate mt-0.5">
-                              {activityTypeSubtitle}
-                            </div>
-                          </div>
+                          <h3
+                            className="text-xs sm:text-sm font-extrabold text-white truncate whitespace-nowrap flex-1 min-w-0"
+                            title={singleLineTitle}
+                          >
+                            {singleLineTitle}
+                          </h3>
                         </div>
 
-                        {/* 4 Action Buttons on Left */}
-                        <div
-                          className="flex items-center gap-0.5 bg-black/15 rounded-xl px-1 py-0.5 shrink-0"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleMoveOrder(index, 'up')}
-                            disabled={index === 0}
-                            className="p-1 rounded-lg text-white/80 hover:text-white disabled:opacity-30 cursor-pointer"
-                            title="جابه‌جایی به بالا"
+                        {/* Row 2: Subtle Activity Type Label (Right) + 4 Action Controls (Left) */}
+                        <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-white/15">
+                          <div className="text-[10px] sm:text-[11px] font-extrabold text-amber-200 truncate min-w-0">
+                            {activityTypeSubtitle}
+                          </div>
+
+                          {/* 4 Action Buttons on Left */}
+                          <div
+                            className="flex items-center gap-0.5 bg-black/15 rounded-xl px-1 py-0.5 shrink-0"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <ArrowUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleMoveOrder(index, 'down')}
-                            disabled={index === sortedDailyPlans.length - 1}
-                            className="p-1 rounded-lg text-white/80 hover:text-white disabled:opacity-30 cursor-pointer"
-                            title="جابه‌جایی به پایین"
-                          >
-                            <ArrowDown className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openEditForm(plan)}
-                            className="p-1 rounded-lg text-white/80 hover:text-white cursor-pointer"
-                            title="ویرایش برنامه"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeletingPlan(plan)}
-                            className="p-1 rounded-lg text-white/80 hover:text-rose-200 cursor-pointer"
-                            title="حذف فعالیت"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveOrder(index, 'up')}
+                              disabled={index === 0}
+                              className="p-1 rounded-lg text-white/80 hover:text-white disabled:opacity-30 cursor-pointer"
+                              title="جابه‌جایی به بالا"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveOrder(index, 'down')}
+                              disabled={index === sortedDailyPlans.length - 1}
+                              className="p-1 rounded-lg text-white/80 hover:text-white disabled:opacity-30 cursor-pointer"
+                              title="جابه‌جایی به پایین"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openEditForm(plan)}
+                              className="p-1 rounded-lg text-white/80 hover:text-white cursor-pointer"
+                              title="ویرایش برنامه"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingPlan(plan)}
+                              className="p-1 rounded-lg text-white/80 hover:text-rose-200 cursor-pointer"
+                              title="حذف فعالیت"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -1405,25 +1410,43 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                         </span>
                       </div>
 
-                      {/* Sections 10 & 11: Symmetrical Actual Performance + Transfer to Next Day */}
+                      {/* Sections 10 & 11: Symmetrical Actual Performance + «تحلیل درس» (Bottom-Right) + «انتقال به روز بعد» (Bottom-Left) */}
                       {!hasPerf ? (
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="space-y-2">
                           <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-medium min-w-0 truncate">
                             <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                             <span className="truncate">آماده انجام (برای ثبت عملکرد کلیک کنید)</span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setTransferringPlan(plan);
-                            }}
-                            className="inline-flex items-center gap-1 rounded-xl border border-indigo-200 dark:border-indigo-800/70 bg-indigo-50/80 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-2.5 py-1 text-[11px] font-extrabold text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
-                            title="انتقال این فعالیت به برنامه روز بعد"
-                          >
-                            <CalendarArrowUp className="w-3.5 h-3.5 shrink-0" />
-                            <span>انتقال به روز بعد</span>
-                          </button>
+                          <div className="flex items-center justify-between gap-2">
+                            {isStudy && plan.subject_id && onInspectSubject ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onInspectSubject(plan.subject_id!);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-xl border border-violet-200 dark:border-violet-800/70 bg-violet-50/85 dark:bg-violet-950/50 hover:bg-violet-100 dark:hover:bg-violet-900/60 px-2.5 py-1 text-[11px] font-extrabold text-violet-700 dark:text-violet-300 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                                title="مشاهده کارنامه، سطح و تحلیل اختصاصی این درس"
+                              >
+                                <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                                <span>تحلیل درس</span>
+                              </button>
+                            ) : (
+                              <div />
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTransferringPlan(plan);
+                              }}
+                              className="inline-flex items-center gap-1 rounded-xl border border-indigo-200 dark:border-indigo-800/70 bg-indigo-50/80 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-2.5 py-1 text-[11px] font-extrabold text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                              title="انتقال این فعالیت به برنامه روز بعد"
+                            >
+                              <CalendarArrowUp className="w-3.5 h-3.5 shrink-0" />
+                              <span>انتقال به روز بعد</span>
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] tabular-nums pt-0.5">
@@ -1497,19 +1520,41 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                               </div>
                             </>
                           )}
-                          {plan.status !== 'completed' && (
-                            <div className="col-span-2 pt-1 flex justify-end">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setTransferringPlan(plan);
-                                }}
-                                className="inline-flex items-center gap-1 rounded-xl border border-indigo-200 dark:border-indigo-800/70 bg-indigo-50/80 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-2.5 py-1 text-[11px] font-extrabold text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
-                              >
-                                <CalendarArrowUp className="w-3.5 h-3.5 shrink-0" />
-                                <span>انتقال به روز بعد</span>
-                              </button>
+
+                          {/* Bottom Action Row: «تحلیل درس» (Bottom-Right) & «انتقال به روز بعد» (Bottom-Left) */}
+                          {((isStudy && plan.subject_id && onInspectSubject) ||
+                            plan.status !== 'completed') && (
+                            <div className="col-span-2 pt-1 flex items-center justify-between gap-2">
+                              {isStudy && plan.subject_id && onInspectSubject ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onInspectSubject(plan.subject_id!);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-xl border border-violet-200 dark:border-violet-800/70 bg-violet-50/85 dark:bg-violet-950/50 hover:bg-violet-100 dark:hover:bg-violet-900/60 px-2.5 py-1 text-[11px] font-extrabold text-violet-700 dark:text-violet-300 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                                  title="مشاهده کارنامه، سطح و تحلیل اختصاصی این درس"
+                                >
+                                  <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                                  <span>تحلیل درس</span>
+                                </button>
+                              ) : (
+                                <div />
+                              )}
+
+                              {plan.status !== 'completed' && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setTransferringPlan(plan);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-xl border border-indigo-200 dark:border-indigo-800/70 bg-indigo-50/80 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-2.5 py-1 text-[11px] font-extrabold text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                                >
+                                  <CalendarArrowUp className="w-3.5 h-3.5 shrink-0" />
+                                  <span>انتقال به روز بعد</span>
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>

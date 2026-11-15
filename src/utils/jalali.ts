@@ -165,6 +165,18 @@ export function formatJalaliCompact(isoDate: string): string {
 }
 
 /**
+ * Formats an ISO date into short Persian month/day format for chart X-axes:
+ * Example: "۰۸/۲۳" (wrapped in directional isolate so slash order stays MM/DD)
+ */
+export function formatJalaliShortMonthDay(isoDate: string): string {
+  if (!isoDate) return '';
+  const { jm, jd } = isoToJalali(isoDate);
+  const mm = toPersianDigits(String(jm).padStart(2, '0'));
+  const dd = toPersianDigits(String(jd).padStart(2, '0'));
+  return `\u2066${mm}/${dd}\u2069`;
+}
+
+/**
  * Formats an ISO date as single-line weekday + YYYY/MM/DD:
  * e.g. "سه‌شنبه ۱۴۰۵/۰۸/۲۲"
  */

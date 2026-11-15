@@ -149,12 +149,12 @@ export const StepSegmentDots: React.FC<StepSegmentDotsProps> = ({
 }) => {
   const steps: Array<{ n: StepTierNumber; label: string }> = [
     { n: 1, label: 'پایه' },
-    { n: 2, label: 'Plus +' },
-    { n: 3, label: 'Star ★' },
+    { n: 2, label: 'پلاس +' },
+    { n: 3, label: 'استار ★' },
   ];
 
   return (
-    <div className="inline-flex items-center gap-1" dir="ltr">
+    <div className="inline-flex items-center gap-1" dir="rtl">
       {steps.map((s) => {
         const isReached = s.n <= stepNumber;
         const isCurrent = s.n === stepNumber;
@@ -240,9 +240,8 @@ export const SubjectLevelCard: React.FC<SubjectLevelCardProps> = ({ progression 
           <div className="text-[11px] font-bold leading-relaxed tabular-nums">
             {progression.hasSubjectDemotion && progression.latestSubjectDemotion ? (
               <span>
-                سطح درس از «{progression.peakStageProgress.stageNameFa} (
-                {progression.peakStageProgress.stepLabelFa})» به «{stageProgress.stageNameFa} (
-                {stageProgress.stepLabelFa})» تنزل یافته است — {progression.continuityStatusReasonFa}
+                سطح درس از «{progression.peakStageProgress.stageNameFa}» به «
+                {stageProgress.stageNameFa}» تنزل یافته است — {progression.continuityStatusReasonFa}
               </span>
             ) : (
               <span>{progression.continuityStatusReasonFa}</span>
@@ -252,7 +251,7 @@ export const SubjectLevelCard: React.FC<SubjectLevelCardProps> = ({ progression 
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
-        {/* Right Column: Subject Level & Step Identity */}
+        {/* Right Column: Subject Level & Step Identity (3 Clean Lines per Section 9-1) */}
         <div
           className={`lg:col-span-5 flex items-center gap-3.5 border-b lg:border-b-0 lg:border-l pb-3.5 lg:pb-0 lg:pl-4 ${
             isDarkLux
@@ -268,45 +267,41 @@ export const SubjectLevelCard: React.FC<SubjectLevelCardProps> = ({ progression 
           />
 
           <div className="min-w-0 space-y-1 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-extrabold">
-              <BookOpen className="w-3.5 h-3.5 shrink-0 opacity-80" />
-              <span className={palette.accentTextClass}>
-                سطح اختصاصی درس «{progression.subjectName}»
-              </span>
-              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${continuityBadgeClass}`}>
-                {progression.continuityStatusLabelFa}
-              </span>
-            </div>
-
+            {/* Line 1: Level Number + Persian Level & Step Name + Small Badge on same line */}
             <div className="flex flex-wrap items-center gap-1.5">
               <span
                 className={`text-sm sm:text-base font-black leading-snug ${
                   isDarkLux ? 'text-white' : 'text-slate-900 dark:text-white'
                 }`}
               >
-                Level {toPersianDigits(stageProgress.level)} — {stageProgress.stageNameFa}
+                Level {toPersianDigits(stageProgress.level)} – {stageProgress.stageNameFa}
               </span>
               <span
                 dir="ltr"
-                className={`text-xs font-black px-2 py-0.5 rounded-lg ${palette.pillBgClass}`}
+                className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${palette.pillBgClass}`}
               >
                 {stageProgress.stageNameEn}
               </span>
+              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${continuityBadgeClass}`}>
+                {progression.continuityStatusLabelFa}
+              </span>
             </div>
 
+            {/* Line 2: سطح اختصاصی [نام درس] */}
+            <div className="flex items-center gap-1.5 text-xs font-extrabold">
+              <BookOpen className="w-3.5 h-3.5 shrink-0 opacity-80" />
+              <span className={palette.accentTextClass}>
+                سطح اختصاصی {progression.subjectName}
+              </span>
+            </div>
+
+            {/* Line 3: Honorary Title */}
             <div
-              className={`flex flex-wrap items-center gap-2 text-xs font-bold ${
-                isDarkLux ? 'text-slate-200' : 'text-slate-600 dark:text-slate-300'
+              className={`text-xs font-extrabold ${
+                isDarkLux ? 'text-slate-200' : palette.accentTextClass
               }`}
             >
-              <span>
-                عنوان افتخاری:{' '}
-                <strong className={palette.accentTextClass}>
-                  {stageProgress.honoraryTitle}
-                </strong>
-              </span>
-              <span>•</span>
-              <span>{stageProgress.stepLabelFa}</span>
+              {stageProgress.honoraryTitle}
             </div>
           </div>
         </div>
@@ -331,8 +326,7 @@ export const SubjectLevelCard: React.FC<SubjectLevelCardProps> = ({ progression 
                     پیشرفت تا مرحله بعد:{' '}
                     <strong dir="ltr" className="inline-block">
                       {stageProgress.nextStageNameEn}
-                    </strong>{' '}
-                    ({stageProgress.nextStageNameFa})
+                    </strong>
                   </span>
                 </>
               )}
@@ -365,12 +359,13 @@ export const SubjectLevelCard: React.FC<SubjectLevelCardProps> = ({ progression 
             </div>
           </div>
 
+          {/* Two Centered Lines Below Progress Bar (Section 9-1) */}
           <div
-            className={`flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold tabular-nums ${
+            className={`flex flex-col items-center justify-center text-center gap-1 text-[11px] font-bold tabular-nums pt-0.5 ${
               isDarkLux ? 'text-slate-200' : 'text-slate-600 dark:text-slate-400'
             }`}
           >
-            <span className="inline-flex flex-wrap items-center gap-1">
+            <div className="inline-flex flex-wrap items-center justify-center gap-1">
               <span>XP خالص فعلی درس:</span>
               <strong
                 className={`font-black ${
@@ -392,49 +387,53 @@ export const SubjectLevelCard: React.FC<SubjectLevelCardProps> = ({ progression 
                   {toPersianDigits(stageProgress.progressPercentage)}٪)
                 </span>
               )}
-            </span>
+            </div>
 
-            {stageProgress.isMaxStage ? (
-              <span className="inline-flex items-center gap-1 font-black text-emerald-400">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>تکمیل ۱۰۰٪ تمام ۳۹ مرحله درس</span>
-              </span>
-            ) : (
-              <span className={`font-extrabold inline-flex items-center gap-1 ${palette.accentTextClass}`}>
-                <span>{toPersianDigits(stageProgress.xpRemainingToNextLevel)}</span>
-                <XpCoinBadge size="xs" />
-                <span>
-                  نیاز تا {stageProgress.nextStageNameEn} (آستانه{' '}
-                  {toPersianDigits(stageProgress.nextLevelTargetXp)})
+            <div>
+              {stageProgress.isMaxStage ? (
+                <span className="inline-flex items-center justify-center gap-1 font-black text-emerald-400">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>تکمیل ۱۰۰٪ تمام ۳۹ مرحله درس</span>
                 </span>
-              </span>
-            )}
+              ) : (
+                <span className={`font-extrabold inline-flex items-center justify-center gap-1 ${palette.accentTextClass}`}>
+                  <span>{toPersianDigits(stageProgress.xpRemainingToNextLevel)}</span>
+                  <XpCoinBadge size="xs" />
+                  <span>
+                    موردنیاز تا مرحله بعد ({stageProgress.nextStageNameEn} • آستانه{' '}
+                    {toPersianDigits(stageProgress.nextLevelTargetXp)})
+                  </span>
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Continuity & Session Discipline Strip (Sections 3 & 4) */}
+      {/* 4 Compact Single-Line Horizontal Stat Rows (Section 9-1) */}
       <div
-        className={`pt-2.5 border-t grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-bold tabular-nums ${
+        className={`pt-2.5 border-t grid grid-cols-1 md:grid-cols-2 gap-1.5 text-[11px] font-bold tabular-nums ${
           isDarkLux
             ? 'border-white/15 text-slate-200'
             : 'border-slate-200/70 dark:border-slate-800 text-slate-600 dark:text-slate-300'
         }`}
       >
-        <div className="rounded-xl bg-white/60 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 px-2.5 py-1.5 flex items-center justify-between gap-1">
-          <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1 truncate">
-            <Clock className="w-3 h-3 shrink-0" />
+        <div className="rounded-xl bg-white/70 dark:bg-slate-900/55 border border-slate-200/60 dark:border-slate-800 px-3 py-1.5 flex items-center justify-between gap-2">
+          <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5 whitespace-nowrap">
+            <Clock className="w-3.5 h-3.5 shrink-0" />
             <span>آخرین مطالعه مؤثر:</span>
           </span>
-          <strong className="font-black text-slate-900 dark:text-white truncate">
+          <strong className="font-black text-slate-900 dark:text-white whitespace-nowrap">
             {progression.lastEffectiveStudyJalali}
           </strong>
         </div>
 
-        <div className="rounded-xl bg-white/60 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 px-2.5 py-1.5 flex items-center justify-between gap-1">
-          <span className="text-slate-500 dark:text-slate-400 truncate">نوبت‌های ازدست‌رفته:</span>
+        <div className="rounded-xl bg-white/70 dark:bg-slate-900/55 border border-slate-200/60 dark:border-slate-800 px-3 py-1.5 flex items-center justify-between gap-2">
+          <span className="text-slate-500 dark:text-slate-400 whitespace-nowrap">
+            نوبت‌های ازدست‌رفته:
+          </span>
           <strong
-            className={`font-black ${
+            className={`font-black whitespace-nowrap ${
               progression.missedSessionsCount > 0
                 ? 'text-rose-600 dark:text-rose-400'
                 : 'text-emerald-600 dark:text-emerald-400'
@@ -444,17 +443,21 @@ export const SubjectLevelCard: React.FC<SubjectLevelCardProps> = ({ progression 
           </strong>
         </div>
 
-        <div className="rounded-xl bg-white/60 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 px-2.5 py-1.5 flex items-center justify-between gap-1">
-          <span className="text-slate-500 dark:text-slate-400 truncate">جلسات موفق ۱۴ روز اخیر:</span>
-          <strong className="font-black text-indigo-600 dark:text-indigo-400">
+        <div className="rounded-xl bg-white/70 dark:bg-slate-900/55 border border-slate-200/60 dark:border-slate-800 px-3 py-1.5 flex items-center justify-between gap-2">
+          <span className="text-slate-500 dark:text-slate-400 whitespace-nowrap">
+            جلسات موفق ۱۴ روز اخیر:
+          </span>
+          <strong className="font-black text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
             {toPersianDigits(progression.successfulSessionsRecent14d)} جلسه
           </strong>
         </div>
 
-        <div className="rounded-xl bg-white/60 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 px-2.5 py-1.5 flex items-center justify-between gap-1">
-          <span className="text-slate-500 dark:text-slate-400 truncate">تراز XP اختصاصی درس:</span>
-          <strong className="font-black text-slate-900 dark:text-white">
-            +{toPersianDigits(progression.grossSubjectXp)} / {toPersianDigits(progression.subjectPenaltyXp)}-
+        <div className="rounded-xl bg-white/70 dark:bg-slate-900/55 border border-slate-200/60 dark:border-slate-800 px-3 py-1.5 flex items-center justify-between gap-2">
+          <span className="text-slate-500 dark:text-slate-400 whitespace-nowrap">
+            تراز XP اختصاصی درس:
+          </span>
+          <strong className="font-black text-slate-900 dark:text-white whitespace-nowrap" dir="ltr">
+            +{toPersianDigits(progression.grossSubjectXp)} / -{toPersianDigits(progression.subjectPenaltyXp)} XP
           </strong>
         </div>
       </div>

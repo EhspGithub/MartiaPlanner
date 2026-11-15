@@ -270,7 +270,7 @@ export const DashboardView: React.FC = () => {
             )}
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
-              {/* Right Column: Level Crest (1..13 + Step Badge) & Identity Summary */}
+              {/* Right Column: Level Crest (1..13 + Step Badge) & 3-Line Identity Summary (Section 5-1) */}
               <div
                 className={`lg:col-span-4 flex items-center gap-4 border-b lg:border-b-0 lg:border-l pb-4 lg:pb-0 lg:pl-5 ${
                   isDarkLux
@@ -286,12 +286,20 @@ export const DashboardView: React.FC = () => {
                 />
 
                 <div className="min-w-0 flex flex-col justify-center space-y-1 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5 leading-tight">
-                    <span className={`text-[11px] font-extrabold ${palette.accentTextClass}`}>
-                      سطح کل ({toPersianDigits(levelProgress.stageNumber)} از ۳۹)
+                  {/* خط اول: Level ۲ – مس پلاس + نشان کوچک در همان خط */}
+                  <div
+                    className={`flex flex-wrap items-center gap-1.5 text-sm sm:text-base font-black leading-snug ${
+                      isDarkLux ? 'text-white' : 'text-slate-900 dark:text-white'
+                    }`}
+                  >
+                    <span>
+                      Level {toPersianDigits(levelProgress.level)} – {levelProgress.stageNameFa}
                     </span>
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${palette.pillBgClass}`}>
-                      {levelProgress.stepOrdinalFa}
+                    <span
+                      dir="ltr"
+                      className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${palette.pillBgClass}`}
+                    >
+                      {levelProgress.stageNameEn}
                     </span>
                     {globalXpLedger.hasActiveDemotion && (
                       <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-600 text-white">
@@ -300,40 +308,25 @@ export const DashboardView: React.FC = () => {
                     )}
                   </div>
 
-                  <div
-                    className={`flex flex-wrap items-center gap-1.5 text-sm sm:text-base font-black leading-snug ${
-                      isDarkLux ? 'text-white' : 'text-slate-900 dark:text-white'
-                    }`}
-                  >
-                    <span>
-                      Level {toPersianDigits(levelProgress.level)} — {levelProgress.stageNameFa}
-                    </span>
-                    <span
-                      dir="ltr"
-                      className={`text-xs font-black px-2 py-0.5 rounded-lg ${palette.pillBgClass}`}
-                    >
-                      {levelProgress.stageNameEn}
+                  {/* خط دوم: سطح کل (۵ از ۳۹) */}
+                  <div className="leading-tight">
+                    <span className={`text-xs font-extrabold ${palette.accentTextClass}`}>
+                      سطح کل ({toPersianDigits(levelProgress.stageNumber)} از ۳۹)
                     </span>
                   </div>
 
+                  {/* خط سوم: عنوان افتخاری */}
                   <div
-                    className={`flex flex-wrap items-center gap-2 text-xs font-bold leading-tight ${
-                      isDarkLux ? 'text-slate-200' : 'text-slate-600 dark:text-slate-300'
+                    className={`text-xs font-extrabold leading-tight ${
+                      isDarkLux ? 'text-slate-200' : palette.accentTextClass
                     }`}
                   >
-                    <span>
-                      عنوان افتخاری:{' '}
-                      <strong className={palette.accentTextClass}>
-                        {levelProgress.honoraryTitle}
-                      </strong>
-                    </span>
-                    <span>•</span>
-                    <span>{levelProgress.stepLabelFa}</span>
+                    {levelProgress.honoraryTitle}
                   </div>
                 </div>
               </div>
 
-              {/* Center Column: Step Segment Indicator, Progress Bar & Cumulative XP */}
+              {/* Center Column: Step Segment Indicator, Progress Bar & Centered 2-Line Cumulative XP (Section 5-1) */}
               <div
                 className={`lg:col-span-5 space-y-2.5 border-b lg:border-b-0 lg:border-l pb-4 lg:pb-0 lg:pl-5 ${
                   isDarkLux
@@ -356,11 +349,10 @@ export const DashboardView: React.FC = () => {
                       <>
                         <Zap className="w-4 h-4 text-amber-500 shrink-0" />
                         <span>
-                          پیشرفت تا{' '}
+                          پیشرفت تا پله بعد:{' '}
                           <strong dir="ltr" className="inline-block">
                             {levelProgress.nextStageNameEn}
-                          </strong>{' '}
-                          ({levelProgress.nextStageNameFa})
+                          </strong>
                         </span>
                       </>
                     )}
@@ -393,12 +385,13 @@ export const DashboardView: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Two Separate Centered Lines Below Progress Bar */}
                 <div
-                  className={`flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold tabular-nums ${
+                  className={`flex flex-col items-center justify-center text-center gap-1 text-[11px] font-bold tabular-nums pt-0.5 ${
                     isDarkLux ? 'text-slate-200' : 'text-slate-600 dark:text-slate-400'
                   }`}
                 >
-                  <span className="inline-flex flex-wrap items-center gap-1">
+                  <div className="inline-flex flex-wrap items-center justify-center gap-1">
                     <span>XP خالص فعلی:</span>
                     <strong
                       className={`font-black ${
@@ -416,34 +409,36 @@ export const DashboardView: React.FC = () => {
                     {!levelProgress.isMaxStage && (
                       <span className="opacity-85">
                         ({toPersianDigits(levelProgress.xpInCurrentLevel)} از{' '}
-                        {toPersianDigits(levelProgress.xpRequiredForCurrentStep)} این پله •{' '}
-                        {toPersianDigits(levelProgress.progressPercentage)}٪)
+                        {toPersianDigits(levelProgress.xpRequiredForCurrentStep)} •{' '}
+                        {toPersianDigits(levelProgress.progressPercentage)}٪ پله)
                       </span>
                     )}
-                  </span>
+                  </div>
 
-                  {levelProgress.isMaxStage ? (
-                    <span className="inline-flex items-center gap-1 font-black text-emerald-400">
-                      <Crown className="w-3.5 h-3.5" />
-                      <span>تکمیل ۱۰۰٪ تمام ۳۹ مرحله</span>
-                    </span>
-                  ) : (
-                    <span className={`font-extrabold inline-flex items-center gap-1 ${palette.accentTextClass}`}>
-                      <span>{toPersianDigits(levelProgress.xpRemainingToNextLevel)}</span>
-                      <XpCoinBadge size="xs" />
-                      <span>
-                        نیاز تا {levelProgress.nextStageNameEn} (آستانه{' '}
-                        {toPersianDigits(levelProgress.nextLevelTargetXp)})
+                  <div>
+                    {levelProgress.isMaxStage ? (
+                      <span className="inline-flex items-center justify-center gap-1 font-black text-emerald-400">
+                        <Crown className="w-3.5 h-3.5" />
+                        <span>تکمیل ۱۰۰٪ تمام ۳۹ مرحله</span>
                       </span>
-                    </span>
-                  )}
+                    ) : (
+                      <span className={`font-extrabold inline-flex items-center justify-center gap-1 ${palette.accentTextClass}`}>
+                        <span>{toPersianDigits(levelProgress.xpRemainingToNextLevel)}</span>
+                        <XpCoinBadge size="xs" />
+                        <span>
+                          موردنیاز تا پله بعد ({levelProgress.nextStageNameEn} • آستانه{' '}
+                          {toPersianDigits(levelProgress.nextLevelTargetXp)})
+                        </span>
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Left Column: Today's Earned XP & Accordion Toggle */}
-              <div className="lg:col-span-3 flex flex-col justify-center">
+              {/* Left Column: Today's Earned XP & Accordion Toggle (Section 5-2) */}
+              <div className="lg:col-span-3 flex flex-col justify-center min-w-0">
                 <div
-                  className={`rounded-2xl border px-3.5 py-3 space-y-2 ${
+                  className={`rounded-2xl border px-3.5 py-3 space-y-2.5 overflow-hidden ${
                     isDarkLux
                       ? 'bg-white/10 border-white/20 text-white'
                       : 'bg-indigo-600/8 dark:bg-indigo-500/10 border-indigo-200/70 dark:border-indigo-800/60'
@@ -457,9 +452,9 @@ export const DashboardView: React.FC = () => {
                     XPهای کسب‌شده در {rangeLabelPersian}
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 pt-0.5">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-between lg:justify-center xl:justify-between gap-2 pt-0.5">
                     <div
-                      className={`text-base sm:text-lg font-black tabular-nums flex items-center gap-1 shrink-0 ${
+                      className={`text-base sm:text-lg font-black tabular-nums flex items-center justify-center gap-1 shrink-0 ${
                         isDarkLux ? 'text-amber-300' : 'text-indigo-700 dark:text-indigo-300'
                       }`}
                     >
@@ -475,7 +470,7 @@ export const DashboardView: React.FC = () => {
                         setShowXpFormulaGuide((prev) => !prev);
                       }}
                       aria-expanded={showXpFormulaGuide}
-                      className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-[11px] font-extrabold transition-all cursor-pointer shrink-0 shadow-2xs ${
+                      className={`inline-flex items-center justify-center gap-1 rounded-xl border px-2.5 py-1.5 text-[11px] font-extrabold transition-all cursor-pointer max-w-full shadow-2xs ${
                         showXpFormulaGuide
                           ? 'bg-indigo-600 text-white border-indigo-600'
                           : isDarkLux
@@ -484,7 +479,7 @@ export const DashboardView: React.FC = () => {
                       }`}
                     >
                       <Info className="w-3.5 h-3.5 shrink-0" />
-                      <span className="whitespace-nowrap">ریز محاسبات XP</span>
+                      <span className="whitespace-nowrap truncate">ریز محاسبات XP</span>
                       <ChevronDown
                         className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${
                           showXpFormulaGuide ? 'rotate-180' : ''
@@ -496,7 +491,7 @@ export const DashboardView: React.FC = () => {
               </div>
             </div>
 
-            {/* Expandable 1/10th Scale XP Formula Guide + Cumulative Net & Penalty Summary */}
+            {/* Expandable 1/10th Scale XP Formula Guide + Cumulative Net & Penalty Summary (Section 5-2) */}
             {showXpFormulaGuide && (
               <div
                 className={`pt-3 border-t text-xs animate-in fade-in duration-150 ${
@@ -504,14 +499,9 @@ export const DashboardView: React.FC = () => {
                 }`}
               >
                 <div className="rounded-2xl bg-slate-50/95 dark:bg-slate-800/90 text-slate-900 dark:text-white border border-indigo-200/80 dark:border-slate-700/80 p-4 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                      <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
-                      <span>ریز محاسبه امتیاز عملکرد (XP) در بازه «{rangeLabelPersian}» و تراز کل</span>
-                    </div>
-                    <span className="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-300 tabular-nums">
-                      امتیاز امروز: {toPersianDigits(rangeXpBreakdown.totalXp)} XP
-                    </span>
+                  <div className="font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span className="truncate">محاسبات امتیاز عملکرد XP – امروز و تراز کل</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 tabular-nums">
                     <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 px-3 py-2 flex items-center justify-between">
@@ -597,8 +587,9 @@ export const DashboardView: React.FC = () => {
             )}
 
             {/* ===================================================================
-                MASTER COLLAPSIBLE ACCORDION FOR THE 5 XP ANALYSIS CARDS
-                («تحلیل روند پیشرفت و رشد تحصیلی»)
+                SECTION 5-3: MASTER COLLAPSIBLE ACCORDION FOR THE 5 XP ANALYSIS CARDS
+                Line 1: تحلیل روند پیشرفت و رشد تحصیلی
+                Line 2: مشاهده پنج شاخص تحلیلی
             =================================================================== */}
             <div
               className={`pt-3 border-t space-y-2.5 ${
@@ -612,30 +603,26 @@ export const DashboardView: React.FC = () => {
                   aria-expanded={isXpVelocityOpen}
                   className="w-full px-4 py-3 flex items-center justify-between gap-3 text-right hover:bg-indigo-50/50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
                 >
-                  <div className="flex flex-wrap items-center gap-2 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
                       <Activity className="w-4 h-4" />
                     </div>
-                    <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
-                      تحلیل روند پیشرفت و رشد تحصیلی
-                    </span>
-                    <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                      ({xpVelocityAnalysis.trendLabelPersian} •{' '}
-                      {xpVelocityAnalysis.estimatedNextLevelTextPersian})
-                    </span>
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white truncate">
+                        تحلیل روند پیشرفت و رشد تحصیلی
+                      </div>
+                      <div className="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400">
+                        {isXpVelocityOpen ? 'بستن پنج شاخص تحلیلی' : 'مشاهده پنج شاخص تحلیلی'}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400">
-                      {isXpVelocityOpen ? 'بستن تحلیل' : 'مشاهده ۵ شاخص تحلیلی'}
-                    </span>
-                    <div
-                      className={`w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-indigo-600 dark:text-indigo-400 transition-transform duration-200 ${
-                        isXpVelocityOpen ? 'rotate-180' : ''
-                      }`}
-                    >
-                      <ChevronDown className="w-4 h-4" />
-                    </div>
+                  <div
+                    className={`w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0 transition-transform duration-200 ${
+                      isXpVelocityOpen ? 'rotate-180' : ''
+                    }`}
+                  >
+                    <ChevronDown className="w-4 h-4" />
                   </div>
                 </button>
 
@@ -749,8 +736,9 @@ export const DashboardView: React.FC = () => {
               </div>
 
               {/* =================================================================
-                  SECTION 2: COLLAPSIBLE PROMOTION, DEMOTION & XP HISTORY LEDGER
-                  («تاریخچه ارتقا، تنزل و تغییرات XP»)
+                  SECTION 5-4: COLLAPSIBLE PROMOTION, DEMOTION & XP HISTORY LEDGER
+                  Line 1: تاریخچه ارتقا، تنزل و تغییرات XP
+                  Line 2: مشاهده کارنامه تغییرات
               ================================================================= */}
               <div className="rounded-2xl border border-indigo-200/70 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 text-slate-900 dark:text-white overflow-hidden">
                 <button
@@ -759,29 +747,26 @@ export const DashboardView: React.FC = () => {
                   aria-expanded={isXpHistoryOpen}
                   className="w-full px-4 py-3 flex items-center justify-between gap-3 text-right hover:bg-indigo-50/50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
                 >
-                  <div className="flex flex-wrap items-center gap-2 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-violet-500/15 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-violet-500/15 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
                       <History className="w-4 h-4" />
                     </div>
-                    <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
-                      تاریخچه ارتقا، تنزل و تغییرات XP
-                    </span>
-                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 tabular-nums">
-                      ({toPersianDigits(globalXpLedger.historyEvents.length)} رویداد ثبت‌شده)
-                    </span>
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white truncate">
+                        تاریخچه ارتقا، تنزل و تغییرات XP
+                      </div>
+                      <div className="text-[11px] font-extrabold text-violet-600 dark:text-violet-400">
+                        {isXpHistoryOpen ? 'بستن کارنامه تغییرات' : 'مشاهده کارنامه تغییرات'}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[11px] font-extrabold text-violet-600 dark:text-violet-400">
-                      {isXpHistoryOpen ? 'بستن تاریخچه' : 'مشاهده کارنامه تغییرات'}
-                    </span>
-                    <div
-                      className={`w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-violet-600 dark:text-violet-400 transition-transform duration-200 ${
-                        isXpHistoryOpen ? 'rotate-180' : ''
-                      }`}
-                    >
-                      <ChevronDown className="w-4 h-4" />
-                    </div>
+                  <div
+                    className={`w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-violet-600 dark:text-violet-400 shrink-0 transition-transform duration-200 ${
+                      isXpHistoryOpen ? 'rotate-180' : ''
+                    }`}
+                  >
+                    <ChevronDown className="w-4 h-4" />
                   </div>
                 </button>
 
