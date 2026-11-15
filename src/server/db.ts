@@ -149,6 +149,9 @@ export function initDatabase() {
     'ALTER TABLE daily_plans ADD COLUMN reminder_time TEXT',
     'ALTER TABLE daily_plans ADD COLUMN activity_group_snapshot TEXT',
     'ALTER TABLE daily_plans ADD COLUMN target_exercises INTEGER',
+    'ALTER TABLE daily_plans ADD COLUMN transferred_from_date TEXT',
+    'ALTER TABLE daily_plans ADD COLUMN transfer_count INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE daily_plans ADD COLUMN transfer_history_json TEXT',
     "ALTER TABLE activity_categories ADD COLUMN activity_group TEXT NOT NULL DEFAULT 'essential'",
     'ALTER TABLE activity_categories ADD COLUMN impact_weight REAL NOT NULL DEFAULT 1.0',
   ];

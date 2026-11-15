@@ -309,6 +309,19 @@ export const SubjectsLevelMap: React.FC<SubjectsLevelMapProps> = ({
                       >
                         {activeSelectedSubject.stageProgress.stageNameEn}
                       </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${
+                          activeSelectedSubject.continuityStatus === 'critical'
+                            ? 'bg-rose-600 text-white'
+                            : activeSelectedSubject.continuityStatus === 'warning'
+                            ? 'bg-amber-500 text-slate-950'
+                            : activeSelectedSubject.continuityStatus === 'attention'
+                            ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300'
+                            : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                        }`}
+                      >
+                        {activeSelectedSubject.continuityStatusLabelFa}
+                      </span>
                     </div>
 
                     <div
@@ -326,10 +339,17 @@ export const SubjectsLevelMap: React.FC<SubjectsLevelMapProps> = ({
                       <span>{activeSelectedSubject.stageProgress.stepLabelFa}</span>
                       <span>•</span>
                       <span className="inline-flex items-center gap-1">
-                        <span>XP اختصاصی درس:</span>
+                        <span>XP خالص درس:</span>
                         <strong>{toPersianDigits(activeSelectedSubject.subjectXp)}</strong>
                         <XpCoinBadge size="xs" />
+                        {activeSelectedSubject.subjectPenaltyXp > 0 && (
+                          <span className="text-rose-500 dark:text-rose-400 font-extrabold">
+                            (کسرشده: {toPersianDigits(activeSelectedSubject.subjectPenaltyXp)}-)
+                          </span>
+                        )}
                       </span>
+                      <span>•</span>
+                      <span>آخرین مطالعه: {activeSelectedSubject.lastEffectiveStudyJalali}</span>
                       <span>•</span>
                       {activeSelectedSubject.stageProgress.isMaxStage ? (
                         <span className="inline-flex items-center gap-1 text-emerald-400 font-black">

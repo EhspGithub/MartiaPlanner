@@ -730,6 +730,47 @@ export const localSQLiteFallback = {
     return { success: true };
   },
 
+  transferPlanToNextDay(id: string): DailyPlanItem {
+    const db = loadDB();
+    const idx = db.plans.findIndex((p) => p.id === id);
+    if (idx === -1) throw new Error('فعالیت موردنظر یافت نشد.');
+
+    const existing = db.plans[idx];
+    const fromDate = String(existing.plan_date);
+    const toDate = addDaysISO(fromDate, 1);
+    const now = new Date().toISOString();
+
+    let historyList: Array<{ from_date: string; to_date: string; transferred_at: string }> = [];
+    try {
+      if (existing.transfer_history_json) {
+        const parsed = JSON.parse(existing.transfer_history_json);
+        if (Array.isArray(parsed)) historyList = parsed;
+      }
+    } catch {}
+    historyList.push({
+      from_date: fromDate,
+      to_date: toDate,
+      transferred_at: now,
+    });
+
+    const targetDayPlans = db.plans.filter((p) => p.plan_date === toDate);
+    const maxOrder = targetDayPlans.reduce((m, p) => Math.max(m, p.custom_sort_order), 0);
+
+    const updated = {
+      ...existing,
+      plan_date: toDate,
+      transferred_from_date: fromDate,
+      transfer_count: Number(existing.transfer_count || 0) + 1,
+      transfer_history_json: JSON.stringify(historyList),
+      custom_sort_order: maxOrder + 1,
+      updated_at: now,
+    };
+
+    db.plans[idx] = updated;
+    saveDB(db);
+    return hydratePlans(db, [updated])[0];
+  },
+
   deletePlan(id: string) {
     const db = loadDB();
     db.plans = db.plans.filter((p) => p.id !== id);

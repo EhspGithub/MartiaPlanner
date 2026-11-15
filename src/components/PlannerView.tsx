@@ -33,6 +33,7 @@ import {
   Bell,
   Timer,
   ChevronDown,
+  CalendarArrowUp,
 } from 'lucide-react';
 import type {
   ActivityCategory,
@@ -187,6 +188,9 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
 
   const [activePerformancePlan, setActivePerformancePlan] = useState<DailyPlanItem | null>(null);
   const [deletingPlan, setDeletingPlan] = useState<DailyPlanItem | null>(null);
+  const [transferringPlan, setTransferringPlan] = useState<DailyPlanItem | null>(null);
+  const [transferSubmitting, setTransferSubmitting] = useState<boolean>(false);
+  const [transferToastMessage, setTransferToastMessage] = useState<string | null>(null);
 
   const categoriesMap = useMemo(() => {
     const map = new Map<string, ActivityCategory>();
@@ -450,6 +454,35 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       await loadDailyData(selectedDate);
     }
     onDataMutated();
+  };
+
+  const handleTransferPlanToNextDay = async (planId: string) => {
+    await api.transferPlanToNextDay(planId);
+    setTransferToastMessage('فعالیت با موفقیت به برنامه روز بعد منتقل شد.');
+    setTimeout(() => {
+      setTransferToastMessage((prev) =>
+        prev === 'فعالیت با موفقیت به برنامه روز بعد منتقل شد.' ? null : prev
+      );
+    }, 4500);
+    if (activeTab === 'weekly') {
+      await loadWeeklyPlans();
+    } else {
+      await loadDailyData(selectedDate);
+    }
+    onDataMutated();
+  };
+
+  const handleConfirmCardTransfer = async () => {
+    if (!transferringPlan) return;
+    try {
+      setTransferSubmitting(true);
+      await handleTransferPlanToNextDay(transferringPlan.id);
+      setTransferringPlan(null);
+    } catch (err: any) {
+      setError(err.message || 'خطا در انتقال فعالیت به روز بعد');
+    } finally {
+      setTransferSubmitting(false);
+    }
   };
 
   const sortedDailyPlans = useMemo(() => {
@@ -1105,6 +1138,22 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
             </div>
           </div>
 
+          {transferToastMessage && (
+            <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 p-3.5 flex items-center justify-between gap-2 text-xs font-extrabold text-emerald-700 dark:text-emerald-300 shadow-xs">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>{transferToastMessage}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTransferToastMessage(null)}
+                className="p-1 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {error && (
             <div className="rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-4 text-xs text-rose-700 dark:text-rose-300">
               {error}
@@ -1270,7 +1319,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                             پیش‌بینی: {formatMinutesPersian(predMins)}
                           </span>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             {isStudy &&
                               plan.target_exercises !== null &&
                               plan.target_exercises !== undefined &&
@@ -1287,6 +1336,22 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                             )}
                           </div>
                         </div>
+
+                        {plan.transferred_from_date && (
+                          <div className="flex items-center justify-between gap-2 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/50 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                            <span className="inline-flex items-center gap-1 truncate">
+                              <CalendarArrowUp className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                              <span>
+                                منتقل‌شده از {formatJalaliWeekdaySlash(plan.transferred_from_date)}
+                              </span>
+                            </span>
+                            {Number(plan.transfer_count || 0) > 1 && (
+                              <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-amber-200/60 dark:bg-amber-900/60 shrink-0">
+                                {toPersianDigits(plan.transfer_count || 1)} نوبت انتقال
+                              </span>
+                            )}
+                          </div>
+                        )}
 
                         {plan.description && (
                           <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 leading-relaxed truncate">
@@ -1340,11 +1405,25 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                         </span>
                       </div>
 
-                      {/* Sections 10 & 11: Symmetrical Actual Performance without Edit Button */}
+                      {/* Sections 10 & 11: Symmetrical Actual Performance + Transfer to Next Day */}
                       {!hasPerf ? (
-                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                          <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                          <span>آماده انجام (برای ثبت عملکرد روی کارت کلیک کنید)</span>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-medium min-w-0 truncate">
+                            <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span className="truncate">آماده انجام (برای ثبت عملکرد کلیک کنید)</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTransferringPlan(plan);
+                            }}
+                            className="inline-flex items-center gap-1 rounded-xl border border-indigo-200 dark:border-indigo-800/70 bg-indigo-50/80 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-2.5 py-1 text-[11px] font-extrabold text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                            title="انتقال این فعالیت به برنامه روز بعد"
+                          >
+                            <CalendarArrowUp className="w-3.5 h-3.5 shrink-0" />
+                            <span>انتقال به روز بعد</span>
+                          </button>
                         </div>
                       ) : (
                         <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] tabular-nums pt-0.5">
@@ -1417,6 +1496,21 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                                 </span>
                               </div>
                             </>
+                          )}
+                          {plan.status !== 'completed' && (
+                            <div className="col-span-2 pt-1 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setTransferringPlan(plan);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-xl border border-indigo-200 dark:border-indigo-800/70 bg-indigo-50/80 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-2.5 py-1 text-[11px] font-extrabold text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                              >
+                                <CalendarArrowUp className="w-3.5 h-3.5 shrink-0" />
+                                <span>انتقال به روز بعد</span>
+                              </button>
+                            </div>
                           )}
                         </div>
                       )}
@@ -1867,10 +1961,75 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
 
       <PerformanceModal
         plan={activePerformancePlan}
+        dayPlans={
+          activePerformancePlan
+            ? activeTab === 'weekly'
+              ? weeklyPlans.filter((p) => p.plan_date === activePerformancePlan.plan_date)
+              : dailyPlans
+            : dailyPlans
+        }
         onClose={() => setActivePerformancePlan(null)}
         onSave={handleSavePerformance}
         onResetPerformance={handleResetPerformance}
+        onTransferToNextDay={handleTransferPlanToNextDay}
       />
+
+      {transferringPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800/70 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                <CalendarArrowUp className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                  انتقال فعالیت به روز بعد
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 leading-relaxed">
+                  این فعالیت به برنامه روز بعد منتقل خواهد شد و اطلاعات ثبت‌شده آن حفظ می‌شوند. آیا ادامه می‌دهید؟
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 px-3.5 py-2.5 text-xs space-y-1">
+              <div className="font-extrabold text-slate-900 dark:text-white truncate">
+                {Number(transferringPlan.is_study) === 1
+                  ? `${transferringPlan.subject_name_snapshot || 'درس'}${
+                      transferringPlan.unit_title_snapshot
+                        ? ` · ${transferringPlan.unit_title_snapshot}`
+                        : ''
+                    }`
+                  : transferringPlan.category_title_snapshot}
+              </div>
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 tabular-nums">
+                <span>اولویت: {transferringPlan.priority_code}</span>
+                <span>
+                  مقصد: {formatJalaliWeekdaySlash(addDaysISO(transferringPlan.plan_date, 1))}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setTransferringPlan(null)}
+                disabled={transferSubmitting}
+                className="rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer min-h-[40px]"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCardTransfer}
+                disabled={transferSubmitting}
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-extrabold text-white hover:bg-indigo-700 shadow-md shadow-indigo-600/20 cursor-pointer min-h-[40px]"
+              >
+                {transferSubmitting ? 'در حال انتقال...' : 'تأیید و انتقال'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deletingPlan && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">

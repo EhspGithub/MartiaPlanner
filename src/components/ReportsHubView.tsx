@@ -295,9 +295,18 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
       calculateAllSubjectsProgressions({
         subjects: activeSubjectsList,
         allTimePlans,
+        todayIso,
       }),
-    [activeSubjectsList, allTimePlans]
+    [activeSubjectsList, allTimePlans, todayIso]
   );
+
+  const progressionsBySubjectId = useMemo(() => {
+    const map = new Map<string, (typeof allSubjectsProgressions)[number]>();
+    for (const sp of allSubjectsProgressions) {
+      map.set(sp.subjectId, sp);
+    }
+    return map;
+  }, [allSubjectsProgressions]);
 
   const selectedSubjectProgression = useMemo(
     () =>
@@ -1223,43 +1232,63 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
 
                   {/* Mobile Card View (Zero Horizontal Scroll) */}
                   <div className="md:hidden divide-y divide-slate-200 dark:divide-slate-800">
-                    {comparedSubjectsAnalytics.map((subj) => (
-                      <div key={subj.subjectId} className="p-3.5 space-y-2 text-xs tabular-nums">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-black text-slate-900 dark:text-white text-sm truncate">
-                            {subj.subjectName}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedSingleSubjectId(subj.subjectId);
-                              setSubjectSubMode('single');
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-300 text-[11px] font-extrabold cursor-pointer shrink-0"
-                          >
-                            گزارش درس
-                          </button>
+                    {comparedSubjectsAnalytics.map((subj) => {
+                      const prog = progressionsBySubjectId.get(subj.subjectId);
+                      return (
+                        <div key={subj.subjectId} className="p-3.5 space-y-2 text-xs tabular-nums">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-black text-slate-900 dark:text-white text-sm truncate">
+                                {subj.subjectName}
+                              </span>
+                              {prog && (
+                                <span
+                                  className={`px-2 py-0.5 rounded-md text-[10px] font-black shrink-0 ${
+                                    prog.continuityStatus === 'critical'
+                                      ? 'bg-rose-600 text-white'
+                                      : prog.continuityStatus === 'warning'
+                                      ? 'bg-amber-500 text-slate-950'
+                                      : prog.continuityStatus === 'attention'
+                                      ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300'
+                                      : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                  }`}
+                                >
+                                  {prog.continuityStatusLabelFa}
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedSingleSubjectId(subj.subjectId);
+                                setSubjectSubMode('single');
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-300 text-[11px] font-extrabold cursor-pointer shrink-0"
+                            >
+                              گزارش درس
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                            <span>
+                              مطالعه:{' '}
+                              <strong className="text-indigo-700 dark:text-indigo-300">
+                                {formatDurationPrimePersian(subj.actualMinutes)}
+                              </strong>{' '}
+                              از {formatDurationPrimePersian(subj.predictedMinutes)} (
+                              {toPersianDigits(subj.adherenceRatioPct)}٪)
+                            </span>
+                            <span>
+                              تست: <strong>{toPersianDigits(subj.actualExercises)}</strong> | امتیاز:{' '}
+                              <strong className="text-emerald-700 dark:text-emerald-300">
+                                {subj.performanceScore0To100 !== null
+                                  ? `${toPersianDigits(subj.performanceScore0To100)} از ۱۰۰`
+                                  : '—'}
+                              </strong>
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-300">
-                          <span>
-                            مطالعه:{' '}
-                            <strong className="text-indigo-700 dark:text-indigo-300">
-                              {formatDurationPrimePersian(subj.actualMinutes)}
-                            </strong>{' '}
-                            از {formatDurationPrimePersian(subj.predictedMinutes)} (
-                            {toPersianDigits(subj.adherenceRatioPct)}٪)
-                          </span>
-                          <span>
-                            تست: <strong>{toPersianDigits(subj.actualExercises)}</strong> | امتیاز:{' '}
-                            <strong className="text-emerald-700 dark:text-emerald-300">
-                              {subj.performanceScore0To100 !== null
-                                ? `${toPersianDigits(subj.performanceScore0To100)} از ۱۰۰`
-                                : '—'}
-                            </strong>
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Desktop Table View */}
@@ -1268,6 +1297,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                       <thead className="bg-slate-50/90 dark:bg-slate-800/50 text-xs font-extrabold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                         <tr>
                           <th className="py-3.5 px-4">نام درس</th>
+                          <th className="py-3.5 px-4">وضعیت پیوستگی</th>
                           <th className="py-3.5 px-4">زمان پیش‌بینی</th>
                           <th className="py-3.5 px-4">مطالعه واقعی</th>
                           <th className="py-3.5 px-4">تحقق زمان</th>
@@ -1279,14 +1309,35 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800 tabular-nums">
-                        {comparedSubjectsAnalytics.map((subj) => (
-                          <tr
-                            key={subj.subjectId}
-                            className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
-                          >
-                            <td className="py-3.5 px-4 font-black text-slate-900 dark:text-white whitespace-nowrap">
-                              {subj.subjectName}
-                            </td>
+                        {comparedSubjectsAnalytics.map((subj) => {
+                          const prog = progressionsBySubjectId.get(subj.subjectId);
+                          return (
+                            <tr
+                              key={subj.subjectId}
+                              className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                            >
+                              <td className="py-3.5 px-4 font-black text-slate-900 dark:text-white whitespace-nowrap">
+                                {subj.subjectName}
+                              </td>
+                              <td className="py-3.5 px-4 whitespace-nowrap">
+                                {prog ? (
+                                  <span
+                                    className={`px-2 py-0.5 rounded-lg text-[11px] font-black ${
+                                      prog.continuityStatus === 'critical'
+                                        ? 'bg-rose-600 text-white'
+                                        : prog.continuityStatus === 'warning'
+                                        ? 'bg-amber-500 text-slate-950'
+                                        : prog.continuityStatus === 'attention'
+                                        ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300'
+                                        : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                    }`}
+                                  >
+                                    {prog.continuityStatusLabelFa}
+                                  </span>
+                                ) : (
+                                  '—'
+                                )}
+                              </td>
                             <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                               {formatDurationPrimePersian(subj.predictedMinutes)}
                             </td>
@@ -1324,20 +1375,21 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                                 ? `${toPersianDigits(subj.performanceScore0To100)} از ۱۰۰`
                                 : '—'}
                             </td>
-                            <td className="py-3.5 px-4 whitespace-nowrap">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedSingleSubjectId(subj.subjectId);
-                                  setSubjectSubMode('single');
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-300 text-xs font-extrabold hover:bg-indigo-100 cursor-pointer"
-                              >
-                                گزارش درس
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                              <td className="py-3.5 px-4 whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedSingleSubjectId(subj.subjectId);
+                                    setSubjectSubMode('single');
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-300 text-xs font-extrabold hover:bg-indigo-100 cursor-pointer"
+                                >
+                                  گزارش درس
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

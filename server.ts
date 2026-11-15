@@ -583,6 +583,80 @@ app.post('/api/plans/reorder', (req, res) => {
   }
 });
 
+app.post('/api/plans/:id/transfer-next-day', (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = db.prepare('SELECT * FROM daily_plans WHERE id = ?').get(id) as any;
+    if (!existing) {
+      return res.status(404).json({ error: 'فعالیت موردنظر یافت نشد.' });
+    }
+
+    const fromDate = String(existing.plan_date);
+    const toDate = addDaysISO(fromDate, 1);
+    const now = new Date().toISOString();
+
+    let historyList: Array<{ from_date: string; to_date: string; transferred_at: string }> = [];
+    try {
+      if (existing.transfer_history_json) {
+        const parsed = JSON.parse(existing.transfer_history_json);
+        if (Array.isArray(parsed)) historyList = parsed;
+      }
+    } catch {}
+    historyList.push({
+      from_date: fromDate,
+      to_date: toDate,
+      transferred_at: now,
+    });
+
+    const maxOrder =
+      (
+        db
+          .prepare('SELECT MAX(custom_sort_order) as m FROM daily_plans WHERE plan_date = ?')
+          .get(toDate) as any
+      )?.m || 0;
+
+    const newTransferCount = Number(existing.transfer_count || 0) + 1;
+
+    const transferTx = db.transaction(() => {
+      db.prepare(`
+        UPDATE daily_plans
+        SET plan_date = ?,
+            transferred_from_date = ?,
+            transfer_count = ?,
+            transfer_history_json = ?,
+            custom_sort_order = ?,
+            updated_at = ?
+        WHERE id = ?
+      `).run(
+        toDate,
+        fromDate,
+        newTransferCount,
+        JSON.stringify(historyList),
+        maxOrder + 1,
+        now,
+        id
+      );
+
+      db.prepare(`
+        INSERT INTO plan_history_audit (id, plan_id, previous_predicted_minutes, new_predicted_minutes, changed_at, reason)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        crypto.randomUUID(),
+        id,
+        Number(existing.predicted_minutes || 0),
+        Number(existing.predicted_minutes || 0),
+        now,
+        `انتقال فعالیت از تاریخ ${fromDate} به برنامه روز بعد (${toDate})`
+      );
+    });
+
+    transferTx();
+    res.json(getHydratedPlanById(id));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'خطا در انتقال فعالیت به روز بعد' });
+  }
+});
+
 app.delete('/api/plans/:id', (req, res) => {
   try {
     const { id } = req.params;
@@ -1320,8 +1394,9 @@ app.post('/api/backup/import', (req, res) => {
           subject_id, subject_name_snapshot, unit_id, unit_title_snapshot,
           study_type_id, study_type_title_snapshot, priority_code,
           initial_predicted_minutes, predicted_minutes, target_exercises, reminder_time, description, status,
-          custom_sort_order, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          custom_sort_order, transferred_from_date, transfer_count, transfer_history_json,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const p of payload.daily_plans || []) {
         if (!p || !p.id || !p.plan_date) continue;
@@ -1346,6 +1421,13 @@ app.post('/api/backup/import', (req, res) => {
           p.description || '',
           p.status || 'pending',
           Number(p.custom_sort_order ?? 1),
+          p.transferred_from_date ?? null,
+          Number(p.transfer_count ?? 0),
+          typeof p.transfer_history_json === 'string'
+            ? p.transfer_history_json
+            : Array.isArray(p.transfer_history)
+            ? JSON.stringify(p.transfer_history)
+            : null,
           p.created_at || new Date().toISOString(),
           p.updated_at || new Date().toISOString()
         );

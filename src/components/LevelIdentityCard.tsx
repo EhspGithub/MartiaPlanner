@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Crown,
   Sparkles,
@@ -7,9 +7,15 @@ import {
   Zap,
   CheckCircle2,
   BookOpen,
+  History,
+  TrendingDown,
+  ChevronDown,
+  ArrowUpRight,
+  ArrowDownRight,
+  Clock,
+  AlertTriangle,
 } from 'lucide-react';
 import type {
-  UserLevelProgress,
   SubjectLevelProgress,
   LevelVisualPalette,
   StepTierNumber,
@@ -181,17 +187,70 @@ export interface SubjectLevelCardProps {
 
 /**
  * Dedicated Independent Subject Level Card rendered inside «گزارش هر درس»
- * Harmonized with Global Level visual identity, clearly marked as Subject-specific XP & Level.
+ * Harmonized with Global Level visual identity, clearly marked as Subject-specific XP & Level,
+ * with independent subject continuity status, missed session tracking, penalty XP, and history.
  */
 export const SubjectLevelCard: React.FC<SubjectLevelCardProps> = ({ progression }) => {
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   const { stageProgress } = progression;
   const { palette } = stageProgress;
   const isDarkLux = Boolean(palette.isDarkLuxury);
+
+  const continuityBadgeClass =
+    progression.continuityStatus === 'critical'
+      ? 'bg-rose-600 text-white'
+      : progression.continuityStatus === 'warning'
+      ? 'bg-amber-500 text-slate-950'
+      : progression.continuityStatus === 'attention'
+      ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+      : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800/60';
 
   return (
     <div
       className={`rounded-3xl border bg-gradient-to-l ${palette.cardBgClass} ${palette.cardBorderClass} p-4 sm:p-5 shadow-xs space-y-3.5 transition-all`}
     >
+      {/* Subject Demotion / Continuity Warning Alert Banner */}
+      {(progression.hasSubjectDemotion || progression.continuityStatus === 'critical' || progression.continuityStatus === 'warning') && (
+        <div
+          className={`rounded-2xl border p-3.5 text-xs space-y-1.5 ${
+            progression.hasSubjectDemotion || progression.continuityStatus === 'critical'
+              ? 'bg-rose-50/95 dark:bg-rose-950/45 border-rose-300 dark:border-rose-800/80 text-rose-950 dark:text-rose-100'
+              : 'bg-amber-50/95 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800/80 text-amber-950 dark:text-amber-100'
+          }`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 font-black">
+              {progression.hasSubjectDemotion ? (
+                <TrendingDown className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              )}
+              <span>
+                {progression.hasSubjectDemotion
+                  ? `پسرفت در سطح درس «${progression.subjectName}» به دلیل نوبت‌های مطالعه‌نشده`
+                  : `هشدار پیوستگی مطالعه در درس «${progression.subjectName}» (${progression.continuityStatusLabelFa})`}
+              </span>
+            </div>
+            {progression.subjectPenaltyXp > 0 && (
+              <span className="px-2 py-0.5 rounded-lg bg-rose-600 text-white text-[10px] font-black tabular-nums">
+                کسر اختصاصی درس: {toPersianDigits(progression.subjectPenaltyXp)}- XP
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] font-bold leading-relaxed tabular-nums">
+            {progression.hasSubjectDemotion && progression.latestSubjectDemotion ? (
+              <span>
+                سطح درس از «{progression.peakStageProgress.stageNameFa} (
+                {progression.peakStageProgress.stepLabelFa})» به «{stageProgress.stageNameFa} (
+                {stageProgress.stepLabelFa})» تنزل یافته است — {progression.continuityStatusReasonFa}
+              </span>
+            ) : (
+              <span>{progression.continuityStatusReasonFa}</span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
         {/* Right Column: Subject Level & Step Identity */}
         <div
@@ -213,6 +272,9 @@ export const SubjectLevelCard: React.FC<SubjectLevelCardProps> = ({ progression 
               <BookOpen className="w-3.5 h-3.5 shrink-0 opacity-80" />
               <span className={palette.accentTextClass}>
                 سطح اختصاصی درس «{progression.subjectName}»
+              </span>
+              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${continuityBadgeClass}`}>
+                {progression.continuityStatusLabelFa}
               </span>
             </div>
 
@@ -308,8 +370,8 @@ export const SubjectLevelCard: React.FC<SubjectLevelCardProps> = ({ progression 
               isDarkLux ? 'text-slate-200' : 'text-slate-600 dark:text-slate-400'
             }`}
           >
-            <span className="inline-flex items-center gap-1">
-              <span>XP اختصاصی فعلی درس:</span>
+            <span className="inline-flex flex-wrap items-center gap-1">
+              <span>XP خالص فعلی درس:</span>
               <strong
                 className={`font-black ${
                   isDarkLux ? 'text-white' : 'text-slate-900 dark:text-white'
@@ -318,6 +380,11 @@ export const SubjectLevelCard: React.FC<SubjectLevelCardProps> = ({ progression 
                 {toPersianDigits(progression.subjectXp)}
               </strong>
               <XpCoinBadge size="xs" />
+              {progression.subjectPenaltyXp > 0 && (
+                <span className="text-rose-500 dark:text-rose-400 font-extrabold">
+                  (کسرشده: {toPersianDigits(progression.subjectPenaltyXp)}-)
+                </span>
+              )}
               {!stageProgress.isMaxStage && (
                 <span className="opacity-85">
                   ({toPersianDigits(stageProgress.xpInCurrentLevel)} از{' '}
@@ -346,9 +413,55 @@ export const SubjectLevelCard: React.FC<SubjectLevelCardProps> = ({ progression 
         </div>
       </div>
 
-      {/* Balanced Subject Criteria Summary Strip */}
+      {/* Continuity & Session Discipline Strip (Sections 3 & 4) */}
       <div
-        className={`pt-2.5 border-t flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold tabular-nums ${
+        className={`pt-2.5 border-t grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-bold tabular-nums ${
+          isDarkLux
+            ? 'border-white/15 text-slate-200'
+            : 'border-slate-200/70 dark:border-slate-800 text-slate-600 dark:text-slate-300'
+        }`}
+      >
+        <div className="rounded-xl bg-white/60 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 px-2.5 py-1.5 flex items-center justify-between gap-1">
+          <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1 truncate">
+            <Clock className="w-3 h-3 shrink-0" />
+            <span>آخرین مطالعه مؤثر:</span>
+          </span>
+          <strong className="font-black text-slate-900 dark:text-white truncate">
+            {progression.lastEffectiveStudyJalali}
+          </strong>
+        </div>
+
+        <div className="rounded-xl bg-white/60 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 px-2.5 py-1.5 flex items-center justify-between gap-1">
+          <span className="text-slate-500 dark:text-slate-400 truncate">نوبت‌های ازدست‌رفته:</span>
+          <strong
+            className={`font-black ${
+              progression.missedSessionsCount > 0
+                ? 'text-rose-600 dark:text-rose-400'
+                : 'text-emerald-600 dark:text-emerald-400'
+            }`}
+          >
+            {toPersianDigits(progression.missedSessionsCount)} نوبت
+          </strong>
+        </div>
+
+        <div className="rounded-xl bg-white/60 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 px-2.5 py-1.5 flex items-center justify-between gap-1">
+          <span className="text-slate-500 dark:text-slate-400 truncate">جلسات موفق ۱۴ روز اخیر:</span>
+          <strong className="font-black text-indigo-600 dark:text-indigo-400">
+            {toPersianDigits(progression.successfulSessionsRecent14d)} جلسه
+          </strong>
+        </div>
+
+        <div className="rounded-xl bg-white/60 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 px-2.5 py-1.5 flex items-center justify-between gap-1">
+          <span className="text-slate-500 dark:text-slate-400 truncate">تراز XP اختصاصی درس:</span>
+          <strong className="font-black text-slate-900 dark:text-white">
+            +{toPersianDigits(progression.grossSubjectXp)} / {toPersianDigits(progression.subjectPenaltyXp)}-
+          </strong>
+        </div>
+      </div>
+
+      {/* Balanced Subject Criteria Summary Strip + History Toggle */}
+      <div
+        className={`pt-2 border-t flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold tabular-nums ${
           isDarkLux
             ? 'border-white/15 text-slate-300'
             : 'border-slate-200/70 dark:border-slate-800 text-slate-500 dark:text-slate-400'
@@ -361,12 +474,114 @@ export const SubjectLevelCard: React.FC<SubjectLevelCardProps> = ({ progression 
             ? `${toPersianDigits(progression.weightedQuality0To10)} از ۱۰`
             : '—'}
           )، تحقق برنامه ({toPersianDigits(progression.taskCompletionPct)}٪) و استمرار در{' '}
-          {toPersianDigits(progression.distinctActiveDays)} روز فعال
+          {toPersianDigits(progression.distinctActiveDays)} روز فعال (ضریب عمق یادگیری:{' '}
+          {toPersianDigits(progression.effectivenessMultiplier)}×)
         </span>
-        <span className="font-extrabold">
-          ضریب عمق یادگیری: {toPersianDigits(progression.effectivenessMultiplier)}×
-        </span>
+
+        <button
+          type="button"
+          onClick={() => setIsHistoryOpen((prev) => !prev)}
+          aria-expanded={isHistoryOpen}
+          className="inline-flex items-center gap-1 rounded-xl border border-indigo-200/80 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 px-2.5 py-1 text-[11px] font-extrabold text-indigo-600 dark:text-indigo-300 hover:border-indigo-400 transition-colors cursor-pointer shrink-0"
+        >
+          <History className="w-3.5 h-3.5 shrink-0" />
+          <span>
+            تاریخچه امتیاز و سطح درس ({toPersianDigits(progression.subjectHistoryEvents.length)})
+          </span>
+          <ChevronDown
+            className={`w-3.5 h-3.5 transition-transform duration-200 ${
+              isHistoryOpen ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
       </div>
+
+      {/* Collapsible Subject-Specific XP & Level History */}
+      {isHistoryOpen && (
+        <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800 space-y-2">
+          {progression.subjectHistoryEvents.length === 0 ? (
+            <div className="rounded-xl bg-white/70 dark:bg-slate-900/60 p-3 text-center text-xs text-slate-500 dark:text-slate-400 font-bold">
+              هنوز رویداد ثبت‌شده‌ای برای تاریخچه این درس وجود ندارد.
+            </div>
+          ) : (
+            <div className="max-h-56 overflow-y-auto space-y-1.5 pr-0.5">
+              {progression.subjectHistoryEvents.slice(0, 25).map((ev) => {
+                const isPos = ev.xpDelta >= 0;
+                const stageChanged = ev.stageAfterNumber !== ev.stageBeforeNumber;
+                return (
+                  <div
+                    key={ev.id}
+                    className={`rounded-xl border px-3 py-2 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 tabular-nums ${
+                      ev.categoryType === 'پسرفت'
+                        ? 'bg-rose-50/85 dark:bg-rose-950/35 border-rose-200 dark:border-rose-800/70'
+                        : ev.categoryType === 'جریمه'
+                        ? 'bg-amber-50/75 dark:bg-amber-950/25 border-amber-200/80 dark:border-amber-800/60'
+                        : ev.categoryType === 'ارتقا'
+                        ? 'bg-emerald-50/85 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/70'
+                        : 'bg-white/80 dark:bg-slate-900/70 border-slate-200/80 dark:border-slate-800'
+                    }`}
+                  >
+                    <div className="space-y-0.5 min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black ${
+                            ev.categoryType === 'پسرفت'
+                              ? 'bg-rose-600 text-white'
+                              : ev.categoryType === 'جریمه'
+                              ? 'bg-amber-500 text-slate-950'
+                              : ev.categoryType === 'ارتقا'
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-indigo-600/15 text-indigo-700 dark:text-indigo-300'
+                          }`}
+                        >
+                          {isPos ? (
+                            <ArrowUpRight className="w-3 h-3 shrink-0" />
+                          ) : (
+                            <ArrowDownRight className="w-3 h-3 shrink-0" />
+                          )}
+                          <span>{ev.eventBadgeFa}</span>
+                        </span>
+                        <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200">
+                          {ev.jalaliDate}
+                        </span>
+                        {stageChanged && (
+                          <span className="text-[11px] font-black text-indigo-700 dark:text-indigo-300">
+                            • {ev.stageBeforeNameFa} ({ev.stepBeforeLabelFa}) ← {ev.stageAfterNameFa} (
+                            {ev.stepAfterLabelFa})
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                        {ev.reasonFa}
+                      </div>
+                    </div>
+
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between gap-1 shrink-0">
+                      <span
+                        className={`font-black inline-flex items-center gap-1 ${
+                          isPos
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-rose-600 dark:text-rose-400'
+                        }`}
+                      >
+                        <span dir="ltr">
+                          {isPos
+                            ? `+${toPersianDigits(ev.xpDelta)}`
+                            : `-${toPersianDigits(Math.abs(ev.xpDelta))}`}
+                        </span>
+                        <XpCoinBadge size="xs" />
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                        {toPersianDigits(ev.xpBefore)} ← {toPersianDigits(ev.xpAfter)} XP
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

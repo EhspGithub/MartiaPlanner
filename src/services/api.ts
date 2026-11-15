@@ -274,6 +274,16 @@ export const api = {
     return res;
   },
 
+  async transferPlanToNextDay(id: string): Promise<DailyPlanItem> {
+    const res = await request(
+      `/api/plans/${encodeURIComponent(id)}/transfer-next-day`,
+      { method: 'POST' },
+      () => localSQLiteFallback.transferPlanToNextDay(id)
+    );
+    invalidateApiCache('plans');
+    return res;
+  },
+
   async deletePlan(id: string): Promise<{ success: boolean }> {
     const res = await request(
       `/api/plans/${encodeURIComponent(id)}`,

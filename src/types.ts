@@ -103,6 +103,9 @@ export interface DailyPlanItem {
   predicted_minutes: number; // Current predicted duration in minutes
   target_exercises?: number | null; // Optional target exercises/tests count for this study plan
   reminder_time?: string | null; // Optional HH:MM reminder time (e.g., "16:30")
+  transferred_from_date?: string | null; // ISO date from which the plan was transferred
+  transfer_count?: number; // Number of times transferred to next day
+  transfer_history_json?: string | null; // JSON array of { from_date, to_date, transferred_at }
   description: string;
   status: PlanStatus; // 'pending' | 'partial' | 'completed'
   custom_sort_order: number;

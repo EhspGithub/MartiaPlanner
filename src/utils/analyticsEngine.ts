@@ -25,6 +25,7 @@ import {
   addDaysISO,
   getDateRangeISOList,
   toPersianDigits,
+  formatDurationPrimePersian,
 } from './jalali.ts';
 
 // ============================================================================
@@ -1914,21 +1915,530 @@ function resolve39StageProgress(
   };
 }
 
-export function calculateUserLevelProgress(allTimeXpInput: number): UserLevelProgress {
+export type XpLedgerEventType =
+  | 'level_promotion'
+  | 'step_promotion'
+  | 'level_demotion'
+  | 'step_demotion'
+  | 'xp_gain'
+  | 'xp_penalty';
+
+export interface XpLedgerHistoryEvent {
+  id: string;
+  dateIso: string;
+  jalaliDate: string;
+  eventType: XpLedgerEventType;
+  eventBadgeFa: 'ارتقای سطح' | 'ارتقای پله' | 'تنزل سطح' | 'تنزل پله' | 'پاداش XP' | 'جریمه عدم فعالیت';
+  categoryType: 'ارتقا' | 'پسرفت' | 'پاداش' | 'جریمه';
+  xpBefore: number;
+  xpAfter: number;
+  xpDelta: number; // positive or negative
+  stageBeforeNumber: number;
+  stageAfterNumber: number;
+  levelBefore: number;
+  levelAfter: number;
+  stageBeforeNameFa: string;
+  stageBeforeNameEn: string;
+  stepBeforeLabelFa: string;
+  stageAfterNameFa: string;
+  stageAfterNameEn: string;
+  stepAfterLabelFa: string;
+  reasonFa: string;
+  streakDays?: number;
+  multiplierR?: number;
+  unfulfilledRatioM?: number;
+  basePenaltyB?: number;
+}
+
+export interface GlobalInactivityDayPenalty {
+  dateIso: string;
+  jalaliDate: string;
+  streakDay: number;
+  basePenaltyB: number;
+  multiplierR: number;
+  unfulfilledRatioM: number;
+  fulfillmentRatio: number;
+  rawPenaltyXp: number;
+  deductedXp: number;
+  xpBefore: number;
+  xpAfter: number;
+  demotedStage: boolean;
+  demotedLevel: boolean;
+  stageBeforeNameFa: string;
+  stageAfterNameFa: string;
+  reasonFa: string;
+}
+
+export interface GlobalXpLedgerResult {
+  grossTotalXp: number;
+  totalPenaltyXp: number;
+  netTotalXp: number;
+  penalty7dXp: number;
+  penalty30dXp: number;
+  consecutiveInactiveDays: number;
+  maxConsecutiveInactiveDays: number;
+  totalMissedEducationalDays: number;
+  totalActiveEducationalDays: number;
+  currentStreakMultiplierR: number;
+  basePenaltyB: number;
+  hasActiveDemotion: boolean;
+  peakStageProgress: UserLevelProgress;
+  currentStageProgress: UserLevelProgress;
+  latestDemotionEvent: XpLedgerHistoryEvent | null;
+  latestPenaltyRecord: GlobalInactivityDayPenalty | null;
+  dailyPenalties: GlobalInactivityDayPenalty[];
+  historyEvents: XpLedgerHistoryEvent[];
+}
+
+/**
+ * Escalating inactivity multiplier r_d (Section 1-2):
+ * Day 1 -> 1.0 (10% of active daily XP)
+ * Day 2 -> 1.5 (15%)
+ * Day 3 -> 2.0 (20%)
+ * Day 4 -> 2.5 (25%)
+ * Day 5 -> 3.0 (30%)
+ * Day 6 -> 3.5 (35%)
+ * Day 7+ -> 4.0 (40% cap)
+ */
+export function getGlobalInactivityMultiplierR(consecutiveDay: number): number {
+  if (consecutiveDay <= 0) return 0;
+  if (consecutiveDay === 1) return 1.0;
+  if (consecutiveDay === 2) return 1.5;
+  if (consecutiveDay === 3) return 2.0;
+  if (consecutiveDay === 4) return 2.5;
+  if (consecutiveDay === 5) return 3.0;
+  if (consecutiveDay === 6) return 3.5;
+  return 4.0;
+}
+
+/**
+ * Escalating subject-specific missed-session multiplier r_{s,d} (Section 3-2):
+ */
+export function getSubjectInactivityMultiplierR(consecutiveMissedSession: number): number {
+  if (consecutiveMissedSession <= 0) return 0;
+  if (consecutiveMissedSession === 1) return 1.0;
+  if (consecutiveMissedSession === 2) return 1.35;
+  if (consecutiveMissedSession === 3) return 1.7;
+  if (consecutiveMissedSession === 4) return 2.05;
+  return 2.5;
+}
+
+let cachedGlobalLedgerKey = '';
+let cachedGlobalLedgerValue: GlobalXpLedgerResult | null = null;
+
+function buildPlansSignature(plans: DailyPlanItem[], todayIso: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < plans.length; i++) {
+    const p = plans[i];
+    const perf = p.performance;
+    const str = `${p.id}:${p.plan_date}:${p.status}:${p.predicted_minutes}:${p.transferred_from_date || ''}:${
+      perf ? `${perf.actual_minutes}:${perf.exercises_count}:${perf.learning_quality}` : '0'
+    }`;
+    for (let j = 0; j < str.length; j++) {
+      hash ^= str.charCodeAt(j);
+      hash = Math.imul(hash, 16777619);
+    }
+  }
+  return `${todayIso}:${plans.length}:${hash >>> 0}`;
+}
+
+/**
+ * Evaluates the student's complete chronological Global XP & Inactivity Penalty Ledger.
+ * - Only days prior to `todayIso` where educational plans (`is_study === 1`) exist are accountable.
+ * - Days without educational plans (rest days / holidays / unscheduled days) NEVER trigger a penalty or increase the streak.
+ * - Transferred plans already have their `plan_date` moved to the destination day, preventing double penalties.
+ * - Token activity below the effective threshold (50% fulfillment or >=30m quality study) reduces M_d proportionally
+ *   for that day without wiping the consecutive inactivity streak.
+ * - Deducts P_d = B * r_d * M_d from net Global XP (floored at 0) and genuinely updates/demotes the 39-Stage Level.
+ */
+export function evaluateGlobalXpLedger(
+  allTimePlans: DailyPlanItem[],
+  todayIsoInput?: string
+): GlobalXpLedgerResult {
+  const todayIso =
+    todayIsoInput ||
+    (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+        d.getDate()
+      ).padStart(2, '0')}`;
+    })();
+
+  const sig = buildPlansSignature(allTimePlans, todayIso);
+  if (cachedGlobalLedgerKey === sig && cachedGlobalLedgerValue) {
+    return cachedGlobalLedgerValue;
+  }
+
+  const plansByDate = new Map<string, DailyPlanItem[]>();
+  for (const plan of allTimePlans) {
+    const list = plansByDate.get(plan.plan_date);
+    if (list) list.push(plan);
+    else plansByDate.set(plan.plan_date, [plan]);
+  }
+
+  const sortedDates = Array.from(plansByDate.keys()).sort((a, b) => a.localeCompare(b));
+
+  let runningGrossXp = 0;
+  let runningNetXp = 0;
+  let totalPenaltyXp = 0;
+  let peakNetXp = 0;
+
+  let consecutiveInactiveDays = 0;
+  let maxConsecutiveInactiveDays = 0;
+  let totalMissedEducationalDays = 0;
+  let totalActiveEducationalDays = 0;
+
+  const activeDayEarnedXps: number[] = [];
+  const dailyPenalties: GlobalInactivityDayPenalty[] = [];
+  const historyEvents: XpLedgerHistoryEvent[] = [];
+
+  const date7dStart = addDaysISO(todayIso, -6);
+  const date30dStart = addDaysISO(todayIso, -29);
+  let penalty7dXp = 0;
+  let penalty30dXp = 0;
+
+  for (const dateIso of sortedDates) {
+    const dayPlans = plansByDate.get(dateIso) || [];
+    if (dayPlans.length === 0) continue;
+
+    const jalaliDate = formatJalaliCompact(dateIso);
+    const dayXpBreakdown = calculateXpFromPlans(dayPlans);
+    const earnedToday = dayXpBreakdown.totalXp;
+
+    // 1. Apply Positive Earned XP for this day
+    if (earnedToday > 0) {
+      const xpBefore = runningNetXp;
+      const stageBefore = resolve39StageProgress(xpBefore, GLOBAL_STAGES_CATALOG);
+
+      runningGrossXp = roundXp2(runningGrossXp + earnedToday);
+      runningNetXp = roundXp2(runningNetXp + earnedToday);
+      if (runningNetXp > peakNetXp) {
+        peakNetXp = runningNetXp;
+      }
+
+      const stageAfter = resolve39StageProgress(runningNetXp, GLOBAL_STAGES_CATALOG);
+
+      let eventType: XpLedgerEventType = 'xp_gain';
+      let eventBadgeFa: XpLedgerHistoryEvent['eventBadgeFa'] = 'پاداش XP';
+      let categoryType: XpLedgerHistoryEvent['categoryType'] = 'پاداش';
+      let reasonFa = `کسب +${toPersianDigits(earnedToday)} XP از ثبت عملکرد روزانه (${toPersianDigits(
+        dayXpBreakdown.completedCount
+      )} فعالیت کامل، ${formatDurationPrimePersian(dayXpBreakdown.actualStudyMinutes)} مطالعه)`;
+
+      if (stageAfter.level > stageBefore.level) {
+        eventType = 'level_promotion';
+        eventBadgeFa = 'ارتقای سطح';
+        categoryType = 'ارتقا';
+        reasonFa = `صعود از سطح ${toPersianDigits(stageBefore.level)} (${
+          stageBefore.stageNameFa
+        }) به سطح ${toPersianDigits(stageAfter.level)} (${
+          stageAfter.stageNameFa
+        }) با کسب +${toPersianDigits(earnedToday)} XP`;
+      } else if (stageAfter.stageNumber > stageBefore.stageNumber) {
+        eventType = 'step_promotion';
+        eventBadgeFa = 'ارتقای پله';
+        categoryType = 'ارتقا';
+        reasonFa = `ارتقای پله از «${stageBefore.stageNameFa}» به «${stageAfter.stageNameFa}» (${
+          stageAfter.stepLabelFa
+        }) با کسب +${toPersianDigits(earnedToday)} XP`;
+      }
+
+      historyEvents.push({
+        id: `ev-gain-${dateIso}`,
+        dateIso,
+        jalaliDate,
+        eventType,
+        eventBadgeFa,
+        categoryType,
+        xpBefore,
+        xpAfter: runningNetXp,
+        xpDelta: earnedToday,
+        stageBeforeNumber: stageBefore.stageNumber,
+        stageAfterNumber: stageAfter.stageNumber,
+        levelBefore: stageBefore.level,
+        levelAfter: stageAfter.level,
+        stageBeforeNameFa: stageBefore.stageNameFa,
+        stageBeforeNameEn: stageBefore.stageNameEn,
+        stepBeforeLabelFa: stageBefore.stepLabelFa,
+        stageAfterNameFa: stageAfter.stageNameFa,
+        stageAfterNameEn: stageAfter.stageNameEn,
+        stepAfterLabelFa: stageAfter.stepLabelFa,
+        reasonFa,
+      });
+    }
+
+    // 2. Evaluate Educational Commitment & Inactivity Penalty (Strictly for completed calendar days before todayIso)
+    const studyPlans = dayPlans.filter((p) => Number(p.is_study) === 1);
+    if (studyPlans.length === 0) {
+      // No educational commitment on this day -> neither active nor penalized
+      continue;
+    }
+
+    let plannedStudyMins = 0;
+    let actualStudyMins = 0;
+    let completedStudyCount = 0;
+    let partialStudyCount = 0;
+
+    for (const sp of studyPlans) {
+      plannedStudyMins += Math.max(
+        0,
+        Number(sp.initial_predicted_minutes || sp.predicted_minutes || 0)
+      );
+      if (sp.status === 'completed') completedStudyCount += 1;
+      else if (sp.status === 'partial') partialStudyCount += 1;
+
+      if (sp.performance) {
+        actualStudyMins += Math.max(0, Number(sp.performance.actual_minutes || 0));
+      }
+    }
+
+    const timeFulfillment =
+      plannedStudyMins > 0
+        ? Math.min(1, actualStudyMins / plannedStudyMins)
+        : actualStudyMins > 0
+        ? 1
+        : 0;
+    const taskFulfillment =
+      (completedStudyCount + partialStudyCount * 0.5) / studyPlans.length;
+    const fulfillmentRatio = roundXp2(
+      Math.min(1, Math.max(0, 0.6 * timeFulfillment + 0.4 * taskFulfillment))
+    );
+
+    const qualEval = calculateWeightedLearningQualityL(studyPlans);
+    const hasAcceptableQuality =
+      qualEval.weightedAverage0To10 === null || qualEval.weightedAverage0To10 >= 4;
+
+    // Effective educational activity threshold (Section 1-4):
+    // >= 50% fulfillment of planned educational tasks/time, OR >= 30 mins of real study with acceptable quality
+    const isEffectivelyActive =
+      fulfillmentRatio >= 0.5 ||
+      (actualStudyMins >= 30 &&
+        completedStudyCount + partialStudyCount >= 1 &&
+        hasAcceptableQuality);
+
+    if (isEffectivelyActive) {
+      totalActiveEducationalDays += 1;
+      consecutiveInactiveDays = 0;
+      if (earnedToday > 0) {
+        activeDayEarnedXps.push(earnedToday);
+      }
+      continue;
+    }
+
+    // Do not penalize today or future dates while they are still open for completion
+    if (dateIso >= todayIso) {
+      continue;
+    }
+
+    // Day before todayIso had educational commitments that were NOT effectively fulfilled
+    consecutiveInactiveDays += 1;
+    totalMissedEducationalDays += 1;
+    if (consecutiveInactiveDays > maxConsecutiveInactiveDays) {
+      maxConsecutiveInactiveDays = consecutiveInactiveDays;
+    }
+
+    const avgActiveDailyXp =
+      activeDayEarnedXps.length > 0
+        ? activeDayEarnedXps.reduce((a, b) => a + b, 0) / activeDayEarnedXps.length
+        : 12.0;
+    const basePenaltyB = roundXp2(Math.max(1.0, Math.min(10.0, avgActiveDailyXp * 0.1)));
+    const multiplierR = getGlobalInactivityMultiplierR(consecutiveInactiveDays);
+    const unfulfilledRatioM = roundXp2(Math.max(0, 1 - fulfillmentRatio));
+
+    const rawPenaltyXp = roundXp2(basePenaltyB * multiplierR * unfulfilledRatioM);
+    if (rawPenaltyXp <= 0 || runningNetXp <= 0) {
+      continue;
+    }
+
+    const xpBeforePenalty = runningNetXp;
+    const stageBeforePenalty = resolve39StageProgress(xpBeforePenalty, GLOBAL_STAGES_CATALOG);
+    const deductedXp = roundXp2(Math.min(xpBeforePenalty, rawPenaltyXp));
+
+    runningNetXp = roundXp2(Math.max(0, xpBeforePenalty - deductedXp));
+    totalPenaltyXp = roundXp2(totalPenaltyXp + deductedXp);
+
+    if (dateIso >= date7dStart && dateIso <= todayIso) {
+      penalty7dXp = roundXp2(penalty7dXp + deductedXp);
+    }
+    if (dateIso >= date30dStart && dateIso <= todayIso) {
+      penalty30dXp = roundXp2(penalty30dXp + deductedXp);
+    }
+
+    const stageAfterPenalty = resolve39StageProgress(runningNetXp, GLOBAL_STAGES_CATALOG);
+    const demotedLevel = stageAfterPenalty.level < stageBeforePenalty.level;
+    const demotedStage = stageAfterPenalty.stageNumber < stageBeforePenalty.stageNumber;
+
+    const unfulfilledPct = Math.round(unfulfilledRatioM * 100);
+    const reasonFa =
+      fulfillmentRatio === 0
+        ? `عدم ثبت عملکرد برای ${toPersianDigits(
+            studyPlans.length
+          )} برنامه درسی (${toPersianDigits(
+            consecutiveInactiveDays
+          )} روز متوالی وقفه؛ ضریب تشدید ×${toPersianDigits(multiplierR)})`
+        : `تحقق ناقص برنامه درسی (${toPersianDigits(
+            unfulfilledPct
+          )}٪ انجام‌نشده در روز ${toPersianDigits(
+            consecutiveInactiveDays
+          )} وقفه؛ ضریب ×${toPersianDigits(multiplierR)})`;
+
+    const penaltyRecord: GlobalInactivityDayPenalty = {
+      dateIso,
+      jalaliDate,
+      streakDay: consecutiveInactiveDays,
+      basePenaltyB,
+      multiplierR,
+      unfulfilledRatioM,
+      fulfillmentRatio,
+      rawPenaltyXp,
+      deductedXp,
+      xpBefore: xpBeforePenalty,
+      xpAfter: runningNetXp,
+      demotedStage,
+      demotedLevel,
+      stageBeforeNameFa: stageBeforePenalty.stageNameFa,
+      stageAfterNameFa: stageAfterPenalty.stageNameFa,
+      reasonFa,
+    };
+    dailyPenalties.push(penaltyRecord);
+
+    let eventType: XpLedgerEventType = 'xp_penalty';
+    let eventBadgeFa: XpLedgerHistoryEvent['eventBadgeFa'] = 'جریمه عدم فعالیت';
+    let categoryType: XpLedgerHistoryEvent['categoryType'] = 'جریمه';
+
+    if (demotedLevel) {
+      eventType = 'level_demotion';
+      eventBadgeFa = 'تنزل سطح';
+      categoryType = 'پسرفت';
+    } else if (demotedStage) {
+      eventType = 'step_demotion';
+      eventBadgeFa = 'تنزل پله';
+      categoryType = 'پسرفت';
+    }
+
+    historyEvents.push({
+      id: `ev-pen-${dateIso}`,
+      dateIso,
+      jalaliDate,
+      eventType,
+      eventBadgeFa,
+      categoryType,
+      xpBefore: xpBeforePenalty,
+      xpAfter: runningNetXp,
+      xpDelta: -deductedXp,
+      stageBeforeNumber: stageBeforePenalty.stageNumber,
+      stageAfterNumber: stageAfterPenalty.stageNumber,
+      levelBefore: stageBeforePenalty.level,
+      levelAfter: stageAfterPenalty.level,
+      stageBeforeNameFa: stageBeforePenalty.stageNameFa,
+      stageBeforeNameEn: stageBeforePenalty.stageNameEn,
+      stepBeforeLabelFa: stageBeforePenalty.stepLabelFa,
+      stageAfterNameFa: stageAfterPenalty.stageNameFa,
+      stageAfterNameEn: stageAfterPenalty.stageNameEn,
+      stepAfterLabelFa: stageAfterPenalty.stepLabelFa,
+      reasonFa: demotedStage
+        ? `تنزل از «${stageBeforePenalty.stageNameFa}» به «${stageAfterPenalty.stageNameFa}» به علت کسر ${toPersianDigits(
+            deductedXp
+          )} XP (${reasonFa})`
+        : `کسر ${toPersianDigits(deductedXp)} XP — ${reasonFa}`,
+      streakDays: consecutiveInactiveDays,
+      multiplierR,
+      unfulfilledRatioM,
+      basePenaltyB,
+    });
+  }
+
+  const avgActiveDailyXpFinal =
+    activeDayEarnedXps.length > 0
+      ? activeDayEarnedXps.reduce((a, b) => a + b, 0) / activeDayEarnedXps.length
+      : 12.0;
+  const currentBasePenaltyB = roundXp2(
+    Math.max(1.0, Math.min(10.0, avgActiveDailyXpFinal * 0.1))
+  );
+  const currentStreakMultiplierR = getGlobalInactivityMultiplierR(consecutiveInactiveDays);
+
+  const currentStageProgress = resolve39StageProgress(runningNetXp, GLOBAL_STAGES_CATALOG);
+  const peakStageProgress = resolve39StageProgress(peakNetXp, GLOBAL_STAGES_CATALOG);
+
+  const demotionEvents = historyEvents.filter(
+    (e) => e.eventType === 'level_demotion' || e.eventType === 'step_demotion'
+  );
+  const latestDemotionEvent =
+    demotionEvents.length > 0 ? demotionEvents[demotionEvents.length - 1] : null;
+  const latestPenaltyRecord =
+    dailyPenalties.length > 0 ? dailyPenalties[dailyPenalties.length - 1] : null;
+
+  const hasActiveDemotion =
+    currentStageProgress.stageNumber < peakStageProgress.stageNumber &&
+    latestDemotionEvent !== null;
+
+  const result: GlobalXpLedgerResult = {
+    grossTotalXp: runningGrossXp,
+    totalPenaltyXp,
+    netTotalXp: runningNetXp,
+    penalty7dXp,
+    penalty30dXp,
+    consecutiveInactiveDays,
+    maxConsecutiveInactiveDays,
+    totalMissedEducationalDays,
+    totalActiveEducationalDays,
+    currentStreakMultiplierR,
+    basePenaltyB: currentBasePenaltyB,
+    hasActiveDemotion,
+    peakStageProgress,
+    currentStageProgress,
+    latestDemotionEvent,
+    latestPenaltyRecord,
+    dailyPenalties,
+    // Most recent events first for UI display
+    historyEvents: [...historyEvents].reverse(),
+  };
+
+  cachedGlobalLedgerKey = sig;
+  cachedGlobalLedgerValue = result;
+  return result;
+}
+
+export function calculateUserLevelProgress(
+  allTimeXpInput: number,
+  allTimePlans?: DailyPlanItem[],
+  todayIso?: string
+): UserLevelProgress {
+  if (Array.isArray(allTimePlans)) {
+    return evaluateGlobalXpLedger(allTimePlans, todayIso).currentStageProgress;
+  }
   return resolve39StageProgress(allTimeXpInput, GLOBAL_STAGES_CATALOG);
 }
 
 // ============================================================================
-// 9B. INDEPENDENT SUBJECT-SPECIFIC XP & 39-STAGE LEVEL PROGRESSION
+// 9B. INDEPENDENT SUBJECT-SPECIFIC XP, CONTINUITY & 39-STAGE LEVEL PROGRESSION
 // ============================================================================
+export type SubjectContinuityStatus = 'normal' | 'attention' | 'warning' | 'critical';
+
 export interface SubjectLevelProgress {
   subjectId: string;
   subjectName: string;
   gradeLevel: string;
-  subjectXp: number;
+  subjectXp: number; // Net Subject XP after deducting subject-specific inactivity penalties
+  grossSubjectXp: number; // Positive Subject XP before penalties
+  subjectPenaltyXp: number; // Total XP deducted from this subject due to missed planned sessions
   rawEffortXp: number;
   effectivenessMultiplier: number; // Quality + Adherence + Consistency balance
   distinctActiveDays: number;
+  plannedStudyDaysCount: number;
+  missedSessionsCount: number;
+  consecutiveMissedSessions: number;
+  successfulSessionsRecent14d: number;
+  lastEffectiveStudyDate: string | null;
+  lastEffectiveStudyJalali: string;
+  daysSinceLastStudy: number | null;
+  continuityStatus: SubjectContinuityStatus;
+  continuityStatusLabelFa: 'وضعیت عادی' | 'نیازمند توجه' | 'هشدار جدی' | 'استمرار ضعیف';
+  continuityStatusReasonFa: string;
+  hasSubjectDemotion: boolean;
+  peakStageProgress: UserLevelProgress;
+  latestSubjectDemotion: XpLedgerHistoryEvent | null;
+  subjectHistoryEvents: XpLedgerHistoryEvent[];
   plansCount: number;
   completedCount: number;
   totalStudyMinutes: number;
@@ -1940,24 +2450,35 @@ export interface SubjectLevelProgress {
   stageProgress: UserLevelProgress;
 }
 
+function daysBetweenIsoDates(fromIso: string, toIso: string): number {
+  const [y1, m1, d1] = fromIso.split('-').map(Number);
+  const [y2, m2, d2] = toIso.split('-').map(Number);
+  const utc1 = Date.UTC(y1, (m1 || 1) - 1, d1 || 1);
+  const utc2 = Date.UTC(y2, (m2 || 1) - 1, d2 || 1);
+  return Math.max(0, Math.round((utc2 - utc1) / (1000 * 60 * 60 * 24)));
+}
+
 /**
- * Computes an individual subject's dedicated XP and 39-Stage Level strictly from
- * that subject's own plans & performance records. Completely isolated from Global Level
- * and from all other subjects so modifying one subject never alters any other.
- *
- * Anti-cramming / Balanced Design:
- * Raw effort points (1/10th weights + active day continuity) are modulated by
- * a Mastery Multiplier combining weighted learning quality (45%), Educational Score E (35%),
- * plan completion ratio (10%), and distinct active-day consistency (10%), with an
- * additional safeguard dampener when learning quality falls below 4/10.
+ * Computes an individual subject's dedicated XP, continuity status, independent penalty ledger,
+ * and 39-Stage Level strictly from that subject's own plans & performance records.
+ * Completely isolated from Global Level and from all other subjects.
  */
 export function calculateSubjectProgression(params: {
   subjectId: string;
   subjectName: string;
   gradeLevel?: string;
   allTimePlans: DailyPlanItem[];
+  todayIso?: string;
 }): SubjectLevelProgress {
-  const { subjectId, subjectName, gradeLevel = 'هشتم', allTimePlans } = params;
+  const { subjectId, subjectName, gradeLevel = 'هشتم', allTimePlans, todayIso: rawTodayIso } = params;
+  const todayIso =
+    rawTodayIso ||
+    (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+        d.getDate()
+      ).padStart(2, '0')}`;
+    })();
 
   const subjectPlans = allTimePlans.filter(
     (p) =>
@@ -1976,8 +2497,13 @@ export function calculateSubjectProgression(params: {
   let rawQualityXp = 0;
   let loggedCount = 0;
   const activeDaysSet = new Set<string>();
+  const plansByDate = new Map<string, DailyPlanItem[]>();
 
   for (const p of subjectPlans) {
+    const dList = plansByDate.get(p.plan_date);
+    if (dList) dList.push(p);
+    else plansByDate.set(p.plan_date, [p]);
+
     if (p.status === 'completed') completedCount += 1;
     else if (p.status === 'partial') partialCount += 1;
 
@@ -2040,7 +2566,7 @@ export function calculateSubjectProgression(params: {
     predictedMinutes > 0 ? Math.round((totalStudyMinutes / predictedMinutes) * 100) : 0;
 
   let effectivenessMultiplier = 0.5;
-  let subjectXp = 0;
+  let grossSubjectXp = 0;
 
   if (rawEffortXp > 0) {
     const qualityNorm =
@@ -2059,19 +2585,316 @@ export function calculateSubjectProgression(params: {
       effectivenessMultiplier *= 0.65;
     }
     effectivenessMultiplier = roundXp2(effectivenessMultiplier);
-    subjectXp = roundXp2(rawEffortXp * effectivenessMultiplier);
+    grossSubjectXp = roundXp2(rawEffortXp * effectivenessMultiplier);
   }
 
+  // Chronological Subject Ledger: Positive Subject XP + Subject-Specific Inactivity Penalties
+  const sortedDates = Array.from(plansByDate.keys()).sort((a, b) => a.localeCompare(b));
+  const date14dStart = addDaysISO(todayIso, -13);
+
+  let runningNetSubjectXp = 0;
+  let peakSubjectXp = 0;
+  let subjectPenaltyXp = 0;
+  let missedSessionsCount = 0;
+  let consecutiveMissedSessions = 0;
+  let successfulSessionsRecent14d = 0;
+  let lastEffectiveStudyDate: string | null = null;
+  const activeSessionEarnedXps: number[] = [];
+  const subjectHistoryEvents: XpLedgerHistoryEvent[] = [];
+
+  for (const dateIso of sortedDates) {
+    const daySubjPlans = plansByDate.get(dateIso) || [];
+    if (daySubjPlans.length === 0) continue;
+
+    const jalaliDate = formatJalaliCompact(dateIso);
+    let dayComp = 0;
+    let dayPart = 0;
+    let dayPredMins = 0;
+    let dayActMins = 0;
+    let dayEx = 0;
+    let dayQualXp = 0;
+
+    for (const sp of daySubjPlans) {
+      if (sp.status === 'completed') dayComp += 1;
+      else if (sp.status === 'partial') dayPart += 1;
+      dayPredMins += Math.max(0, Number(sp.initial_predicted_minutes || sp.predicted_minutes || 0));
+      if (sp.performance) {
+        const m = Math.max(0, Number(sp.performance.actual_minutes || 0));
+        const ex = Math.max(0, Number(sp.performance.exercises_count || 0));
+        dayActMins += m;
+        dayEx += ex;
+        const q = parseLearningQuality0To10(sp.performance.learning_quality);
+        if (q !== null && m > 0) {
+          dayQualXp += q * XP_SCALE_WEIGHTS.QUALITY_POINT_MULTIPLIER;
+        }
+      }
+    }
+
+    const isDayActive = dayActMins > 0 || dayEx > 0 || dayComp > 0 || dayPart > 0;
+    const dayRawBase =
+      dayComp * XP_SCALE_WEIGHTS.COMPLETED_ACTIVITY +
+      dayPart * XP_SCALE_WEIGHTS.PARTIAL_ACTIVITY +
+      dayActMins / XP_SCALE_WEIGHTS.STUDY_MINUTES_DIVISOR +
+      dayEx * XP_SCALE_WEIGHTS.EXERCISE_UNIT +
+      dayQualXp +
+      (isDayActive ? 1.0 : 0);
+
+    const dayPositiveSubjectXp = roundXp2(dayRawBase * effectivenessMultiplier);
+
+    if (dayPositiveSubjectXp > 0) {
+      const xpBefore = runningNetSubjectXp;
+      const stageBefore = resolve39StageProgress(xpBefore, SUBJECT_STAGES_CATALOG);
+
+      runningNetSubjectXp = roundXp2(runningNetSubjectXp + dayPositiveSubjectXp);
+      if (runningNetSubjectXp > peakSubjectXp) {
+        peakSubjectXp = runningNetSubjectXp;
+      }
+
+      const stageAfter = resolve39StageProgress(runningNetSubjectXp, SUBJECT_STAGES_CATALOG);
+
+      let eventType: XpLedgerEventType = 'xp_gain';
+      let eventBadgeFa: XpLedgerHistoryEvent['eventBadgeFa'] = 'پاداش XP';
+      let categoryType: XpLedgerHistoryEvent['categoryType'] = 'پاداش';
+      let reasonFa = `کسب +${toPersianDigits(dayPositiveSubjectXp)} XP در درس «${subjectName}» (${formatDurationPrimePersian(
+        dayActMins
+      )} مطالعه)`;
+
+      if (stageAfter.level > stageBefore.level) {
+        eventType = 'level_promotion';
+        eventBadgeFa = 'ارتقای سطح';
+        categoryType = 'ارتقا';
+        reasonFa = `صعود سطح درس «${subjectName}» از ${stageBefore.stageNameFa} به ${stageAfter.stageNameFa}`;
+      } else if (stageAfter.stageNumber > stageBefore.stageNumber) {
+        eventType = 'step_promotion';
+        eventBadgeFa = 'ارتقای پله';
+        categoryType = 'ارتقا';
+        reasonFa = `ارتقای پله درس «${subjectName}» از ${stageBefore.stageNameFa} به ${stageAfter.stageNameFa}`;
+      }
+
+      subjectHistoryEvents.push({
+        id: `subj-gain-${subjectId}-${dateIso}`,
+        dateIso,
+        jalaliDate,
+        eventType,
+        eventBadgeFa,
+        categoryType,
+        xpBefore,
+        xpAfter: runningNetSubjectXp,
+        xpDelta: dayPositiveSubjectXp,
+        stageBeforeNumber: stageBefore.stageNumber,
+        stageAfterNumber: stageAfter.stageNumber,
+        levelBefore: stageBefore.level,
+        levelAfter: stageAfter.level,
+        stageBeforeNameFa: stageBefore.stageNameFa,
+        stageBeforeNameEn: stageBefore.stageNameEn,
+        stepBeforeLabelFa: stageBefore.stepLabelFa,
+        stageAfterNameFa: stageAfter.stageNameFa,
+        stageAfterNameEn: stageAfter.stageNameEn,
+        stepAfterLabelFa: stageAfter.stepLabelFa,
+        reasonFa,
+      });
+    }
+
+    const timeRatio =
+      dayPredMins > 0 ? Math.min(1, dayActMins / dayPredMins) : dayActMins > 0 ? 1 : 0;
+    const taskRatio = (dayComp + dayPart * 0.5) / daySubjPlans.length;
+    const sessionFulfillment = roundXp2(0.6 * timeRatio + 0.4 * taskRatio);
+
+    const isEffectiveStudySession =
+      sessionFulfillment >= 0.5 || (dayActMins >= 25 && dayComp + dayPart >= 1);
+
+    if (isEffectiveStudySession) {
+      consecutiveMissedSessions = 0;
+      lastEffectiveStudyDate = dateIso;
+      if (dateIso >= date14dStart && dateIso <= todayIso) {
+        successfulSessionsRecent14d += dayComp + dayPart;
+      }
+      if (dayPositiveSubjectXp > 0) {
+        activeSessionEarnedXps.push(dayPositiveSubjectXp);
+      }
+      continue;
+    }
+
+    // Do not penalize today's or future sessions while still in progress
+    if (dateIso >= todayIso) {
+      continue;
+    }
+
+    const unfulfilledSessionCount = daySubjPlans.filter((p) => p.status === 'pending').length || 1;
+    missedSessionsCount += unfulfilledSessionCount;
+    consecutiveMissedSessions += 1;
+
+    const avgSessionXp =
+      activeSessionEarnedXps.length > 0
+        ? activeSessionEarnedXps.reduce((a, b) => a + b, 0) / activeSessionEarnedXps.length
+        : 6.5;
+    const baseSubjPenaltyB = roundXp2(Math.max(0.6, Math.min(4.5, avgSessionXp * 0.12)));
+    const subjMultiplierR = getSubjectInactivityMultiplierR(consecutiveMissedSessions);
+    const unfulfilledM = roundXp2(Math.max(0, 1 - sessionFulfillment));
+    const rawSubjPenalty = roundXp2(baseSubjPenaltyB * subjMultiplierR * unfulfilledM);
+
+    if (rawSubjPenalty <= 0 || runningNetSubjectXp <= 0) {
+      continue;
+    }
+
+    const xpBeforePenalty = runningNetSubjectXp;
+    const stageBeforePenalty = resolve39StageProgress(xpBeforePenalty, SUBJECT_STAGES_CATALOG);
+    const deductedSubjXp = roundXp2(Math.min(xpBeforePenalty, rawSubjPenalty));
+
+    runningNetSubjectXp = roundXp2(Math.max(0, xpBeforePenalty - deductedSubjXp));
+    subjectPenaltyXp = roundXp2(subjectPenaltyXp + deductedSubjXp);
+
+    const stageAfterPenalty = resolve39StageProgress(runningNetSubjectXp, SUBJECT_STAGES_CATALOG);
+    const demotedLevel = stageAfterPenalty.level < stageBeforePenalty.level;
+    const demotedStage = stageAfterPenalty.stageNumber < stageBeforePenalty.stageNumber;
+
+    let eventType: XpLedgerEventType = 'xp_penalty';
+    let eventBadgeFa: XpLedgerHistoryEvent['eventBadgeFa'] = 'جریمه عدم فعالیت';
+    let categoryType: XpLedgerHistoryEvent['categoryType'] = 'جریمه';
+
+    if (demotedLevel) {
+      eventType = 'level_demotion';
+      eventBadgeFa = 'تنزل سطح';
+      categoryType = 'پسرفت';
+    } else if (demotedStage) {
+      eventType = 'step_demotion';
+      eventBadgeFa = 'تنزل پله';
+      categoryType = 'پسرفت';
+    }
+
+    const baseReasonFa =
+      sessionFulfillment === 0
+        ? `عدم انجام نوبت برنامه‌ریزی‌شده درس «${subjectName}» (${toPersianDigits(
+            consecutiveMissedSessions
+          )} نوبت متوالی ازدست‌رفته؛ ضریب ×${toPersianDigits(subjMultiplierR)})`
+        : `تحقق ناقص نوبت مطالعه درس «${subjectName}» (${toPersianDigits(
+            Math.round(unfulfilledM * 100)
+          )}٪ ناتمام در نوبت ${toPersianDigits(consecutiveMissedSessions)} وقفه)`;
+
+    subjectHistoryEvents.push({
+      id: `subj-pen-${subjectId}-${dateIso}`,
+      dateIso,
+      jalaliDate,
+      eventType,
+      eventBadgeFa,
+      categoryType,
+      xpBefore: xpBeforePenalty,
+      xpAfter: runningNetSubjectXp,
+      xpDelta: -deductedSubjXp,
+      stageBeforeNumber: stageBeforePenalty.stageNumber,
+      stageAfterNumber: stageAfterPenalty.stageNumber,
+      levelBefore: stageBeforePenalty.level,
+      levelAfter: stageAfterPenalty.level,
+      stageBeforeNameFa: stageBeforePenalty.stageNameFa,
+      stageBeforeNameEn: stageBeforePenalty.stageNameEn,
+      stepBeforeLabelFa: stageBeforePenalty.stepLabelFa,
+      stageAfterNameFa: stageAfterPenalty.stageNameFa,
+      stageAfterNameEn: stageAfterPenalty.stageNameEn,
+      stepAfterLabelFa: stageAfterPenalty.stepLabelFa,
+      reasonFa: demotedStage
+        ? `تنزل از «${stageBeforePenalty.stageNameFa}» به «${stageAfterPenalty.stageNameFa}» به علت کسر ${toPersianDigits(
+            deductedSubjXp
+          )} XP (${baseReasonFa})`
+        : `کسر ${toPersianDigits(deductedSubjXp)} XP — ${baseReasonFa}`,
+      streakDays: consecutiveMissedSessions,
+      multiplierR: subjMultiplierR,
+      unfulfilledRatioM: unfulfilledM,
+      basePenaltyB: baseSubjPenaltyB,
+    });
+  }
+
+  // Reconcile net Subject XP with total grossSubjectXp minus accumulated subjectPenaltyXp
+  const subjectXp = roundXp2(Math.max(0, grossSubjectXp - subjectPenaltyXp));
   const stageProgress = resolve39StageProgress(subjectXp, SUBJECT_STAGES_CATALOG);
+  const peakStageProgress = resolve39StageProgress(
+    Math.max(grossSubjectXp, peakSubjectXp),
+    SUBJECT_STAGES_CATALOG
+  );
+
+  const subjDemotions = subjectHistoryEvents.filter(
+    (e) => e.eventType === 'level_demotion' || e.eventType === 'step_demotion'
+  );
+  const latestSubjectDemotion =
+    subjDemotions.length > 0 ? subjDemotions[subjDemotions.length - 1] : null;
+  const hasSubjectDemotion =
+    stageProgress.stageNumber < peakStageProgress.stageNumber &&
+    latestSubjectDemotion !== null;
+
+  const daysSinceLastStudy =
+    lastEffectiveStudyDate !== null
+      ? daysBetweenIsoDates(lastEffectiveStudyDate, todayIso)
+      : null;
+
+  const lastEffectiveStudyJalali =
+    lastEffectiveStudyDate !== null
+      ? daysSinceLastStudy === 0
+        ? `امروز (${formatJalaliCompact(lastEffectiveStudyDate)})`
+        : daysSinceLastStudy === 1
+        ? `دیروز (${formatJalaliCompact(lastEffectiveStudyDate)})`
+        : `${toPersianDigits(daysSinceLastStudy ?? 0)} روز پیش (${formatJalaliCompact(
+            lastEffectiveStudyDate
+          )})`
+      : 'ثبت نشده';
+
+  let continuityStatus: SubjectContinuityStatus = 'normal';
+  let continuityStatusLabelFa: SubjectLevelProgress['continuityStatusLabelFa'] = 'وضعیت عادی';
+  let continuityStatusReasonFa =
+    distinctActiveDays > 0
+      ? `مطالعه منظم در ${toPersianDigits(distinctActiveDays)} روز فعال و بدون نوبت برنامه‌ریزی‌شده معوقه`
+      : 'هنوز برنامه منقضی‌شده‌ای بدون انجام باقی نمانده است';
+
+  if (
+    consecutiveMissedSessions >= 3 ||
+    (daysSinceLastStudy !== null && daysSinceLastStudy > 12 && sortedDates.length >= 2)
+  ) {
+    continuityStatus = 'critical';
+    continuityStatusLabelFa = 'استمرار ضعیف';
+    continuityStatusReasonFa =
+      consecutiveMissedSessions >= 3
+        ? `${toPersianDigits(consecutiveMissedSessions)} نوبت مطالعاتی متوالی از برنامه درس «${subjectName}» انجام نشده است`
+        : `بیش از ${toPersianDigits(daysSinceLastStudy || 0)} روز از آخرین مطالعه مؤثر درس «${subjectName}» گذشته است`;
+  } else if (consecutiveMissedSessions === 2 || hasSubjectDemotion) {
+    continuityStatus = 'warning';
+    continuityStatusLabelFa = 'هشدار جدی';
+    continuityStatusReasonFa = hasSubjectDemotion
+      ? `کسر ${toPersianDigits(subjectPenaltyXp)} XP به دلیل نوبت‌های ازدست‌رفته باعث تنزل پله در این درس شده است`
+      : `۲ نوبت متوالی از برنامه درس «${subjectName}» انجام نشده و شامل جریمه عدم استمرار شده است`;
+  } else if (
+    consecutiveMissedSessions === 1 ||
+    (daysSinceLastStudy !== null && daysSinceLastStudy > 6)
+  ) {
+    continuityStatus = 'attention';
+    continuityStatusLabelFa = 'نیازمند توجه';
+    continuityStatusReasonFa =
+      consecutiveMissedSessions === 1
+        ? `آخرین نوبت برنامه‌ریزی‌شده درس «${subjectName}» انجام نشده است؛ با ۱ جلسه مطالعه زنجیره را احیا کنید`
+        : `${toPersianDigits(daysSinceLastStudy || 0)} روز از آخرین مطالعه این درس گذشته است`;
+  }
 
   return {
     subjectId,
     subjectName,
     gradeLevel,
     subjectXp,
+    grossSubjectXp,
+    subjectPenaltyXp,
     rawEffortXp,
     effectivenessMultiplier,
     distinctActiveDays,
+    plannedStudyDaysCount: sortedDates.length,
+    missedSessionsCount,
+    consecutiveMissedSessions,
+    successfulSessionsRecent14d,
+    lastEffectiveStudyDate,
+    lastEffectiveStudyJalali,
+    daysSinceLastStudy,
+    continuityStatus,
+    continuityStatusLabelFa,
+    continuityStatusReasonFa,
+    hasSubjectDemotion,
+    peakStageProgress,
+    latestSubjectDemotion,
+    subjectHistoryEvents: [...subjectHistoryEvents].reverse(),
     plansCount: subjectPlans.length,
     completedCount,
     totalStudyMinutes,
@@ -2087,8 +2910,9 @@ export function calculateSubjectProgression(params: {
 export function calculateAllSubjectsProgressions(params: {
   subjects: Array<{ id: string; name: string; grade_level?: string; is_archived?: number }>;
   allTimePlans: DailyPlanItem[];
+  todayIso?: string;
 }): SubjectLevelProgress[] {
-  const { subjects, allTimePlans } = params;
+  const { subjects, allTimePlans, todayIso } = params;
   const entries = new Map<string, { id: string; name: string; gradeLevel: string }>();
 
   for (const s of subjects) {
@@ -2121,6 +2945,7 @@ export function calculateAllSubjectsProgressions(params: {
         subjectName: e.name,
         gradeLevel: e.gradeLevel,
         allTimePlans,
+        todayIso,
       })
     );
   }
@@ -2144,6 +2969,8 @@ export interface DailyHistoricalXpRecord {
   jalaliCompact: string;
   dayState: 'active' | 'missed_planned' | 'unrecorded';
   totalXp: number;
+  penaltyXp: number;
+  netDayXp: number;
   educationalXp: number;
   studyMinutes: number;
   exercisesCount: number;
@@ -2158,6 +2985,8 @@ export interface XpVelocityAndProgressAnalysis {
   xp14dTotal: number;
   xp30dTotal: number;
   prev7dTotal: number;
+  penalty7dTotal: number;
+  net7dTotal: number;
 
   dailyRate7dCalendar: number;
   dailyRate7dEffective: number;
@@ -2201,6 +3030,12 @@ export function analyzeXpVelocityAndProgress(params: {
 }): XpVelocityAndProgressAnalysis {
   const { allTimePlans, todayIso, levelProgress } = params;
 
+  const globalLedger = evaluateGlobalXpLedger(allTimePlans, todayIso);
+  const penaltyByDate = new Map<string, GlobalInactivityDayPenalty>();
+  for (const pen of globalLedger.dailyPenalties) {
+    penaltyByDate.set(pen.dateIso, pen);
+  }
+
   const plansByDate = new Map<string, DailyPlanItem[]>();
   for (const plan of allTimePlans) {
     const list = plansByDate.get(plan.plan_date);
@@ -2212,6 +3047,8 @@ export function analyzeXpVelocityAndProgress(params: {
     const dayPlans = plansByDate.get(dateIso) || [];
     const xp = calculateXpFromPlans(dayPlans);
     const evalDay = evaluateDayPerformance({ dateIso, plans: dayPlans });
+    const pen = penaltyByDate.get(dateIso);
+    const penaltyXp = pen ? pen.deductedXp : 0;
 
     const hasLoggedAny =
       xp.completedCount > 0 ||
@@ -2219,14 +3056,17 @@ export function analyzeXpVelocityAndProgress(params: {
       xp.actualStudyMinutes > 0 ||
       xp.exercisesCount > 0;
 
+    const studyPlans = dayPlans.filter((p) => Number(p.is_study) === 1);
+
     let dayState: 'active' | 'missed_planned' | 'unrecorded' = 'unrecorded';
-    if (hasLoggedAny) {
+    if (hasLoggedAny && !pen) {
       dayState = 'active';
-    } else if (dayPlans.length > 0 && dateIso < todayIso) {
+    } else if (studyPlans.length > 0 && dateIso < todayIso) {
       dayState = 'missed_planned';
+    } else if (hasLoggedAny) {
+      dayState = 'active';
     }
 
-    const studyPlans = dayPlans.filter((p) => Number(p.is_study) === 1);
     const educationalXp = calculateXpFromPlans(studyPlans).totalXp;
 
     return {
@@ -2234,6 +3074,8 @@ export function analyzeXpVelocityAndProgress(params: {
       jalaliCompact: formatJalaliCompact(dateIso),
       dayState,
       totalXp: xp.totalXp,
+      penaltyXp,
+      netDayXp: roundXp2(xp.totalXp - penaltyXp),
       educationalXp,
       studyMinutes: xp.actualStudyMinutes,
       exercisesCount: xp.exercisesCount,
@@ -2253,9 +3095,11 @@ export function analyzeXpVelocityAndProgress(params: {
   const todayXp = roundXp2(todayRecord.totalXp);
 
   const xp7dTotal = roundXp2(records7d.reduce((s, r) => s + r.totalXp, 0));
-  const xp14dTotal = roundXp2(records14d.reduce((s, r) => s + r.totalXp, 0));
-  const xp30dTotal = roundXp2(records30d.reduce((s, r) => s + r.totalXp, 0));
-  const prev7dTotal = roundXp2(prev7dRecords.reduce((s, r) => s + r.totalXp, 0));
+  const penalty7dTotal = roundXp2(records7d.reduce((s, r) => s + r.penaltyXp, 0));
+  const net7dTotal = roundXp2(xp7dTotal - penalty7dTotal);
+  const xp14dTotal = roundXp2(records14d.reduce((s, r) => s + r.netDayXp, 0));
+  const xp30dTotal = roundXp2(records30d.reduce((s, r) => s + r.netDayXp, 0));
+  const prev7dTotal = roundXp2(prev7dRecords.reduce((s, r) => s + r.netDayXp, 0));
 
   const activeDays7d = records7d.filter((r) => r.dayState === 'active').length;
   const missedPlannedDays7d = records7d.filter((r) => r.dayState === 'missed_planned').length;
@@ -2269,19 +3113,20 @@ export function analyzeXpVelocityAndProgress(params: {
     prevActiveDays7d + prev7dRecords.filter((r) => r.dayState === 'missed_planned').length
   );
 
-  const dailyRate7dCalendar = roundRate1(xp7dTotal / 7);
-  const dailyRate14dCalendar = roundRate1(xp14dTotal / 14);
-  const dailyRate30dCalendar = roundRate1(xp30dTotal / 30);
+  const effectiveNet7d = Math.max(0, net7dTotal);
+  const dailyRate7dCalendar = roundRate1(effectiveNet7d / 7);
+  const dailyRate14dCalendar = roundRate1(Math.max(0, xp14dTotal) / 14);
+  const dailyRate30dCalendar = roundRate1(Math.max(0, xp30dTotal) / 30);
 
-  const accountableRate7d = xp7dTotal / accountableDays7d;
-  const sorted7dXp = [...records7d.map((r) => r.totalXp)].sort((a, b) => a - b);
+  const accountableRate7d = effectiveNet7d / accountableDays7d;
+  const sorted7dXp = [...records7d.map((r) => Math.max(0, r.netDayXp))].sort((a, b) => a - b);
   const trimmedSum7d =
     sorted7dXp.length >= 7
       ? sorted7dXp.slice(1, 6).reduce((s, v) => s + v, 0) / 5
       : dailyRate7dCalendar;
 
   const dailyRate7dEffective =
-    xp7dTotal > 0
+    effectiveNet7d > 0
       ? Math.max(
           0.1,
           roundRate1(
@@ -2292,11 +3137,11 @@ export function analyzeXpVelocityAndProgress(params: {
 
   const prev7dDailyRate =
     prevActiveDays7d > 0
-      ? roundRate1(prev7dTotal / Math.max(3, prevAccountableDays7d))
+      ? roundRate1(Math.max(0, prev7dTotal) / Math.max(3, prevAccountableDays7d))
       : 0;
 
   const currentComparableRate =
-    activeDays7d > 0 ? roundRate1(xp7dTotal / Math.max(3, accountableDays7d)) : 0;
+    activeDays7d > 0 ? roundRate1(effectiveNet7d / Math.max(3, accountableDays7d)) : 0;
   const velocityDeltaAbsolute = roundRate1(currentComparableRate - prev7dDailyRate);
 
   let velocityDeltaPercent: number | null = null;
@@ -2304,15 +3149,29 @@ export function analyzeXpVelocityAndProgress(params: {
   let trendLabelPersian = 'در حال ثبت خط پایه';
   let trendBadgeTone: 'emerald' | 'indigo' | 'amber' | 'slate' = 'slate';
 
-  if (activeDays7d === 0 && prevActiveDays7d === 0) {
+  if (activeDays7d === 0 && prevActiveDays7d === 0 && missedPlannedDays7d === 0) {
     trendDirection = 'insufficient_data';
     trendLabelPersian = 'در انتظار ثبت فعالیت';
     trendBadgeTone = 'slate';
   } else if (prevActiveDays7d === 0 || prev7dTotal < 5) {
-    trendDirection = activeDays7d >= 2 || xp7dTotal >= 12 ? 'ascending' : 'stable';
+    trendDirection =
+      missedPlannedDays7d >= 2
+        ? 'descending'
+        : activeDays7d >= 2 || effectiveNet7d >= 12
+        ? 'ascending'
+        : 'stable';
     trendLabelPersian =
-      trendDirection === 'ascending' ? 'شروع پرقدرت و صعودی 🚀' : 'پایدار (هفته اول ثبت)';
-    trendBadgeTone = trendDirection === 'ascending' ? 'emerald' : 'indigo';
+      trendDirection === 'ascending'
+        ? 'شروع پرقدرت و صعودی 🚀'
+        : trendDirection === 'descending'
+        ? 'کاهش ریتم و ثبت جریمه عدم فعالیت'
+        : 'پایدار (هفته اول ثبت)';
+    trendBadgeTone =
+      trendDirection === 'ascending'
+        ? 'emerald'
+        : trendDirection === 'descending'
+        ? 'amber'
+        : 'indigo';
   } else {
     velocityDeltaPercent = Math.max(
       -100,
@@ -2321,13 +3180,16 @@ export function analyzeXpVelocityAndProgress(params: {
         Math.round(((currentComparableRate - prev7dDailyRate) / prev7dDailyRate) * 100)
       )
     );
-    if (velocityDeltaPercent >= 12) {
+    if (velocityDeltaPercent >= 12 && missedPlannedDays7d <= 1) {
       trendDirection = 'ascending';
       trendLabelPersian = `صعودی (+${toPersianDigits(velocityDeltaPercent)}٪ نسبت به هفته قبل)`;
       trendBadgeTone = 'emerald';
-    } else if (velocityDeltaPercent <= -15) {
+    } else if (velocityDeltaPercent <= -15 || penalty7dTotal > 0) {
       trendDirection = 'descending';
-      trendLabelPersian = `کاهش ریتم (${toPersianDigits(Math.abs(velocityDeltaPercent))}٪ کمتر از هفته قبل)`;
+      trendLabelPersian =
+        penalty7dTotal > 0
+          ? `افت سرعت و کسر ${toPersianDigits(penalty7dTotal)} XP جریمه وقفه`
+          : `کاهش ریتم (${toPersianDigits(Math.abs(velocityDeltaPercent))}٪ کمتر از هفته قبل)`;
       trendBadgeTone = 'amber';
     } else {
       trendDirection = 'stable';
@@ -2392,19 +3254,23 @@ export function analyzeXpVelocityAndProgress(params: {
       alignmentTitlePersian = 'هشدار رشد ظاهری XP بدون عمق کافی یادگیری';
       alignmentDescriptionPersian = `با وجود کسب ${toPersianDigits(
         xp7dTotal
-      )} XP در ۷ روز اخیر، شاخص عملکرد آموزشی واقعی (${toPersianDigits(
+      )} XP مثبت در ۷ روز اخیر، شاخص عملکرد آموزشی واقعی (${toPersianDigits(
         avgEducationalScore7d
       )} از ۱۰۰)${
         avgLearningQuality7d !== null
           ? ` و کیفیت یادگیری (${toPersianDigits(avgLearningQuality7d)} از ۱۰)`
           : ''
       } نشان می‌دهد بخشی از امتیازها از تیک‌زدن فعالیت‌ها بدون ساعت مطالعه عمیق یا حل تست کافی حاصل شده است.`;
-    } else if (trendDirection === 'descending' && avgEducationalScore7d < 75) {
+    } else if (trendDirection === 'descending' && (avgEducationalScore7d < 75 || penalty7dTotal > 0)) {
       alignmentStatus = 'simultaneous_drop';
-      alignmentTitlePersian = 'کاهش هم‌زمان سرعت XP و ریتم مطالعه';
-      alignmentDescriptionPersian = `در ۷ روز اخیر هم سرعت کسب XP و هم امتیاز عملکرد آموزشی (${toPersianDigits(
+      alignmentTitlePersian = 'کاهش هم‌زمان سرعت XP و استمرار مطالعه';
+      alignmentDescriptionPersian = `در ۷ روز اخیر به دلیل ${toPersianDigits(
+        missedPlannedDays7d
+      )} روز عدم تحقق برنامه درسی${
+        penalty7dTotal > 0 ? ` و کسر ${toPersianDigits(penalty7dTotal)} XP جریمه عدم فعالیت` : ''
+      }، سرعت رشد و شاخص آموزشی (${toPersianDigits(
         avgEducationalScore7d
-      )} از ۱۰۰) نسبت به ظرفیت شما کاهش یافته است؛ بازگشت به یک باکس مطالعه متمرکز ۴۵ دقیقه‌ای این روند را به سرعت احیا می‌کند.`;
+      )} از ۱۰۰) کاهش یافته است؛ ثبت یک جلسه مطالعه مؤثر امروز زنجیره جریمه را متوقف می‌کند.`;
     } else if (
       avgEducationalScore7d >= 78 &&
       (avgLearningQuality7d === null || avgLearningQuality7d >= 7.5) &&
@@ -2414,7 +3280,7 @@ export function analyzeXpVelocityAndProgress(params: {
       alignmentTitlePersian = 'کیفیت یادگیری عالی، نیازمند پیوستگی روزانه بیشتر';
       alignmentDescriptionPersian = `کیفیت مطالعه شما در روزهای فعال بسیار مطلوب است (شاخص آموزشی ${toPersianDigits(
         avgEducationalScore7d
-      )} از ۱۰۰)، اما افزایش تعداد روزهای فعال هفته، سرعت صعود شما به مرحله بعدی را دوچندان می‌کند.`;
+      )} از ۱۰۰)، اما افزایش تعداد روزهای فعال هفته، از جریمه عدم استمرار جلوگیری کرده و سرعت صعود به مرحله بعدی را دوچندان می‌کند.`;
     } else {
       alignmentStatus = 'synergistic_growth';
       alignmentTitlePersian = 'رشد اصیل و هم‌راستای XP با پیشرفت واقعی تحصیلی';
@@ -2426,6 +3292,14 @@ export function analyzeXpVelocityAndProgress(params: {
           : ''
       }) است و رشد واقعی علمی شما را بازتاب می‌دهد.`;
     }
+  } else if (missedPlannedDays7d >= 1 && penalty7dTotal > 0) {
+    alignmentStatus = 'simultaneous_drop';
+    alignmentTitlePersian = 'توقف مطالعه و اعمال جریمه عدم استمرار';
+    alignmentDescriptionPersian = `در ۷ روز اخیر ${toPersianDigits(
+      missedPlannedDays7d
+    )} روز برنامه‌ریزی درسی بدون ثبت عملکرد باقی مانده و ${toPersianDigits(
+      penalty7dTotal
+    )} XP از حساب سطح کل کسر شده است.`;
   }
 
   const effectivePaceForPrediction = Math.max(
@@ -2459,14 +3333,27 @@ export function analyzeXpVelocityAndProgress(params: {
     trendDirection === 'descending' ||
     alignmentStatus === 'superficial_xp_warning' ||
     alignmentStatus === 'simultaneous_drop' ||
-    missedPlannedDays7d >= 2;
+    missedPlannedDays7d >= 1 ||
+    penalty7dTotal > 0;
 
   let warningHeadlinePersian: string | null = null;
-  if (alignmentStatus === 'superficial_xp_warning') {
+  if (globalLedger.hasActiveDemotion && globalLedger.latestDemotionEvent) {
+    warningHeadlinePersian = `هشدار پسرفت سطح: به دلیل عدم فعالیت مستمر و کسر ${toPersianDigits(
+      globalLedger.totalPenaltyXp
+    )} XP، رتبه شما از «${globalLedger.latestDemotionEvent.stageBeforeNameFa}» به «${
+      globalLedger.currentStageProgress.stageNameFa
+    }» تنزل یافته است.`;
+  } else if (penalty7dTotal > 0) {
+    warningHeadlinePersian = `در ۷ روز اخیر به دلیل ${toPersianDigits(
+      missedPlannedDays7d
+    )} روز عدم تحقق برنامه آموزشی، مجموعاً ${toPersianDigits(
+      penalty7dTotal
+    )} XP جریمه عدم استمرار کسر شده است.`;
+  } else if (alignmentStatus === 'superficial_xp_warning') {
     warningHeadlinePersian =
-      'امتیاز سطح دائمی شما محفوظ است؛ اما برای تبدیل XP به پیشرفت واقعی، کیفیت مطالعه و تست‌زنی را اولویت دهید.';
-  } else if (trendDirection === 'descending' || missedPlannedDays7d >= 2) {
-    warningHeadlinePersian = `سطح دائمی شما بدون هیچ کسر امتیازی حفظ شده است، اما سرعت پیشرفت هفتگی شما کاهش یافته است (${toPersianDigits(
+      'برای تثبیت ارتقای سطح و جلوگیری از افت کیفیت، زمان مطالعه عمیق و حل تست را در اولویت قرار دهید.';
+  } else if (trendDirection === 'descending') {
+    warningHeadlinePersian = `سرعت پیشرفت هفتگی شما کاهش یافته است (${toPersianDigits(
       activeDays7d
     )} روز فعال در ۷ روز اخیر).`;
   }
@@ -2478,17 +3365,17 @@ export function analyzeXpVelocityAndProgress(params: {
       targetRecoveryStudyMins / XP_SCALE_WEIGHTS.STUDY_MINUTES_DIVISOR +
       targetRecoveryTests * XP_SCALE_WEIGHTS.EXERCISE_UNIT +
       8 * XP_SCALE_WEIGHTS.QUALITY_POINT_MULTIPLIER
-  ); // 5 + 1.2 + 3 + 1.6 = 10.8 XP
+  ); // 10.8 XP
   const nextGoalName =
     levelProgress.nextStageNameEn || levelProgress.stageNameEn;
   const recoveryChallengeTextPersian = hasPerformanceDropWarning
-    ? `چالش احیای ریتم (بدون جریمه): با تکمیل ۱ باکس مطالعه ${toPersianDigits(
+    ? `گام جبران و شکستن زنجیره جریمه: با تکمیل حداقل ۵۰٪ برنامه درسی امروز یا ۱ باکس مطالعه ${toPersianDigits(
         targetRecoveryStudyMins
       )} دقیقه‌ای با کیفیت +۸ و حل ${toPersianDigits(
         targetRecoveryTests
-      )} تست، حدود +${toPersianDigits(
+      )} تست، زنجیره عدم فعالیت صفر شده و حدود +${toPersianDigits(
         recoveryChallengeXp
-      )} XP کسب کرده و منحنی پیشرفت خود را دوباره صعودی کنید.`
+      )} XP برای بازگشت به «${nextGoalName}» کسب می‌کنید.`
     : `گام طلایی ادامه مسیر: حفظ پیوستگی روزانه و ثبت حداقل ۱ باکس مطالعه عمیق برای صعود سریع‌تر به «${nextGoalName}».`;
 
   return {
@@ -2497,6 +3384,8 @@ export function analyzeXpVelocityAndProgress(params: {
     xp14dTotal,
     xp30dTotal,
     prev7dTotal,
+    penalty7dTotal,
+    net7dTotal,
     dailyRate7dCalendar,
     dailyRate7dEffective,
     dailyRate14dCalendar,
