@@ -519,13 +519,13 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
 
   const isTodaySelected = activeTab !== 'weekly' && selectedDate === todayIso;
 
-  // Format minutes as H:MM′ in Persian digits (e.g., 165 -> ۲:۴۵′)
+  // Format minutes as H:MM′ in Persian digits with LTR isolate so ′ is always after the number
   const formatClockPrime = (totalMinutes: number): string => {
     const safe = Math.max(0, Math.round(totalMinutes || 0));
     const hrs = Math.floor(safe / 60);
     const mins = safe % 60;
     const paddedMins = mins < 10 ? `0${mins}` : `${mins}`;
-    return `${toPersianDigits(hrs)}:${toPersianDigits(paddedMins)}′`;
+    return `\u2066${toPersianDigits(hrs)}:${toPersianDigits(paddedMins)}′\u2069`;
   };
 
   // Format registered daily capacity for accordion title (e.g., «۶ ساعت» or «۳۶۰ دقیقه»)
@@ -663,7 +663,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                   <Timer className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
                 </div>
                 <div className="text-[11px] sm:text-xs font-extrabold text-white tabular-nums whitespace-nowrap truncate">
-                  زمان پیش‌بینی: {toPersianDigits(daySummary.predStudyMinutes)}
+                  زمان پیش‌بینی: {`\u2066${toPersianDigits(daySummary.predStudyMinutes)}′\u2069`}
                 </div>
               </div>
 
@@ -686,7 +686,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                   <CheckCircle2 className="w-3.5 h-3.5 text-teal-300 shrink-0" />
                 </div>
                 <div className="text-[11px] sm:text-xs font-extrabold text-white tabular-nums whitespace-nowrap truncate">
-                  زمان مطالعه: {toPersianDigits(daySummary.actualStudyMinutes)}
+                  زمان مطالعه: {`\u2066${toPersianDigits(daySummary.actualStudyMinutes)}′\u2069`}
                 </div>
               </div>
 
@@ -1366,7 +1366,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                           {/* Item 2 (Row 1 Left): Actual Time + Prime Symbol Variance in Parentheses */}
                           <div className="flex items-center justify-end gap-1 min-w-0 truncate text-left">
                             <span className="text-slate-800 dark:text-slate-200 font-bold truncate">
-                              واقعی: {toPersianDigits(actualMins || 0)}′
+                              واقعی: {`\u2066${toPersianDigits(actualMins || 0)}′\u2069`}
                               {diff !== null && (
                                 <span
                                   className={`mr-1 font-semibold ${
@@ -1383,8 +1383,8 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                                   {diff === 0
                                     ? 'مطابق پیش‌بینی'
                                     : diff > 0
-                                    ? `${toPersianDigits(diff)}′ بیشتر`
-                                    : `${toPersianDigits(Math.abs(diff))}′ کمتر`}
+                                    ? `\u2066${toPersianDigits(diff)}′\u2069 بیشتر`
+                                    : `\u2066${toPersianDigits(Math.abs(diff))}′\u2069 کمتر`}
                                   )
                                 </span>
                               )}

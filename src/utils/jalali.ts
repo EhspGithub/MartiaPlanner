@@ -654,53 +654,36 @@ export function getJalaliMonthRange(referenceIsoDate: string): {
 }
 
 /**
- * Formats minutes clearly in Persian: e.g. "۹۰ دقیقه (۱ ساعت و ۳۰ دقیقه)" or compact "۹۰ دقیقه"
- */
-export function formatMinutesPersian(minutes: number, includeHoursHint = false): string {
-  const mins = Math.max(0, Math.round(minutes || 0));
-  if (!includeHoursHint || mins < 60) {
-    return `${toPersianDigits(mins)} دقیقه`;
-  }
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (m === 0) {
-    return `${toPersianDigits(mins)} دقیقه (${toPersianDigits(h)} ساعت)`;
-  }
-  return `${toPersianDigits(mins)} دقیقه (${toPersianDigits(h)} ساعت و ${toPersianDigits(m)} دقیقه)`;
-}
-
-/**
- * Formats minutes with hours and minutes unit for compact display (Section 1.3):
- * e.g. 90 -> "۱ ساعت و ۳۰ دقیقه", 60 -> "۱ ساعت", 45 -> "۴۵ دقیقه"
- */
-export function formatHoursAndMinutesPersian(minutes: number): string {
-  const mins = Math.max(0, Math.round(minutes || 0));
-  if (mins < 60) {
-    return `${toPersianDigits(mins)} دقیقه`;
-  }
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (m === 0) {
-    return `${toPersianDigits(h)} ساعت (${toPersianDigits(mins)} دقیقه)`;
-  }
-  return `${toPersianDigits(h)} ساعت و ${toPersianDigits(m)} دقیقه`;
-}
-
-/**
- * Unified compact prime time formatter for the Performance menu (Section 8):
- * - For < 60 minutes: e.g. 45 -> "۴۵′"
- * - For >= 60 minutes: e.g. 205 -> "۳:۲۵′", 180 -> "۳:۰۰′"
- * Never outputs the words «ساعت» or «دقیقه».
+ * Unified compact prime time formatter across the entire application:
+ * - For < 60 minutes: e.g. 20 -> "\u2066۲۰′\u2069" (visually ۲۰′)
+ * - For >= 60 minutes: e.g. 195 -> "\u2066۳:۱۵′\u2069", 180 -> "\u2066۳:۰۰′\u2069"
+ * Uses Unicode Left-to-Right Isolate (\u2066...\u2069) so the prime symbol (′) is ALWAYS
+ * placed after (to the right of) the digits even inside RTL containers, never before (′۲۰).
+ * Never outputs the extra words «ساعت» or «دقیقه».
  */
 export function formatDurationPrimePersian(minutes: number | null | undefined): string {
   const mins = Math.max(0, Math.round(Number(minutes || 0)));
   if (mins < 60) {
-    return `${toPersianDigits(mins)}′`;
+    return `\u2066${toPersianDigits(mins)}′\u2069`;
   }
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   const paddedM = m < 10 ? `0${m}` : `${m}`;
-  return `${toPersianDigits(h)}:${toPersianDigits(paddedM)}′`;
+  return `\u2066${toPersianDigits(h)}:${toPersianDigits(paddedM)}′\u2069`;
+}
+
+/**
+ * Formats minutes in unified prime notation (e.g. 45 -> "۴۵′", 90 -> "۱:۳۰′")
+ */
+export function formatMinutesPersian(minutes: number, _includeHoursHint = false): string {
+  return formatDurationPrimePersian(minutes);
+}
+
+/**
+ * Formats hours and minutes in unified prime notation (e.g. 90 -> "۱:۳۰′", 45 -> "۴۵′")
+ */
+export function formatHoursAndMinutesPersian(minutes: number): string {
+  return formatDurationPrimePersian(minutes);
 }
 
 /**

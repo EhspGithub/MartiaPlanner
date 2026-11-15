@@ -504,18 +504,223 @@ export const api = {
     return updated;
   },
 
-  exportBackup(): Promise<any> {
-    return request('/api/backup/export', undefined, () => localSQLiteFallback.exportBackup());
+  async exportBackup(): Promise<any> {
+    const dbDump = await request('/api/backup/export', undefined, () =>
+      localSQLiteFallback.exportBackup()
+    );
+
+    const clientPreferences: Record<string, any> = {};
+    try {
+      const smartRem = localStorage.getItem('martia_smart_reminder_enabled_v1');
+      if (smartRem !== null) clientPreferences.smart_reminder_enabled = smartRem;
+      const customQuotes = localStorage.getItem('martia_motivational_quotes_bank_v1');
+      if (customQuotes !== null) clientPreferences.motivational_quotes_bank = customQuotes;
+      const firedRem = localStorage.getItem('martia_fired_reminders_v1');
+      if (firedRem !== null) clientPreferences.fired_reminders = firedRem;
+      const themePref = localStorage.getItem('martia_theme_v1');
+      if (themePref !== null) clientPreferences.theme = themePref;
+    } catch {}
+
+    return {
+      ...dbDump,
+      client_preferences: clientPreferences,
+    };
+  },
+
+  validateBackupPayload(raw: any): {
+    valid: boolean;
+    error?: string;
+    normalizedPayload?: any;
+    summary?: {
+      version: string;
+      exportedAt: string;
+      subjectsCount: number;
+      unitsCount: number;
+      plansCount: number;
+      performanceLogsCount: number;
+      categoriesCount: number;
+      studyTypesCount: number;
+      prioritiesCount: number;
+      studyGoalsCount: number;
+      timeBudgetsCount: number;
+      hasClientPreferences: boolean;
+    };
+  } {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return {
+        valid: false,
+        error: 'فرمت فایل انتخاب‌شده نامعتبر است (ساختار JSON معتبر یافت نشد).',
+      };
+    }
+
+    if (raw.app !== 'MartiaPlanner') {
+      return {
+        valid: false,
+        error: 'این فایل متعلق به سامانه Martia Planner نیست و امکان بازیابی آن وجود ندارد.',
+      };
+    }
+
+    if (raw.schemaVersion !== undefined && Number(raw.schemaVersion) > 2) {
+      return {
+        valid: false,
+        error: `نسخه ساختار این فایل پشتیبان (${raw.schemaVersion}) جدیدتر از نسخه فعلی برنامه است و سازگار نیست.`,
+      };
+    }
+
+    const dataRoot =
+      raw.data && typeof raw.data === 'object' && Array.isArray(raw.data.daily_plans)
+        ? raw.data
+        : raw;
+
+    if (!Array.isArray(dataRoot.subjects) || !Array.isArray(dataRoot.daily_plans)) {
+      return {
+        valid: false,
+        error: 'فایل پشتیبان ناقص یا آسیب‌دیده است (جداول اصلی دروس و برنامه‌های مطالعاتی یافت نشد).',
+      };
+    }
+
+    for (const s of dataRoot.subjects) {
+      if (!s || typeof s !== 'object' || !s.id || !s.name) {
+        return {
+          valid: false,
+          error: 'اطلاعات جدول دروس در فایل پشتیبان مخدوش است.',
+        };
+      }
+    }
+
+    for (const p of dataRoot.daily_plans) {
+      if (!p || typeof p !== 'object' || !p.id || !p.plan_date) {
+        return {
+          valid: false,
+          error: 'اطلاعات جدول برنامه‌های مطالعاتی در فایل پشتیبان مخدوش است.',
+        };
+      }
+    }
+
+    const perfLogs = Array.isArray(dataRoot.performance_logs) ? dataRoot.performance_logs : [];
+    for (const pf of perfLogs) {
+      if (!pf || typeof pf !== 'object' || !pf.id || !pf.plan_id) {
+        return {
+          valid: false,
+          error: 'اطلاعات سوابق عملکرد در فایل پشتیبان مخدوش است.',
+        };
+      }
+    }
+
+    const budgetsList = Array.isArray(dataRoot.daily_time_budgets)
+      ? dataRoot.daily_time_budgets
+      : dataRoot.daily_time_budgets && typeof dataRoot.daily_time_budgets === 'object'
+      ? Object.values(dataRoot.daily_time_budgets)
+      : [];
+
+    const goalsList = Array.isArray(dataRoot.daily_study_goals) ? dataRoot.daily_study_goals : [];
+
+    const normalizedPayload = {
+      ...dataRoot,
+      app: 'MartiaPlanner',
+      version: String(raw.version || dataRoot.version || '1.0.0'),
+      exportedAt: String(raw.exportedAt || dataRoot.exportedAt || new Date().toISOString()),
+      schemaVersion: Number(raw.schemaVersion || 2),
+      subjects: dataRoot.subjects,
+      subject_units: Array.isArray(dataRoot.subject_units) ? dataRoot.subject_units : [],
+      daily_plans: dataRoot.daily_plans,
+      performance_logs: perfLogs,
+      activity_categories: Array.isArray(dataRoot.activity_categories)
+        ? dataRoot.activity_categories
+        : [],
+      study_activity_types: Array.isArray(dataRoot.study_activity_types)
+        ? dataRoot.study_activity_types
+        : [],
+      priority_levels: Array.isArray(dataRoot.priority_levels) ? dataRoot.priority_levels : [],
+      daily_study_goals: goalsList,
+      daily_time_budgets: budgetsList,
+      client_preferences:
+        raw.client_preferences && typeof raw.client_preferences === 'object'
+          ? raw.client_preferences
+          : {},
+    };
+
+    return {
+      valid: true,
+      normalizedPayload,
+      summary: {
+        version: normalizedPayload.version,
+        exportedAt: normalizedPayload.exportedAt,
+        subjectsCount: normalizedPayload.subjects.length,
+        unitsCount: normalizedPayload.subject_units.length,
+        plansCount: normalizedPayload.daily_plans.length,
+        performanceLogsCount: normalizedPayload.performance_logs.length,
+        categoriesCount: normalizedPayload.activity_categories.length,
+        studyTypesCount: normalizedPayload.study_activity_types.length,
+        prioritiesCount: normalizedPayload.priority_levels.length,
+        studyGoalsCount: normalizedPayload.daily_study_goals.length,
+        timeBudgetsCount: normalizedPayload.daily_time_budgets.length,
+        hasClientPreferences: Object.keys(normalizedPayload.client_preferences).length > 0,
+      },
+    };
   },
 
   async importBackup(payload: any): Promise<{ success: boolean }> {
+    const validation = this.validateBackupPayload(payload);
+    if (!validation.valid || !validation.normalizedPayload) {
+      throw new Error(validation.error || 'فایل پشتیبان معتبر نیست.');
+    }
+
+    const cleanPayload = validation.normalizedPayload;
     const res = await request(
       '/api/backup/import',
-      { method: 'POST', body: JSON.stringify(payload) },
-      () => localSQLiteFallback.importBackup(payload)
+      { method: 'POST', body: JSON.stringify(cleanPayload) },
+      () => localSQLiteFallback.importBackup(cleanPayload)
     );
+
+    // Sync local fallback storage as well so offline mode stays in sync
+    try {
+      localSQLiteFallback.importBackup(cleanPayload);
+    } catch {}
+
+    // Restore client-side preferences if present
+    try {
+      const prefs = cleanPayload.client_preferences;
+      if (prefs && typeof prefs === 'object') {
+        if (typeof prefs.smart_reminder_enabled === 'string') {
+          localStorage.setItem('martia_smart_reminder_enabled_v1', prefs.smart_reminder_enabled);
+        }
+        if (typeof prefs.motivational_quotes_bank === 'string') {
+          localStorage.setItem('martia_motivational_quotes_bank_v1', prefs.motivational_quotes_bank);
+        }
+        if (typeof prefs.fired_reminders === 'string') {
+          localStorage.setItem('martia_fired_reminders_v1', prefs.fired_reminders);
+        }
+        if (typeof prefs.theme === 'string') {
+          localStorage.setItem('martia_theme_v1', prefs.theme);
+        }
+      }
+    } catch {}
+
     invalidateApiCache('all');
     return res;
+  },
+
+  async getChangelogDocument(): Promise<string> {
+    try {
+      const res = await fetch('/CHANGELOG.md');
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.includes('#')) {
+          return text;
+        }
+      }
+    } catch {}
+    try {
+      const res2 = await fetch('/api/changelog');
+      if (res2.ok) {
+        const text2 = await res2.text();
+        if (text2 && text2.includes('#')) {
+          return text2;
+        }
+      }
+    } catch {}
+    return '';
   },
 
   getDailyGoal(date: string): Promise<DailyStudyGoalConfig> {
@@ -660,5 +865,55 @@ export const api = {
       }
     );
   },
+
+  async getSampleDataStatus(): Promise<{
+    hasSampleData: boolean;
+    samplePlansCount: number;
+    samplePerformancesCount: number;
+    sampleDaysCount: number;
+  }> {
+    return request('/api/sample-data/status', undefined, () =>
+      localSQLiteFallback.getSampleDataStatus()
+    );
+  },
+
+  async seedSampleData(): Promise<{
+    hasSampleData: boolean;
+    samplePlansCount: number;
+    samplePerformancesCount: number;
+    sampleDaysCount: number;
+    alreadyLoaded?: boolean;
+  }> {
+    const res = await request(
+      '/api/sample-data/seed',
+      { method: 'POST' },
+      () => localSQLiteFallback.seedSampleData()
+    );
+    try {
+      localSQLiteFallback.seedSampleData();
+    } catch {}
+    invalidateApiCache('all');
+    return res;
+  },
+
+  async deleteSampleData(): Promise<{
+    hasSampleData: boolean;
+    samplePlansCount: number;
+    samplePerformancesCount: number;
+    sampleDaysCount: number;
+    removedPlansCount?: number;
+  }> {
+    const res = await request(
+      '/api/sample-data',
+      { method: 'DELETE' },
+      () => localSQLiteFallback.deleteSampleData()
+    );
+    try {
+      localSQLiteFallback.deleteSampleData();
+    } catch {}
+    invalidateApiCache('all');
+    return res;
+  },
 };
+
 

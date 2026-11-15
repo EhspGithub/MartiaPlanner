@@ -354,6 +354,7 @@ export const WeeklyStudyChart: React.FC = () => {
                 <BarChart
                   data={aggregateData}
                   margin={{ top: 12, right: 16, left: 0, bottom: 10 }}
+                  barCategoryGap="28%"
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -367,16 +368,13 @@ export const WeeklyStudyChart: React.FC = () => {
                     angle={0}
                     textAnchor="middle"
                     height={36}
+                    tickFormatter={(val) => toPersianDigits(val)}
                     tick={{ fontSize: 11, fill: '#64748b', fontWeight: 700 }}
                     axisLine={{ stroke: '#cbd5e1', strokeOpacity: 0.4 }}
                     tickLine={false}
                   />
                   <YAxis
-                    tickFormatter={(val) =>
-                      unitMode === 'hours'
-                        ? `${toPersianDigits(val)}h`
-                        : `${toPersianDigits(val)}m`
-                    }
+                    tickFormatter={(val) => toPersianDigits(val)}
                     tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }}
                     axisLine={false}
                     tickLine={false}
@@ -388,7 +386,7 @@ export const WeeklyStudyChart: React.FC = () => {
                       String(item?.payload?.name || ''),
                     ]}
                   />
-                  <Bar dataKey="value" radius={[10, 10, 0, 0]} maxBarSize={64}>
+                  <Bar dataKey="value" radius={[10, 10, 0, 0]} maxBarSize={42}>
                     {aggregateData.map((entry, idx) => (
                       <Cell key={`wk-agg-${idx}`} fill={entry.color} />
                     ))}
@@ -398,6 +396,7 @@ export const WeeklyStudyChart: React.FC = () => {
                 <ComposedChart
                   data={chartData}
                   margin={{ top: 12, right: 16, left: 0, bottom: 16 }}
+                  barCategoryGap="24%"
                 >
                   <defs>
                     <linearGradient id="actualBarGrad" x1="0" y1="0" x2="0" y2="1">
@@ -423,16 +422,13 @@ export const WeeklyStudyChart: React.FC = () => {
                     height={68}
                     tickMargin={6}
                     interval={0}
+                    tickFormatter={(val) => toPersianDigits(val)}
                     tick={{ fontSize: 10, fill: '#64748b', fontWeight: 700 }}
                     axisLine={{ stroke: '#cbd5e1', strokeOpacity: 0.4 }}
                     tickLine={false}
                   />
                   <YAxis
-                    tickFormatter={(val) =>
-                      unitMode === 'hours'
-                        ? `${toPersianDigits(val)}h`
-                        : `${toPersianDigits(val)}m`
-                    }
+                    tickFormatter={(val) => toPersianDigits(val)}
                     tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }}
                     axisLine={false}
                     tickLine={false}
@@ -456,7 +452,7 @@ export const WeeklyStudyChart: React.FC = () => {
                     name="مطالعه واقعی"
                     fill="url(#actualBarGrad)"
                     radius={[10, 10, 0, 0]}
-                    maxBarSize={44}
+                    maxBarSize={36}
                   />
                 </ComposedChart>
               ) : (
@@ -487,16 +483,13 @@ export const WeeklyStudyChart: React.FC = () => {
                     height={68}
                     tickMargin={6}
                     interval={0}
+                    tickFormatter={(val) => toPersianDigits(val)}
                     tick={{ fontSize: 10, fill: '#64748b', fontWeight: 700 }}
                     axisLine={{ stroke: '#cbd5e1', strokeOpacity: 0.4 }}
                     tickLine={false}
                   />
                   <YAxis
-                    tickFormatter={(val) =>
-                      unitMode === 'hours'
-                        ? `${toPersianDigits(val)}h`
-                        : `${toPersianDigits(val)}m`
-                    }
+                    tickFormatter={(val) => toPersianDigits(val)}
                     tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }}
                     axisLine={false}
                     tickLine={false}

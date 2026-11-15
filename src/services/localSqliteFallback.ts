@@ -34,6 +34,11 @@ import {
   calculateWeightedLearningQualityL,
   getLearningQualityDescriptor,
 } from '../utils/analyticsEngine.ts';
+import {
+  generateThreeMonthSampleData,
+  SAMPLE_DEMO_PREFIX,
+  SAMPLE_DEMO_TAG,
+} from '../utils/sampleDataGenerator.ts';
 
 interface LocalSQLiteDatabaseDump {
   version: number;
@@ -551,7 +556,7 @@ export const localSQLiteFallback = {
       engineInfo: {
         mode: 'tauri-sqlite',
         databasePath: 'sqlite:martia_planner.db (Device Native)',
-        version: '1.11.0 (Standalone Windows / Android)',
+        version: '1.12.0 (Standalone Windows / Android)',
       },
     };
   },
@@ -1095,10 +1100,27 @@ export const localSQLiteFallback = {
 
   exportBackup() {
     const db = loadDB();
+    const dailyStudyGoals: any[] = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('martia_daily_goal_')) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.goal_date) {
+              dailyStudyGoals.push(parsed);
+            }
+          }
+        }
+      }
+    } catch {}
+
     return {
       exportedAt: new Date().toISOString(),
       app: 'MartiaPlanner',
-      version: '1.11.0',
+      version: '1.12.0',
+      schemaVersion: 2,
       activity_categories: db.categories,
       study_activity_types: db.studyTypes,
       priority_levels: db.priorities,
@@ -1106,60 +1128,96 @@ export const localSQLiteFallback = {
       subject_units: db.units,
       daily_plans: db.plans,
       performance_logs: db.performances,
-      daily_time_budgets: db.timeBudgets || {},
+      daily_study_goals: dailyStudyGoals,
+      daily_time_budgets: Object.values(db.timeBudgets || {}),
     };
   },
 
-  importBackup(payload: any) {
-    if (!payload || payload.app !== 'MartiaPlanner') {
-      throw new Error('فایل پشتیبان معتبر نیست.');
-    }
-    let normalizedBudgets: Record<string, DailyTimeBudgetConfig> = {};
-    if (Array.isArray(payload.daily_time_budgets)) {
-      for (const b of payload.daily_time_budgets) {
-        if (b && b.plan_date) {
-          normalizedBudgets[b.plan_date] = b;
-        }
-      }
-    } else if (payload.daily_time_budgets && typeof payload.daily_time_budgets === 'object') {
-      normalizedBudgets = payload.daily_time_budgets;
+  importBackup(rawPayload: any) {
+    if (!rawPayload || typeof rawPayload !== 'object' || rawPayload.app !== 'MartiaPlanner') {
+      throw new Error('فایل انتخاب‌شده متعلق به سامانه Martia Planner نیست.');
     }
 
-    const db: LocalSQLiteDatabaseDump = {
-      version: 2,
-      categories: payload.activity_categories || [],
-      studyTypes: payload.study_activity_types || [],
-      priorities: payload.priority_levels || [],
-      subjects: payload.subjects || [],
-      units: payload.subject_units || [],
-      plans: payload.daily_plans || [],
-      performances: payload.performance_logs || [],
-      timeBudgets: normalizedBudgets,
-    };
-    saveDB(db);
+    const payload =
+      rawPayload.data && typeof rawPayload.data === 'object' && Array.isArray(rawPayload.data.daily_plans)
+        ? rawPayload.data
+        : rawPayload;
 
-    if (Array.isArray(payload.daily_study_goals)) {
-      for (const g of payload.daily_study_goals) {
-        if (g && g.goal_date) {
-          let customGoals = g.custom_goals;
-          if (!Array.isArray(customGoals) && typeof g.custom_goals_json === 'string') {
-            try {
-              customGoals = JSON.parse(g.custom_goals_json);
-            } catch {
-              customGoals = [];
-            }
+    if (!Array.isArray(payload.daily_plans) || !Array.isArray(payload.subjects)) {
+      throw new Error('ساختار فایل پشتیبان ناقص یا خراب است.');
+    }
+
+    const previousSnapshot = JSON.parse(JSON.stringify(loadDB())) as LocalSQLiteDatabaseDump;
+
+    try {
+      let normalizedBudgets: Record<string, DailyTimeBudgetConfig> = {};
+      if (Array.isArray(payload.daily_time_budgets)) {
+        for (const b of payload.daily_time_budgets) {
+          if (b && b.plan_date) {
+            normalizedBudgets[b.plan_date] = b;
           }
-          this.saveDailyGoal({
-            goal_date: g.goal_date,
-            target_study_minutes: Number(g.target_study_minutes ?? 210),
-            target_exercises_count: Number(g.target_exercises_count ?? 50),
-            target_completed_tasks: Number(g.target_completed_tasks ?? 3),
-            custom_goals: Array.isArray(customGoals) ? customGoals : [],
-          });
+        }
+      } else if (payload.daily_time_budgets && typeof payload.daily_time_budgets === 'object') {
+        normalizedBudgets = payload.daily_time_budgets;
+      }
+
+      const db: LocalSQLiteDatabaseDump = {
+        version: 2,
+        categories:
+          Array.isArray(payload.activity_categories) && payload.activity_categories.length > 0
+            ? payload.activity_categories
+            : previousSnapshot.categories,
+        studyTypes:
+          Array.isArray(payload.study_activity_types) && payload.study_activity_types.length > 0
+            ? payload.study_activity_types
+            : previousSnapshot.studyTypes,
+        priorities:
+          Array.isArray(payload.priority_levels) && payload.priority_levels.length > 0
+            ? payload.priority_levels
+            : previousSnapshot.priorities,
+        subjects: payload.subjects || [],
+        units: payload.subject_units || [],
+        plans: payload.daily_plans || [],
+        performances: payload.performance_logs || [],
+        timeBudgets: normalizedBudgets,
+      };
+      saveDB(db);
+
+      if (Array.isArray(payload.daily_study_goals)) {
+        try {
+          const keysToRemove: string[] = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('martia_daily_goal_')) keysToRemove.push(k);
+          }
+          for (const k of keysToRemove) localStorage.removeItem(k);
+        } catch {}
+
+        for (const g of payload.daily_study_goals) {
+          if (g && g.goal_date) {
+            let customGoals = g.custom_goals;
+            if (!Array.isArray(customGoals) && typeof g.custom_goals_json === 'string') {
+              try {
+                customGoals = JSON.parse(g.custom_goals_json);
+              } catch {
+                customGoals = [];
+              }
+            }
+            this.saveDailyGoal({
+              goal_date: g.goal_date,
+              target_study_minutes: Number(g.target_study_minutes ?? 210),
+              target_exercises_count: Number(g.target_exercises_count ?? 50),
+              target_completed_tasks: Number(g.target_completed_tasks ?? 3),
+              custom_goals: Array.isArray(customGoals) ? customGoals : [],
+            });
+          }
         }
       }
+      return { success: true };
+    } catch (err: any) {
+      saveDB(previousSnapshot);
+      throw new Error(err?.message || 'خطا در بازیابی اطلاعات؛ وضعیت قبلی حفظ شد.');
     }
-    return { success: true };
   },
 
   getDailyGoal(date: string) {
@@ -1260,5 +1318,118 @@ export const localSQLiteFallback = {
     saveDB(db);
     return saved;
   },
+
+  getSampleDataStatus() {
+    const db = loadDB();
+    const samplePlans = db.plans.filter((p) => p.id.startsWith(SAMPLE_DEMO_PREFIX));
+    const samplePerfs = db.performances.filter((pf) => pf.id.startsWith(SAMPLE_DEMO_PREFIX));
+    const distinctDates = new Set(samplePlans.map((p) => p.plan_date));
+    return {
+      hasSampleData: samplePlans.length > 0,
+      samplePlansCount: samplePlans.length,
+      samplePerformancesCount: samplePerfs.length,
+      sampleDaysCount: distinctDates.size,
+    };
+  },
+
+  seedSampleData() {
+    const currentStatus = this.getSampleDataStatus();
+    if (currentStatus.hasSampleData) {
+      return {
+        ...currentStatus,
+        alreadyLoaded: true,
+      };
+    }
+
+    const db = loadDB();
+    const generated = generateThreeMonthSampleData(
+      {
+        subjects: db.subjects.filter((s) => s.is_archived === 0),
+        units: db.units.filter((u) => u.is_archived === 0),
+        categories: db.categories.filter((c) => c.is_active === 1),
+        studyTypes: db.studyTypes.filter((st) => st.is_active === 1),
+      },
+      getTodayISO()
+    );
+
+    const existingPlanIds = new Set(db.plans.map((p) => p.id));
+    for (const p of generated.plans) {
+      if (!existingPlanIds.has(p.id)) {
+        db.plans.push(p);
+      }
+    }
+
+    const existingPerfIds = new Set(db.performances.map((pf) => pf.id));
+    for (const pf of generated.performances) {
+      if (!existingPerfIds.has(pf.id)) {
+        db.performances.push(pf);
+      }
+    }
+
+    if (!db.timeBudgets) db.timeBudgets = {};
+    for (const tb of generated.timeBudgets) {
+      if (!db.timeBudgets[tb.plan_date]) {
+        db.timeBudgets[tb.plan_date] = tb;
+      }
+    }
+
+    try {
+      for (const sg of generated.studyGoals) {
+        const key = `martia_daily_goal_${sg.goal_date}`;
+        if (!localStorage.getItem(key)) {
+          localStorage.setItem(key, JSON.stringify(sg));
+        }
+      }
+    } catch {}
+
+    saveDB(db);
+    return {
+      ...this.getSampleDataStatus(),
+      alreadyLoaded: false,
+    };
+  },
+
+  deleteSampleData() {
+    const db = loadDB();
+    const beforeCount = db.plans.length;
+    db.plans = db.plans.filter((p) => !p.id.startsWith(SAMPLE_DEMO_PREFIX));
+    const removedPlansCount = beforeCount - db.plans.length;
+
+    db.performances = db.performances.filter(
+      (pf) =>
+        !pf.id.startsWith(SAMPLE_DEMO_PREFIX) && !pf.plan_id.startsWith(SAMPLE_DEMO_PREFIX)
+    );
+
+    if (db.timeBudgets) {
+      for (const [dateKey, cfg] of Object.entries(db.timeBudgets)) {
+        if (cfg && typeof cfg.updated_at === 'string' && cfg.updated_at.endsWith(SAMPLE_DEMO_TAG)) {
+          delete db.timeBudgets[dateKey];
+        }
+      }
+    }
+
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('martia_daily_goal_')) {
+          const raw = localStorage.getItem(k);
+          if (raw && raw.includes(SAMPLE_DEMO_TAG)) {
+            keysToRemove.push(k);
+          }
+        }
+      }
+      for (const k of keysToRemove) {
+        localStorage.removeItem(k);
+      }
+    } catch {}
+
+    saveDB(db);
+    return {
+      ...this.getSampleDataStatus(),
+      removedPlansCount,
+    };
+  },
 };
+
 

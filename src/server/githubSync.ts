@@ -19,6 +19,7 @@ const IGNORED_DIRS = new Set([
 
 const IGNORED_FILES = new Set([
   'package-lock.json',
+  'bun.lock',
   '.DS_Store',
   'martia_planner.sqlite',
   'martia_planner.sqlite-shm',

@@ -4,6 +4,7 @@
  */
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
+import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
@@ -20,6 +21,11 @@ import {
   calculateWeightedLearningQualityL,
   getLearningQualityDescriptor,
 } from './src/utils/analyticsEngine.ts';
+import {
+  generateThreeMonthSampleData,
+  SAMPLE_DEMO_PREFIX,
+  SAMPLE_DEMO_TAG,
+} from './src/utils/sampleDataGenerator.ts';
 
 dotenv.config();
 initDatabase();
@@ -1149,23 +1155,39 @@ app.put('/api/settings/priorities/:code', (req, res) => {
   }
 });
 
+// Changelog Document Endpoint (Serves repository CHANGELOG.md directly)
+app.get(['/CHANGELOG.md', '/api/changelog'], (_req, res) => {
+  try {
+    const changelogPath = path.join(process.cwd(), 'CHANGELOG.md');
+    if (fs.existsSync(changelogPath)) {
+      const content = fs.readFileSync(changelogPath, 'utf-8');
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      return res.send(content);
+    }
+    res.status(404).send('# تاریخچه تغییرات یافت نشد');
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Full Database Backup & Restore
 app.get('/api/backup/export', (_req, res) => {
   try {
     const data = {
       exportedAt: new Date().toISOString(),
       app: 'MartiaPlanner',
-      version: '1.11.0',
-      activity_categories: db.prepare('SELECT * FROM activity_categories').all(),
-      study_activity_types: db.prepare('SELECT * FROM study_activity_types').all(),
-      priority_levels: db.prepare('SELECT * FROM priority_levels').all(),
-      subjects: db.prepare('SELECT * FROM subjects').all(),
-      subject_units: db.prepare('SELECT * FROM subject_units').all(),
-      daily_plans: db.prepare('SELECT * FROM daily_plans').all(),
-      performance_logs: db.prepare('SELECT * FROM performance_logs').all(),
-      plan_history_audit: db.prepare('SELECT * FROM plan_history_audit').all(),
-      daily_study_goals: db.prepare('SELECT * FROM daily_study_goals').all(),
-      daily_time_budgets: db.prepare('SELECT * FROM daily_time_budgets').all(),
+      version: '1.12.0',
+      schemaVersion: 2,
+      activity_categories: db.prepare('SELECT * FROM activity_categories ORDER BY sort_order ASC').all(),
+      study_activity_types: db.prepare('SELECT * FROM study_activity_types ORDER BY sort_order ASC').all(),
+      priority_levels: db.prepare('SELECT * FROM priority_levels ORDER BY sort_rank ASC').all(),
+      subjects: db.prepare('SELECT * FROM subjects ORDER BY sort_order ASC').all(),
+      subject_units: db.prepare('SELECT * FROM subject_units ORDER BY subject_id ASC, sort_order ASC').all(),
+      daily_plans: db.prepare('SELECT * FROM daily_plans ORDER BY plan_date ASC, custom_sort_order ASC').all(),
+      performance_logs: db.prepare('SELECT * FROM performance_logs ORDER BY logged_at ASC').all(),
+      plan_history_audit: db.prepare('SELECT * FROM plan_history_audit ORDER BY changed_at ASC').all(),
+      daily_study_goals: db.prepare('SELECT * FROM daily_study_goals ORDER BY goal_date ASC').all(),
+      daily_time_budgets: db.prepare('SELECT * FROM daily_time_budgets ORDER BY plan_date ASC').all(),
     };
     res.json(data);
   } catch (err: any) {
@@ -1175,9 +1197,20 @@ app.get('/api/backup/export', (_req, res) => {
 
 app.post('/api/backup/import', (req, res) => {
   try {
-    const payload = req.body;
-    if (!payload || payload.app !== 'MartiaPlanner' || !Array.isArray(payload.daily_plans)) {
-      return res.status(400).json({ error: 'فایل پشتیبان معتبر نیست.' });
+    const rawPayload = req.body;
+    if (!rawPayload || typeof rawPayload !== 'object' || rawPayload.app !== 'MartiaPlanner') {
+      return res.status(400).json({ error: 'فایل انتخاب‌شده متعلق به سامانه Martia Planner نیست.' });
+    }
+
+    const payload =
+      rawPayload.data && typeof rawPayload.data === 'object' && Array.isArray(rawPayload.data.daily_plans)
+        ? rawPayload.data
+        : rawPayload;
+
+    if (!Array.isArray(payload.daily_plans) || !Array.isArray(payload.subjects)) {
+      return res.status(400).json({
+        error: 'ساختار فایل پشتیبان ناقص یا خراب است (جداول دروس یا برنامه‌های روزانه یافت نشد).',
+      });
     }
 
     const restoreTx = db.transaction(() => {
@@ -1186,6 +1219,8 @@ app.post('/api/backup/import', (req, res) => {
       db.prepare('DELETE FROM daily_plans').run();
       db.prepare('DELETE FROM subject_units').run();
       db.prepare('DELETE FROM subjects').run();
+      db.prepare('DELETE FROM daily_study_goals').run();
+      db.prepare('DELETE FROM daily_time_budgets').run();
 
       if (Array.isArray(payload.activity_categories) && payload.activity_categories.length > 0) {
         const upsertCat = db.prepare(`
@@ -1194,9 +1229,10 @@ app.post('/api/backup/import', (req, res) => {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         for (const c of payload.activity_categories) {
+          if (!c || !c.id || !c.title) continue;
           upsertCat.run(
-            c.id,
-            c.title,
+            String(c.id),
+            String(c.title),
             Number(c.is_study ? 1 : 0),
             c.activity_group || (c.is_study ? 'educational' : 'essential'),
             Number(c.impact_weight ?? 1.0),
@@ -1215,9 +1251,10 @@ app.post('/api/backup/import', (req, res) => {
           ) VALUES (?, ?, ?, ?, ?, ?)
         `);
         for (const st of payload.study_activity_types) {
+          if (!st || !st.id || !st.title) continue;
           upsertSt.run(
-            st.id,
-            st.title,
+            String(st.id),
+            String(st.title),
             st.description || '',
             st.badge_color || 'indigo',
             Number(st.sort_order ?? 1),
@@ -1228,11 +1265,19 @@ app.post('/api/backup/import', (req, res) => {
 
       if (Array.isArray(payload.priority_levels) && payload.priority_levels.length > 0) {
         const upsertPrio = db.prepare(`
-          INSERT OR REPLACE INTO priority_levels (code, title, label, sort_rank, color_code)
-          VALUES (?, ?, ?, ?, ?)
+          INSERT OR REPLACE INTO priority_levels (code, group_name, level_num, label, color_code, sort_rank)
+          VALUES (?, ?, ?, ?, ?, ?)
         `);
         for (const pr of payload.priority_levels) {
-          upsertPrio.run(pr.code, pr.title || pr.code, pr.label, Number(pr.sort_rank ?? 99), pr.color_code || 'indigo');
+          if (!pr || !pr.code) continue;
+          upsertPrio.run(
+            String(pr.code),
+            pr.group_name || String(pr.code).charAt(0) || 'A',
+            Number(pr.level_num ?? 1),
+            pr.label || pr.title || pr.code,
+            pr.color_code || 'indigo',
+            Number(pr.sort_rank ?? 99)
+          );
         }
       }
 
@@ -1241,9 +1286,10 @@ app.post('/api/backup/import', (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const s of payload.subjects || []) {
+        if (!s || !s.id || !s.name) continue;
         insertSubj.run(
-          s.id,
-          s.name,
+          String(s.id),
+          String(s.name),
           s.grade_level || 'هشتم',
           s.unit_type_label || 'درس',
           s.color_code || 'indigo',
@@ -1258,7 +1304,14 @@ app.post('/api/backup/import', (req, res) => {
         VALUES (?, ?, ?, ?, ?)
       `);
       for (const u of payload.subject_units || []) {
-        insertUnit.run(u.id, u.subject_id, u.title, Number(u.sort_order ?? 1), Number(u.is_archived ?? 0));
+        if (!u || !u.id || !u.subject_id || !u.title) continue;
+        insertUnit.run(
+          String(u.id),
+          String(u.subject_id),
+          String(u.title),
+          Number(u.sort_order ?? 1),
+          Number(u.is_archived ?? 0)
+        );
       }
 
       const insertPlan = db.prepare(`
@@ -1271,11 +1324,12 @@ app.post('/api/backup/import', (req, res) => {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const p of payload.daily_plans || []) {
+        if (!p || !p.id || !p.plan_date) continue;
         insertPlan.run(
-          p.id,
-          p.plan_date,
-          p.category_id,
-          p.category_title_snapshot,
+          String(p.id),
+          String(p.plan_date),
+          p.category_id || 'cat-study',
+          p.category_title_snapshot || 'درس',
           Number(p.is_study ? 1 : 0),
           p.activity_group_snapshot || (p.is_study ? 'educational' : 'essential'),
           p.subject_id ?? null,
@@ -1304,17 +1358,37 @@ app.post('/api/backup/import', (req, res) => {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const perf of payload.performance_logs || []) {
+        if (!perf || !perf.id || !perf.plan_id) continue;
         insertPerf.run(
-          perf.id,
-          perf.plan_id,
+          String(perf.id),
+          String(perf.plan_id),
           Number(perf.actual_minutes ?? 0),
           perf.exercises_count !== undefined && perf.exercises_count !== null ? Number(perf.exercises_count) : null,
           perf.learning_quality ?? null,
-          perf.completion_status || 'completed',
+          perf.completion_status === 'partial' ? 'partial' : 'completed',
           perf.notes || '',
           perf.logged_at || new Date().toISOString(),
           perf.updated_at || new Date().toISOString()
         );
+      }
+
+      if (Array.isArray(payload.plan_history_audit)) {
+        const insertAudit = db.prepare(`
+          INSERT OR REPLACE INTO plan_history_audit (
+            id, plan_id, previous_predicted_minutes, new_predicted_minutes, changed_at, reason
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        for (const a of payload.plan_history_audit) {
+          if (!a || !a.id || !a.plan_id) continue;
+          insertAudit.run(
+            String(a.id),
+            String(a.plan_id),
+            Number(a.previous_predicted_minutes ?? a.old_value ?? 0),
+            Number(a.new_predicted_minutes ?? a.new_value ?? 0),
+            a.changed_at || new Date().toISOString(),
+            String(a.reason ?? a.change_reason ?? '')
+          );
+        }
       }
 
       if (Array.isArray(payload.daily_study_goals)) {
@@ -1324,12 +1398,13 @@ app.post('/api/backup/import', (req, res) => {
           ) VALUES (?, ?, ?, ?, ?, ?)
         `);
         for (const g of payload.daily_study_goals) {
+          if (!g || !g.goal_date) continue;
           const customJson =
             typeof g.custom_goals_json === 'string'
               ? g.custom_goals_json
               : JSON.stringify(Array.isArray(g.custom_goals) ? g.custom_goals : []);
           upsertGoal.run(
-            g.goal_date,
+            String(g.goal_date),
             Number(g.target_study_minutes ?? 210),
             Number(g.target_exercises_count ?? 50),
             Number(g.target_completed_tasks ?? 3),
@@ -1339,16 +1414,23 @@ app.post('/api/backup/import', (req, res) => {
         }
       }
 
-      if (Array.isArray(payload.daily_time_budgets)) {
+      const budgetsList = Array.isArray(payload.daily_time_budgets)
+        ? payload.daily_time_budgets
+        : payload.daily_time_budgets && typeof payload.daily_time_budgets === 'object'
+        ? Object.values(payload.daily_time_budgets)
+        : [];
+
+      if (budgetsList.length > 0) {
         const upsertBudget = db.prepare(`
           INSERT OR REPLACE INTO daily_time_budgets (plan_date, budget_minutes, input_unit, updated_at)
           VALUES (?, ?, ?, ?)
         `);
-        for (const b of payload.daily_time_budgets) {
+        for (const b of budgetsList as any[]) {
+          if (!b || !b.plan_date) continue;
           upsertBudget.run(
-            b.plan_date,
+            String(b.plan_date),
             b.budget_minutes !== undefined && b.budget_minutes !== null ? Number(b.budget_minutes) : null,
-            b.input_unit || 'hours',
+            b.input_unit === 'minutes' ? 'minutes' : 'hours',
             b.updated_at || new Date().toISOString()
           );
         }
@@ -1358,7 +1440,198 @@ app.post('/api/backup/import', (req, res) => {
     restoreTx();
     res.json({ success: true });
   } catch (err: any) {
+    res.status(500).json({ error: err.message || 'خطا در بازیابی یکپارچه اطلاعات فایل پشتیبان' });
+  }
+});
+
+// ============================================================================
+// 6.5 SAMPLE DATA MANAGEMENT API (افزودن و حذف ایمن داده‌های نمونه ۳ ماهه)
+// ============================================================================
+function getServerSampleDataStatus() {
+  const planRow = db
+    .prepare(
+      'SELECT COUNT(*) as cnt, COUNT(DISTINCT plan_date) as daysCnt FROM daily_plans WHERE id LIKE ?'
+    )
+    .get(`${SAMPLE_DEMO_PREFIX}%`) as any;
+  const perfRow = db
+    .prepare('SELECT COUNT(*) as cnt FROM performance_logs WHERE id LIKE ?')
+    .get(`${SAMPLE_DEMO_PREFIX}%`) as any;
+  const samplePlansCount = Number(planRow?.cnt || 0);
+  const samplePerformancesCount = Number(perfRow?.cnt || 0);
+  const sampleDaysCount = Number(planRow?.daysCnt || 0);
+  return {
+    hasSampleData: samplePlansCount > 0,
+    samplePlansCount,
+    samplePerformancesCount,
+    sampleDaysCount,
+  };
+}
+
+app.get('/api/sample-data/status', (_req, res) => {
+  try {
+    res.json(getServerSampleDataStatus());
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/sample-data/seed', (_req, res) => {
+  try {
+    const currentStatus = getServerSampleDataStatus();
+    if (currentStatus.hasSampleData) {
+      return res.json({
+        ...currentStatus,
+        alreadyLoaded: true,
+      });
+    }
+
+    const subjects = db
+      .prepare('SELECT * FROM subjects WHERE is_archived = 0 ORDER BY sort_order ASC')
+      .all() as any[];
+    const units = db
+      .prepare('SELECT * FROM subject_units WHERE is_archived = 0 ORDER BY sort_order ASC')
+      .all() as any[];
+    const categories = db
+      .prepare('SELECT * FROM activity_categories WHERE is_active = 1 ORDER BY sort_order ASC')
+      .all() as any[];
+    const studyTypes = db
+      .prepare('SELECT * FROM study_activity_types WHERE is_active = 1 ORDER BY sort_order ASC')
+      .all() as any[];
+
+    const generated = generateThreeMonthSampleData(
+      {
+        subjects,
+        units,
+        categories,
+        studyTypes,
+      },
+      getTodayISO()
+    );
+
+    const seedTx = db.transaction(() => {
+      const insertPlan = db.prepare(`
+        INSERT OR IGNORE INTO daily_plans (
+          id, plan_date, category_id, category_title_snapshot, is_study, activity_group_snapshot,
+          subject_id, subject_name_snapshot, unit_id, unit_title_snapshot,
+          study_type_id, study_type_title_snapshot, priority_code,
+          initial_predicted_minutes, predicted_minutes, target_exercises, reminder_time, description, status,
+          custom_sort_order, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const p of generated.plans) {
+        insertPlan.run(
+          p.id,
+          p.plan_date,
+          p.category_id,
+          p.category_title_snapshot,
+          p.is_study,
+          p.activity_group_snapshot,
+          p.subject_id,
+          p.subject_name_snapshot,
+          p.unit_id,
+          p.unit_title_snapshot,
+          p.study_type_id,
+          p.study_type_title_snapshot,
+          p.priority_code,
+          p.initial_predicted_minutes,
+          p.predicted_minutes,
+          p.target_exercises,
+          p.reminder_time,
+          p.description,
+          p.status,
+          p.custom_sort_order,
+          p.created_at,
+          p.updated_at
+        );
+      }
+
+      const insertPerf = db.prepare(`
+        INSERT OR IGNORE INTO performance_logs (
+          id, plan_id, actual_minutes, exercises_count, learning_quality,
+          completion_status, notes, logged_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const pf of generated.performances) {
+        insertPerf.run(
+          pf.id,
+          pf.plan_id,
+          pf.actual_minutes,
+          pf.exercises_count,
+          pf.learning_quality,
+          pf.completion_status,
+          pf.notes,
+          pf.logged_at,
+          pf.updated_at
+        );
+      }
+
+      const insertBudget = db.prepare(`
+        INSERT OR IGNORE INTO daily_time_budgets (plan_date, budget_minutes, input_unit, updated_at)
+        VALUES (?, ?, ?, ?)
+      `);
+      for (const tb of generated.timeBudgets) {
+        insertBudget.run(tb.plan_date, tb.budget_minutes, tb.input_unit, tb.updated_at);
+      }
+
+      const insertGoal = db.prepare(`
+        INSERT OR IGNORE INTO daily_study_goals (
+          goal_date, target_study_minutes, target_exercises_count, target_completed_tasks, custom_goals_json, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      for (const sg of generated.studyGoals) {
+        insertGoal.run(
+          sg.goal_date,
+          sg.target_study_minutes,
+          sg.target_exercises_count,
+          sg.target_completed_tasks,
+          JSON.stringify(sg.custom_goals || []),
+          sg.updated_at
+        );
+      }
+    });
+
+    seedTx();
+
+    res.json({
+      ...getServerSampleDataStatus(),
+      alreadyLoaded: false,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'خطا در افزودن داده‌های نمونه' });
+  }
+});
+
+app.delete('/api/sample-data', (_req, res) => {
+  try {
+    const deleteTx = db.transaction(() => {
+      db.prepare('DELETE FROM performance_logs WHERE id LIKE ? OR plan_id LIKE ?').run(
+        `${SAMPLE_DEMO_PREFIX}%`,
+        `${SAMPLE_DEMO_PREFIX}%`
+      );
+      db.prepare('DELETE FROM plan_history_audit WHERE plan_id LIKE ?').run(
+        `${SAMPLE_DEMO_PREFIX}%`
+      );
+      const deletedPlans = db
+        .prepare('DELETE FROM daily_plans WHERE id LIKE ?')
+        .run(`${SAMPLE_DEMO_PREFIX}%`);
+      db.prepare('DELETE FROM daily_time_budgets WHERE updated_at LIKE ?').run(
+        `%${SAMPLE_DEMO_TAG}`
+      );
+      db.prepare('DELETE FROM daily_study_goals WHERE updated_at LIKE ?').run(
+        `%${SAMPLE_DEMO_TAG}`
+      );
+      return deletedPlans.changes;
+    });
+
+    const removedPlansCount = deleteTx();
+    res.json({
+      ...getServerSampleDataStatus(),
+      removedPlansCount,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'خطا در حذف داده‌های نمونه' });
   }
 });
 

@@ -126,7 +126,8 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
 
   // Top-level extensible report category
   const [reportCategory, setReportCategory] = useState<ReportCategoryTab>('subjects');
-  const [subjectSubMode, setSubjectSubMode] = useState<SubjectReportSubMode>('comparison');
+  // Default internal tab in «تحلیل دروس» is «گزارش هر درس» ('single')
+  const [subjectSubMode, setSubjectSubMode] = useState<SubjectReportSubMode>('single');
 
   // Timeframe Filter State
   const [filterMode, setFilterMode] = useState<AnalyticsFilterMode>('weekly');
@@ -147,9 +148,9 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
     () => activeSubjectsList[0]?.id || ''
   );
 
-  // Section 12: Minimum 2 and Maximum 3 subjects for simultaneous comparison
+  // Minimum 2 and Maximum 5 subjects for simultaneous comparison
   const [comparedSubjectIds, setComparedSubjectIds] = useState<string[]>(() =>
-    activeSubjectsList.slice(0, 3).map((s) => s.id)
+    activeSubjectsList.slice(0, 4).map((s) => s.id)
   );
   const [isCompareDropdownOpen, setIsCompareDropdownOpen] = useState<boolean>(false);
   const [compareSelectionNotice, setCompareSelectionNotice] = useState<string | null>(null);
@@ -172,7 +173,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
       setSelectedSingleSubjectId(activeSubjectsList[0].id);
     }
     if (comparedSubjectIds.length === 0 && activeSubjectsList.length > 0) {
-      setComparedSubjectIds(activeSubjectsList.slice(0, 3).map((s) => s.id));
+      setComparedSubjectIds(activeSubjectsList.slice(0, 4).map((s) => s.id));
     }
   }, [activeSubjectsList, selectedSingleSubjectId, comparedSubjectIds.length]);
 
@@ -501,27 +502,27 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
     return summaries;
   }, [plans, activeSubjectsList, dateIsoList]);
 
-  // Ensure initial comparedSubjectIds prefers up to 3 subjects with data when loaded
+  // Ensure initial comparedSubjectIds prefers up to 4 subjects with data when loaded
   const hasInitializedDefaultComparedRef = useRef<boolean>(false);
   useEffect(() => {
     if (!loading && !hasInitializedDefaultComparedRef.current && allSubjectsAnalytics.length > 0) {
       hasInitializedDefaultComparedRef.current = true;
       const withData = allSubjectsAnalytics.filter((s) => s.plansCount > 0);
       if (withData.length >= 2) {
-        setComparedSubjectIds(withData.slice(0, 3).map((s) => s.subjectId));
+        setComparedSubjectIds(withData.slice(0, 4).map((s) => s.subjectId));
       } else {
-        setComparedSubjectIds(allSubjectsAnalytics.slice(0, 3).map((s) => s.subjectId));
+        setComparedSubjectIds(allSubjectsAnalytics.slice(0, 4).map((s) => s.subjectId));
       }
     }
   }, [loading, allSubjectsAnalytics]);
 
-  // Filtered subjects for Comparison View (strictly matching user's 2..3 selection)
+  // Filtered subjects for Comparison View (strictly matching user's 2..5 selection)
   const comparedSubjectsAnalytics = useMemo(() => {
     return allSubjectsAnalytics.filter((s) => comparedSubjectIds.includes(s.subjectId));
   }, [allSubjectsAnalytics, comparedSubjectIds]);
 
   const isComparisonCountValid =
-    comparedSubjectsAnalytics.length >= 2 && comparedSubjectsAnalytics.length <= 3;
+    comparedSubjectsAnalytics.length >= 2 && comparedSubjectsAnalytics.length <= 5;
 
   // 5 Key Comparative Insights
   const comparativeHighlights = useMemo(() => {
@@ -589,22 +590,22 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
     });
   }, [dateIsoList, plans, budgets, categories]);
 
-  // Section 12: Toggle subject in Multi-Select Dropdown with max 3 limit
+  // Toggle subject in Multi-Select Dropdown with max 5 limit
   const toggleComparedSubject = (id: string) => {
     setCompareSelectionNotice(null);
     setComparedSubjectIds((prev) => {
       if (prev.includes(id)) {
         return prev.filter((item) => item !== id);
       }
-      if (prev.length >= 3) {
-        setCompareSelectionNotice('حداکثر سه درس به‌صورت هم‌زمان قابل مقایسه است.');
+      if (prev.length >= 5) {
+        setCompareSelectionNotice('حداکثر ۵ درس به‌صورت هم‌زمان قابل مقایسه است.');
         return prev;
       }
       return [...prev, id];
     });
   };
 
-  // Smart XAxis rotation helper
+  // Smart XAxis rotation & Persian digits helper
   const getSmartXAxisProps = (count: number) =>
     count > 3
       ? {
@@ -613,6 +614,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
           height: 60,
           tickMargin: 6,
           interval: 0,
+          tickFormatter: (val: any) => toPersianDigits(val),
           tick: { fontSize: 10, fontWeight: 700 },
         }
       : {
@@ -621,93 +623,65 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
           height: 36,
           tickMargin: 6,
           interval: 0,
+          tickFormatter: (val: any) => toPersianDigits(val),
           tick: { fontSize: 11, fontWeight: 700 },
         };
 
   return (
-    <div className="space-y-6 w-full max-w-full min-w-0 overflow-x-hidden">
+    <div className="space-y-5 w-full max-w-full min-w-0 overflow-x-hidden">
       {/* =====================================================================
-          SECTION 5: SIMPLIFIED HEADER BANNER & EXTENSIBLE REPORT CATEGORY TABS
+          1. MAIN HEADER BANNER & 2 PRIMARY CATEGORY TABS («تحلیل دروس» | «فعالیت‌های تفریحی»)
       ===================================================================== */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-indigo-700 via-violet-600 to-purple-700 text-white p-4 sm:p-6 shadow-lg shadow-indigo-500/15">
         <div className="pointer-events-none absolute -top-20 -left-20 h-60 w-60 rounded-full bg-white/10 blur-2xl" />
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3.5 min-w-0">
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <Sparkles className="w-5 h-5 text-amber-300 shrink-0" />
-            <h1 className="text-sm sm:text-xl lg:text-2xl font-black tracking-tight truncate">
-              مرکز جامع گزارش‌ها و تحلیل‌های تخصصی دروس
+            <h1 className="text-base sm:text-xl lg:text-2xl font-black tracking-tight whitespace-nowrap truncate">
+              بخش گزارش‌ها و تحلیل‌های دروس
             </h1>
           </div>
 
-          {/* Extensible Report Category Switcher (Mobile-safe 2-column grid) */}
+          {/* 2 Equal-Width Primary Tabs on Mobile */}
           <div className="grid grid-cols-2 sm:inline-flex items-center w-full sm:w-auto gap-1.5 p-1.5 rounded-2xl bg-slate-950/30 backdrop-blur-md border border-white/15 min-w-0">
             <button
               type="button"
               onClick={() => setReportCategory('subjects')}
-              className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer min-w-0 ${
+              className={`flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer min-w-0 whitespace-nowrap ${
                 reportCategory === 'subjects'
                   ? 'bg-white text-indigo-950 shadow-sm'
                   : 'text-indigo-100 hover:text-white'
               }`}
             >
               <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              <span className="truncate">گزارش و تحلیل عملکرد درس‌ها</span>
+              <span className="truncate">تحلیل دروس</span>
             </button>
             <button
               type="button"
               onClick={() => setReportCategory('recreation')}
-              className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer min-w-0 ${
+              className={`flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer min-w-0 whitespace-nowrap ${
                 reportCategory === 'recreation'
                   ? 'bg-white text-indigo-950 shadow-sm'
                   : 'text-indigo-100 hover:text-white'
               }`}
             >
               <Gamepad2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              <span className="truncate">گزارش فعالیت‌های تفریحی</span>
+              <span className="truncate">فعالیت‌های تفریحی</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* =====================================================================
-          SECTIONS 6, 7 & 13: UNIFIED TIMEFRAME FILTER BAR & SUB-MODE SWITCHER
-          (Mobile-safe 2-button grid without horizontal overflow)
+          2. UNIFIED TIMEFRAME SELECTOR AT THE TOP OF BOTH SECTIONS
+          (Placed FIRST before any internal sub-tabs, filters, or reports,
+           with redundant summary text below the selector removed)
       ===================================================================== */}
-      <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 sm:p-5 shadow-xs space-y-3.5 min-w-0">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-w-0">
-          {reportCategory === 'subjects' ? (
-            <div className="grid grid-cols-2 sm:inline-flex items-center w-full sm:w-auto gap-1 p-1 rounded-2xl bg-indigo-50/80 dark:bg-slate-800 border border-indigo-200/60 dark:border-slate-700 min-w-0">
-              <button
-                type="button"
-                onClick={() => setSubjectSubMode('comparison')}
-                className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer min-w-0 ${
-                  subjectSubMode === 'comparison'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-700 dark:text-slate-300 hover:text-indigo-600'
-                }`}
-              >
-                <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                <span className="truncate">مقایسه عملکرد درس‌ها</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSubjectSubMode('single')}
-                className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer min-w-0 ${
-                  subjectSubMode === 'single'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-700 dark:text-slate-300 hover:text-indigo-600'
-                }`}
-              >
-                <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                <span className="truncate">گزارش اختصاصی هر درس</span>
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-900 dark:text-white min-w-0">
-              <Gamepad2 className="w-5 h-5 text-amber-500 shrink-0" />
-              <span className="truncate">تحلیل زمان مصرفی سرگرمی‌ها، سقف مجاز و سهم از ظرف زمانی</span>
-            </div>
-          )}
+      <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 sm:p-4 shadow-xs space-y-3 min-w-0">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 min-w-0">
+          <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+            انتخاب بازه زمانی گزارش:
+          </span>
 
           {/* 4 Timeframe Mode Buttons */}
           <div className="grid grid-cols-4 sm:inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 min-w-0">
@@ -738,74 +712,99 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
           </div>
         </div>
 
-        {/* Sub-controls for Timeframe */}
-        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
-          {filterMode === 'daily' && (
-            <ShamsiDateField
-              label="انتخاب روز:"
-              selectedIso={singleDate}
-              onSelectIso={(iso) => setSingleDate(iso)}
-            />
-          )}
-
-          {filterMode === 'weekly' && (
-            <div className="grid grid-cols-3 sm:inline-flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto text-[11px] sm:text-xs">
-              <button
-                type="button"
-                onClick={() => setWeekRefDate(addDaysISO(weekRefDate, -7))}
-                className="px-2.5 sm:px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer whitespace-nowrap text-center"
-              >
-                هفته قبل
-              </button>
-              <button
-                type="button"
-                onClick={() => setWeekRefDate(todayIso)}
-                className={`px-2.5 sm:px-3.5 py-2 rounded-xl font-extrabold transition-colors cursor-pointer whitespace-nowrap text-center ${
-                  weekRefDate === todayIso
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100'
-                }`}
-              >
-                هفته جاری
-              </button>
-              <button
-                type="button"
-                onClick={() => setWeekRefDate(addDaysISO(weekRefDate, 7))}
-                className="px-2.5 sm:px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer whitespace-nowrap text-center"
-              >
-                هفته بعد
-              </button>
-            </div>
-          )}
-
-          {filterMode === 'monthly' && (
-            <div className="text-xs font-bold text-slate-600 dark:text-slate-300">
-              بازه تحلیلی ۳۰ روز اخیر: {activeDateRange.label}
-            </div>
-          )}
-
-          {filterMode === 'custom' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full sm:w-auto bg-slate-50/80 dark:bg-slate-800/50 p-2.5 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 text-xs">
+        {/* Sub-controls for Timeframe (only rendered when needed; no summary text) */}
+        {filterMode !== 'monthly' && (
+          <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-start gap-3 min-w-0">
+            {filterMode === 'daily' && (
               <ShamsiDateField
-                label="از تاریخ:"
-                selectedIso={customStart}
-                onSelectIso={(iso) => setCustomStart(iso)}
-                compact
+                label="انتخاب روز:"
+                selectedIso={singleDate}
+                onSelectIso={(iso) => setSingleDate(iso)}
               />
-              <ShamsiDateField
-                label="تا تاریخ:"
-                selectedIso={customEnd}
-                onSelectIso={(iso) => setCustomEnd(iso)}
-                compact
-              />
-            </div>
-          )}
+            )}
 
-          <div className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400 tabular-nums self-end sm:self-center">
-            {activeDateRange.label} ({toPersianDigits(dateIsoList.length)} روز)
+            {filterMode === 'weekly' && (
+              <div className="grid grid-cols-3 sm:inline-flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto text-[11px] sm:text-xs">
+                <button
+                  type="button"
+                  onClick={() => setWeekRefDate(addDaysISO(weekRefDate, -7))}
+                  className="px-2.5 sm:px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer whitespace-nowrap text-center"
+                >
+                  هفته قبل
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWeekRefDate(todayIso)}
+                  className={`px-2.5 sm:px-3.5 py-2 rounded-xl font-extrabold transition-colors cursor-pointer whitespace-nowrap text-center ${
+                    weekRefDate === todayIso
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100'
+                  }`}
+                >
+                  هفته جاری
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWeekRefDate(addDaysISO(weekRefDate, 7))}
+                  className="px-2.5 sm:px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer whitespace-nowrap text-center"
+                >
+                  هفته بعد
+                </button>
+              </div>
+            )}
+
+            {filterMode === 'custom' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full sm:w-auto bg-slate-50/80 dark:bg-slate-800/50 p-2.5 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 text-xs">
+                <ShamsiDateField
+                  label="از تاریخ:"
+                  selectedIso={customStart}
+                  onSelectIso={(iso) => setCustomStart(iso)}
+                  compact
+                />
+                <ShamsiDateField
+                  label="تا تاریخ:"
+                  selectedIso={customEnd}
+                  onSelectIso={(iso) => setCustomEnd(iso)}
+                  compact
+                />
+              </div>
+            )}
           </div>
-        </div>
+        )}
       </div>
+
+      {/* =====================================================================
+          3. INTERNAL SUB-TABS FOR «تحلیل دروس»:
+          1) «گزارش هر درس» (Default) | 2) «مقایسه درس‌ها»
+      ===================================================================== */}
+      {reportCategory === 'subjects' && (
+        <div className="grid grid-cols-2 sm:inline-flex items-center w-full sm:w-auto gap-1.5 p-1.5 rounded-2xl bg-indigo-50/90 dark:bg-slate-900 border border-indigo-200/80 dark:border-slate-800 min-w-0">
+          <button
+            type="button"
+            onClick={() => setSubjectSubMode('single')}
+            className={`flex items-center justify-center gap-1.5 px-3 sm:px-5 py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer min-w-0 whitespace-nowrap ${
+              subjectSubMode === 'single'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-700 dark:text-slate-300 hover:text-indigo-600'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="truncate">گزارش هر درس</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubjectSubMode('comparison')}
+            className={`flex items-center justify-center gap-1.5 px-3 sm:px-5 py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer min-w-0 whitespace-nowrap ${
+              subjectSubMode === 'comparison'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-700 dark:text-slate-300 hover:text-indigo-600'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="truncate">مقایسه درس‌ها</span>
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -819,25 +818,19 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
       ) : reportCategory === 'subjects' ? (
         subjectSubMode === 'comparison' ? (
           /* =================================================================
-             SECTION 12: MULTI-SUBJECT COMPARISON VIEW (مقایسه عملکرد درس‌ها)
-             WITH MULTI-SELECT CHECKBOX DROPDOWN & 2..3 SUBJECT LIMIT
+             MULTI-SUBJECT COMPARISON VIEW (مقایسه درس‌ها — ۲ تا ۵ درس)
           ================================================================= */
           <div className="space-y-6 min-w-0">
-            {/* Multi-Select Dropdown Bar (Min 2, Max 3 Subjects) */}
+            {/* Multi-Select Dropdown Bar (Min 2, Max 5 Subjects) */}
             <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 shadow-xs space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-900 dark:text-white">
-                    <Filter className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                    <span>انتخاب درس‌ها جهت مقایسه هم‌زمان (حداقل ۲ و حداکثر ۳ درس):</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    از منوی کشویی زیر، ۲ یا ۳ درس مورد نظر خود را تیک بزنید تا نمودارها و جداول مقایسه‌ای نمایش داده شوند.
-                  </p>
+                <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                  <Filter className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span>انتخاب درس‌ها جهت مقایسه هم‌زمان (حداقل ۲ و حداکثر ۵ درس):</span>
                 </div>
 
                 {/* Multi-select Dropdown with Checkboxes */}
-                <div className="relative w-full sm:w-80 shrink-0" ref={compareDropdownRef}>
+                <div className="relative w-full sm:w-88 shrink-0" ref={compareDropdownRef}>
                   <button
                     type="button"
                     onClick={() => setIsCompareDropdownOpen((prev) => !prev)}
@@ -849,7 +842,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                         ? `${comparedSubjectsAnalytics.map((s) => s.subjectName).join('، ')} (${toPersianDigits(
                             comparedSubjectsAnalytics.length
                           )} درس)`
-                        : 'انتخاب درس‌ها (حداقل ۲ و حداکثر ۳ درس)...'}
+                        : 'انتخاب درس‌ها (حداقل ۲ و حداکثر ۵ درس)...'}
                     </span>
                     <ChevronDown
                       className={`w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 transition-transform duration-200 ${
@@ -862,7 +855,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                     <div className="absolute left-0 right-0 mt-2 z-30 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-2.5 space-y-2 max-h-72 overflow-y-auto">
                       <div className="flex items-center justify-between px-2 py-1 border-b border-slate-100 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400">
                         <span>
-                          انتخاب‌شده: {toPersianDigits(comparedSubjectIds.length)} از حداکثر ۳ درس
+                          انتخاب‌شده: {toPersianDigits(comparedSubjectIds.length)} از حداکثر ۵ درس
                         </span>
                         <button
                           type="button"
@@ -870,13 +863,13 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                             setCompareSelectionNotice(null);
                             const withData = allSubjectsAnalytics.filter((s) => s.plansCount > 0);
                             const initial = (withData.length >= 2 ? withData : allSubjectsAnalytics)
-                              .slice(0, 3)
+                              .slice(0, 5)
                               .map((s) => s.subjectId);
                             setComparedSubjectIds(initial);
                           }}
                           className="text-indigo-600 dark:text-indigo-400 hover:underline font-extrabold cursor-pointer"
                         >
-                          انتخاب خودکار ۳ درس برتر
+                          انتخاب خودکار تا ۵ درس
                         </button>
                       </div>
 
@@ -890,7 +883,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                       <div className="space-y-1">
                         {allSubjectsAnalytics.map((subj) => {
                           const isChecked = comparedSubjectIds.includes(subj.subjectId);
-                          const isDisabled = !isChecked && comparedSubjectIds.length >= 3;
+                          const isDisabled = !isChecked && comparedSubjectIds.length >= 5;
                           return (
                             <button
                               key={subj.subjectId}
@@ -948,120 +941,144 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
               <div className="rounded-3xl border border-amber-200/90 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/25 p-6 text-center space-y-2">
                 <AlertTriangle className="w-7 h-7 text-amber-600 dark:text-amber-400 mx-auto" />
                 <div className="text-sm font-black text-slate-900 dark:text-white">
-                  لطفاً حداقل ۲ درس (و حداکثر ۳ درس) را برای نمایش مقایسه انتخاب کنید
+                  لطفاً حداقل ۲ درس (و حداکثر ۵ درس) را برای نمایش مقایسه انتخاب کنید
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300">
-                  برای حفظ خوانایی نمودارها و دقت مقایسه، لازم است از منوی کشویی بالا حداقل ۲ درس و حداکثر ۳ درس انتخاب شده باشد.
+                  برای حفظ خوانایی نمودارها و دقت مقایسه، لازم است از منوی کشویی بالا حداقل ۲ درس و حداکثر ۵ درس انتخاب شده باشد.
                 </p>
               </div>
             ) : (
               <>
-                {/* 5 Key Comparative Highlight Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                {/* 5 Key Comparative Highlight Cards (Strictly 2 Lines Each) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 items-stretch">
                   {/* 1. بیشترین زمان مطالعه */}
-                  <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/85 via-white to-indigo-50/40 dark:from-indigo-950/35 dark:via-slate-900 dark:to-indigo-950/20 p-3.5 shadow-2xs space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200">
-                        بیشترین زمان مطالعه
-                      </span>
-                      <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <div className="h-full rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/85 via-white to-indigo-50/40 dark:from-indigo-950/35 dark:via-slate-900 dark:to-indigo-950/20 px-3.5 py-3 shadow-2xs flex flex-col justify-between gap-1.5">
+                    <div className="flex items-center justify-between gap-1.5 min-w-0">
+                      <div className="text-xs font-black text-slate-900 dark:text-white truncate">
+                        <span>بیشترین مطالعه: </span>
+                        <span className="text-indigo-700 dark:text-indigo-300">
+                          {comparativeHighlights.topStudy
+                            ? comparativeHighlights.topStudy.subjectName
+                            : 'بدون داده'}
+                        </span>
+                      </div>
+                      <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                     </div>
-                    <div className="text-sm font-black text-indigo-950 dark:text-white truncate">
-                      {comparativeHighlights.topStudy
-                        ? comparativeHighlights.topStudy.subjectName
-                        : 'بدون داده'}
-                    </div>
-                    <div className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300 tabular-nums">
-                      {comparativeHighlights.topStudy
-                        ? formatDurationPrimePersian(comparativeHighlights.topStudy.actualMinutes)
-                        : '—'}
+                    <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 tabular-nums truncate">
+                      زمان ثبت‌شده:{' '}
+                      <strong className="text-indigo-700 dark:text-indigo-300">
+                        {comparativeHighlights.topStudy
+                          ? formatDurationPrimePersian(comparativeHighlights.topStudy.actualMinutes)
+                          : '—'}
+                      </strong>
                     </div>
                   </div>
 
                   {/* 2. بیشترین تست و تمرین */}
-                  <div className="rounded-2xl border border-blue-200/80 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/85 via-white to-blue-50/40 dark:from-blue-950/35 dark:via-slate-900 dark:to-blue-950/20 p-3.5 shadow-2xs space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200">
-                        بیشترین تست و تمرین
-                      </span>
-                      <FileCheck2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <div className="h-full rounded-2xl border border-blue-200/80 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/85 via-white to-blue-50/40 dark:from-blue-950/35 dark:via-slate-900 dark:to-blue-950/20 px-3.5 py-3 shadow-2xs flex flex-col justify-between gap-1.5">
+                    <div className="flex items-center justify-between gap-1.5 min-w-0">
+                      <div className="text-xs font-black text-slate-900 dark:text-white truncate">
+                        <span>بیشترین تست: </span>
+                        <span className="text-blue-700 dark:text-blue-300">
+                          {comparativeHighlights.topExercises
+                            ? comparativeHighlights.topExercises.subjectName
+                            : 'بدون داده'}
+                        </span>
+                      </div>
+                      <FileCheck2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
                     </div>
-                    <div className="text-sm font-black text-blue-950 dark:text-white truncate">
-                      {comparativeHighlights.topExercises
-                        ? comparativeHighlights.topExercises.subjectName
-                        : 'بدون داده'}
-                    </div>
-                    <div className="text-[11px] font-bold text-blue-700 dark:text-blue-300 tabular-nums">
-                      {comparativeHighlights.topExercises
-                        ? `${toPersianDigits(comparativeHighlights.topExercises.actualExercises)} تست/تمرین`
-                        : '—'}
+                    <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 tabular-nums truncate">
+                      تعداد حل‌شده:{' '}
+                      <strong className="text-blue-700 dark:text-blue-300">
+                        {comparativeHighlights.topExercises
+                          ? toPersianDigits(comparativeHighlights.topExercises.actualExercises)
+                          : '—'}
+                      </strong>
                     </div>
                   </div>
 
                   {/* 3. بهترین کیفیت یادگیری */}
-                  <div className="rounded-2xl border border-purple-200/80 dark:border-purple-900/50 bg-gradient-to-br from-purple-50/85 via-white to-purple-50/40 dark:from-purple-950/35 dark:via-slate-900 dark:to-purple-950/20 p-3.5 shadow-2xs space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200">
-                        بهترین کیفیت یادگیری
-                      </span>
-                      <Award className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <div className="h-full rounded-2xl border border-purple-200/80 dark:border-purple-900/50 bg-gradient-to-br from-purple-50/85 via-white to-purple-50/40 dark:from-purple-950/35 dark:via-slate-900 dark:to-purple-950/20 px-3.5 py-3 shadow-2xs flex flex-col justify-between gap-1.5">
+                    <div className="flex items-center justify-between gap-1.5 min-w-0">
+                      <div className="text-xs font-black text-slate-900 dark:text-white truncate">
+                        <span>بهترین کیفیت: </span>
+                        <span className="text-purple-700 dark:text-purple-300">
+                          {comparativeHighlights.topQuality
+                            ? comparativeHighlights.topQuality.subjectName
+                            : 'بدون داده'}
+                        </span>
+                      </div>
+                      <Award className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
                     </div>
-                    <div className="text-sm font-black text-purple-950 dark:text-white truncate">
-                      {comparativeHighlights.topQuality
-                        ? comparativeHighlights.topQuality.subjectName
-                        : 'بدون داده'}
-                    </div>
-                    <div className="text-[11px] font-bold text-purple-700 dark:text-purple-300 tabular-nums">
-                      {comparativeHighlights.topQuality &&
-                      comparativeHighlights.topQuality.weightedQuality0To10 !== null
-                        ? `${toPersianDigits(comparativeHighlights.topQuality.weightedQuality0To10)} از ۱۰`
-                        : '—'}
-                    </div>
-                  </div>
-
-                  {/* 4. بیشترین فاصله با پیش‌بینی */}
-                  <div className="rounded-2xl border border-amber-200/80 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/85 via-white to-amber-50/40 dark:from-amber-950/35 dark:via-slate-900 dark:to-amber-950/20 p-3.5 shadow-2xs space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200">
-                        بیشترین فاصله با هدف
-                      </span>
-                      <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    </div>
-                    <div className="text-sm font-black text-amber-950 dark:text-white truncate">
-                      {comparativeHighlights.maxGap
-                        ? comparativeHighlights.maxGap.subjectName
-                        : 'منطبق با برنامه'}
-                    </div>
-                    <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300 tabular-nums">
-                      {comparativeHighlights.maxGap
-                        ? `${toPersianDigits(comparativeHighlights.maxGap.shortfallMinutes)} دقیقه کمتر از پیش‌بینی`
-                        : 'بدون کسری زمان'}
+                    <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 tabular-nums truncate">
+                      میانگین وزنی:{' '}
+                      <strong className="text-purple-700 dark:text-purple-300">
+                        {comparativeHighlights.topQuality &&
+                        comparativeHighlights.topQuality.weightedQuality0To10 !== null
+                          ? `${toPersianDigits(
+                              String(comparativeHighlights.topQuality.weightedQuality0To10).replace(
+                                '.',
+                                '/'
+                              )
+                            )} از ۱۰`
+                          : '—'}
+                      </strong>
                     </div>
                   </div>
 
-                  {/* 5. بهترین امتیاز نهایی عملکرد */}
-                  <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/85 via-white to-emerald-50/40 dark:from-emerald-950/35 dark:via-slate-900 dark:to-emerald-950/20 p-3.5 shadow-2xs space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200">
-                        بهترین امتیاز عملکرد
-                      </span>
-                      <Trophy className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  {/* 4. بیشترین فاصله با هدف */}
+                  <div className="h-full rounded-2xl border border-amber-200/80 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/85 via-white to-amber-50/40 dark:from-amber-950/35 dark:via-slate-900 dark:to-amber-950/20 px-3.5 py-3 shadow-2xs flex flex-col justify-between gap-1.5">
+                    <div className="flex items-center justify-between gap-1.5 min-w-0">
+                      <div className="text-xs font-black text-slate-900 dark:text-white truncate">
+                        <span>بیشترین فاصله: </span>
+                        <span className="text-amber-700 dark:text-amber-300">
+                          {comparativeHighlights.maxGap
+                            ? comparativeHighlights.maxGap.subjectName
+                            : 'منطبق با برنامه'}
+                        </span>
+                      </div>
+                      <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                     </div>
-                    <div className="text-sm font-black text-emerald-950 dark:text-white truncate">
-                      {comparativeHighlights.topScore
-                        ? comparativeHighlights.topScore.subjectName
-                        : 'بدون داده'}
+                    <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 tabular-nums truncate">
+                      {comparativeHighlights.maxGap ? (
+                        <>
+                          کسری نسبت به پیش‌بینی:{' '}
+                          <strong className="text-amber-700 dark:text-amber-300">
+                            {formatDurationPrimePersian(comparativeHighlights.maxGap.shortfallMinutes)}
+                          </strong>
+                        </>
+                      ) : (
+                        'بدون کسری زمان'
+                      )}
                     </div>
-                    <div className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
-                      {comparativeHighlights.topScore &&
-                      comparativeHighlights.topScore.performanceScore0To100 !== null
-                        ? `${toPersianDigits(comparativeHighlights.topScore.performanceScore0To100)} از ۱۰۰`
-                        : '—'}
+                  </div>
+
+                  {/* 5. بهترین امتیاز عملکرد */}
+                  <div className="h-full rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/85 via-white to-emerald-50/40 dark:from-emerald-950/35 dark:via-slate-900 dark:to-emerald-950/20 px-3.5 py-3 shadow-2xs flex flex-col justify-between gap-1.5">
+                    <div className="flex items-center justify-between gap-1.5 min-w-0">
+                      <div className="text-xs font-black text-slate-900 dark:text-white truncate">
+                        <span>بهترین امتیاز: </span>
+                        <span className="text-emerald-700 dark:text-emerald-300">
+                          {comparativeHighlights.topScore
+                            ? comparativeHighlights.topScore.subjectName
+                            : 'بدون داده'}
+                        </span>
+                      </div>
+                      <Trophy className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    </div>
+                    <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 tabular-nums truncate">
+                      امتیاز کل:{' '}
+                      <strong className="text-emerald-700 dark:text-emerald-300">
+                        {comparativeHighlights.topScore &&
+                        comparativeHighlights.topScore.performanceScore0To100 !== null
+                          ? `${toPersianDigits(comparativeHighlights.topScore.performanceScore0To100)} از ۱۰۰`
+                          : '—'}
+                      </strong>
                     </div>
                   </div>
                 </div>
 
-                {/* Comparative Charts Grid */}
+                {/* Comparative Charts Grid (Readable for 2..5 subjects with capped column width) */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
                   {/* Chart A */}
                   <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-6 shadow-xs space-y-4 min-w-0">
@@ -1074,31 +1091,38 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                         <BarChart
                           data={comparedSubjectsAnalytics}
                           margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                          barGap={4}
+                          barCategoryGap="24%"
                         >
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                           <XAxis
                             dataKey="subjectName"
                             {...getSmartXAxisProps(comparedSubjectsAnalytics.length)}
                           />
-                          <YAxis tick={{ fontSize: 11 }} />
+                          <YAxis
+                            tickFormatter={(val) => toPersianDigits(val)}
+                            tick={{ fontSize: 11 }}
+                          />
                           <Tooltip
                             formatter={(val: any, name?: any) => [
-                              `${toPersianDigits(Number(val))} دقیقه`,
+                              formatDurationPrimePersian(Number(val)),
                               String(name ?? ''),
                             ]}
                           />
                           <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
                           <Bar
                             dataKey="predictedMinutes"
-                            name="زمان پیش‌بینی (دقیقه)"
+                            name="زمان پیش‌بینی"
                             fill="#94a3b8"
                             radius={[6, 6, 0, 0]}
+                            maxBarSize={32}
                           />
                           <Bar
                             dataKey="actualMinutes"
-                            name="زمان مطالعه واقعی (دقیقه)"
+                            name="زمان مطالعه واقعی"
                             fill="#4f46e5"
                             radius={[6, 6, 0, 0]}
+                            maxBarSize={32}
                           />
                         </BarChart>
                       </ResponsiveContainer>
@@ -1116,13 +1140,18 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                         <ComposedChart
                           data={comparedSubjectsAnalytics}
                           margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                          barCategoryGap="26%"
                         >
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                           <XAxis
                             dataKey="subjectName"
                             {...getSmartXAxisProps(comparedSubjectsAnalytics.length)}
                           />
-                          <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                          <YAxis
+                            domain={[0, 100]}
+                            tickFormatter={(val) => toPersianDigits(val)}
+                            tick={{ fontSize: 11 }}
+                          />
                           <Tooltip
                             formatter={(val: any, name?: any) => [
                               toPersianDigits(Number(val)),
@@ -1135,6 +1164,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                             name="امتیاز عملکرد درس (از ۱۰۰)"
                             fill="#10b981"
                             radius={[6, 6, 0, 0]}
+                            maxBarSize={36}
                           />
                           <Line
                             type="monotone"
@@ -1251,7 +1281,9 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                             </td>
                             <td className="py-3.5 px-4 font-bold text-purple-700 dark:text-purple-300 whitespace-nowrap">
                               {subj.weightedQuality0To10 !== null
-                                ? `${toPersianDigits(subj.weightedQuality0To10)} از ۱۰`
+                                ? `${toPersianDigits(
+                                    String(subj.weightedQuality0To10).replace('.', '/')
+                                  )} از ۱۰`
                                 : '—'}
                             </td>
                             <td className="py-3.5 px-4 font-black text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
@@ -1282,8 +1314,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
           </div>
         ) : (
           /* =================================================================
-             SECTIONS 7, 8, 9, 10 & 11: SINGLE-SUBJECT DEDICATED REPORT
-             (گزارش اختصاصی هر درس)
+             SINGLE-SUBJECT DEDICATED REPORT («گزارش هر درس»)
           ================================================================= */
           <div className="space-y-6 min-w-0">
             {/* Subject Selector Bar */}
@@ -1308,9 +1339,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
 
             {singleSubjectSummary && (
               <>
-                {/* ===========================================================
-                    SECTION 8: 6 UNIFORM 2-LINE STATISTICAL CARDS
-                =========================================================== */}
+                {/* 6 UNIFORM 2-LINE STATISTICAL CARDS */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                   {/* Card 1: مجموع ساعات مطالعه */}
                   <div className="h-full rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/85 via-white to-indigo-50/40 dark:from-indigo-950/35 dark:via-slate-900 dark:to-indigo-950/20 px-3.5 py-3 shadow-2xs flex flex-col justify-between gap-1.5">
@@ -1333,7 +1362,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Card 2: تست‌ها و تمرین‌های حل‌شده (بدون کلمه «مجموع» و بدون تکرار «تست و تمرین» جلوی عدد) */}
+                  {/* Card 2: تست‌ها و تمرین‌های حل‌شده */}
                   <div className="h-full rounded-2xl border border-blue-200/80 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/85 via-white to-blue-50/40 dark:from-blue-950/35 dark:via-slate-900 dark:to-blue-950/20 px-3.5 py-3 shadow-2xs flex flex-col justify-between gap-1.5">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white tabular-nums truncate">
@@ -1425,7 +1454,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Card 6: میزان تکمیل جلسات درس (بدون «جلسه کامل») */}
+                  {/* Card 6: میزان تکمیل جلسات درس */}
                   <div className="h-full rounded-2xl border border-amber-200/80 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/85 via-white to-amber-50/40 dark:from-amber-950/35 dark:via-slate-900 dark:to-amber-950/20 px-3.5 py-3 shadow-2xs flex flex-col justify-between gap-1.5">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white tabular-nums truncate">
@@ -1446,9 +1475,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                   </div>
                 </div>
 
-                {/* ===========================================================
-                    SECTION 9: SINGLE-SUBJECT TREND CHARTS (CLEAN TITLES, NO SUBTITLES)
-                =========================================================== */}
+                {/* SINGLE-SUBJECT TREND CHARTS */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
                   {/* Chart 1: زمان مطالعه درس */}
                   <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-6 shadow-xs space-y-4 min-w-0">
@@ -1500,6 +1527,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                               },
                             ]}
                             margin={{ top: 10, right: 10, left: -10, bottom: 10 }}
+                            barCategoryGap="28%"
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                             <XAxis
@@ -1507,18 +1535,20 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                               angle={0}
                               textAnchor="middle"
                               height={36}
+                              tickFormatter={(val) => toPersianDigits(val)}
                               tick={{ fontSize: 11, fontWeight: 700 }}
                             />
-                            <YAxis tick={{ fontSize: 11 }} />
+                            <YAxis
+                              tickFormatter={(val) => toPersianDigits(val)}
+                              tick={{ fontSize: 11 }}
+                            />
                             <Tooltip
                               formatter={(val: any) => [
-                                `${formatDurationPrimePersian(Number(val))} (${toPersianDigits(
-                                  Number(val)
-                                )} دقیقه)`,
+                                formatDurationPrimePersian(Number(val)),
                                 'مجموع در بازه',
                               ]}
                             />
-                            <Bar dataKey="minutes" radius={[8, 8, 0, 0]} maxBarSize={60}>
+                            <Bar dataKey="minutes" radius={[8, 8, 0, 0]} maxBarSize={42}>
                               <Cell fill="#4f46e5" />
                               <Cell fill="#94a3b8" />
                             </Bar>
@@ -1527,31 +1557,38 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                           <BarChart
                             data={singleSubjectSummary.dailyTrend}
                             margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                            barGap={4}
+                            barCategoryGap="24%"
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                             <XAxis
                               dataKey="label"
                               {...getSmartXAxisProps(singleSubjectSummary.dailyTrend.length)}
                             />
-                            <YAxis tick={{ fontSize: 11 }} />
+                            <YAxis
+                              tickFormatter={(val) => toPersianDigits(val)}
+                              tick={{ fontSize: 11 }}
+                            />
                             <Tooltip
                               formatter={(val: any, name?: any) => [
-                                `${toPersianDigits(Number(val))} دقیقه`,
+                                formatDurationPrimePersian(Number(val)),
                                 String(name ?? ''),
                               ]}
                             />
                             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
                             <Bar
                               dataKey="predictedMinutes"
-                              name="پیش‌بینی (دقیقه)"
+                              name="پیش‌بینی"
                               fill="#94a3b8"
                               radius={[6, 6, 0, 0]}
+                              maxBarSize={32}
                             />
                             <Bar
                               dataKey="actualMinutes"
-                              name="مطالعه واقعی (دقیقه)"
+                              name="مطالعه واقعی"
                               fill="#4f46e5"
                               radius={[6, 6, 0, 0]}
+                              maxBarSize={32}
                             />
                           </BarChart>
                         )}
@@ -1614,6 +1651,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                               },
                             ]}
                             margin={{ top: 10, right: 10, left: -10, bottom: 10 }}
+                            barCategoryGap="28%"
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                             <XAxis
@@ -1621,16 +1659,21 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                               angle={0}
                               textAnchor="middle"
                               height={36}
+                              tickFormatter={(val) => toPersianDigits(val)}
                               tick={{ fontSize: 10, fontWeight: 700 }}
                             />
-                            <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                            <YAxis
+                              domain={[0, 100]}
+                              tickFormatter={(val) => toPersianDigits(val)}
+                              tick={{ fontSize: 11 }}
+                            />
                             <Tooltip
                               formatter={(val: any) => [
                                 `${toPersianDigits(Math.round(Number(val)))} از ۱۰۰`,
                                 'شاخص تجمیعی درس',
                               ]}
                             />
-                            <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={56}>
+                            <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={42}>
                               <Cell fill="#10b981" />
                               <Cell fill="#4f46e5" />
                               <Cell fill="#9333ea" />
@@ -1640,13 +1683,18 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                           <ComposedChart
                             data={singleSubjectSummary.dailyTrend}
                             margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                            barCategoryGap="24%"
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                             <XAxis
                               dataKey="label"
                               {...getSmartXAxisProps(singleSubjectSummary.dailyTrend.length)}
                             />
-                            <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                            <YAxis
+                              domain={[0, 100]}
+                              tickFormatter={(val) => toPersianDigits(val)}
+                              tick={{ fontSize: 11 }}
+                            />
                             <Tooltip
                               formatter={(val: any, name?: any) => [
                                 toPersianDigits(Number(val)),
@@ -1659,6 +1707,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                               name="امتیاز عملکرد روزانه (از ۱۰۰)"
                               fill="#10b981"
                               radius={[6, 6, 0, 0]}
+                              maxBarSize={36}
                             />
                             <Line
                               type="monotone"
@@ -1675,10 +1724,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                   </div>
                 </div>
 
-                {/* ===========================================================
-                    SECTION 10: RESPONSIVE CHAPTER / UNIT BREAKDOWN
-                    (Mobile Compact 2-Line Cards + Desktop Table)
-                =========================================================== */}
+                {/* RESPONSIVE CHAPTER / UNIT BREAKDOWN */}
                 <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
                   <div className="px-4 sm:px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2.5">
                     <Layers className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
@@ -1693,11 +1739,10 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                     </div>
                   ) : (
                     <>
-                      {/* Mobile Compact 2-Line Cards (No Horizontal Scroll) */}
+                      {/* Mobile Compact 2-Line Cards */}
                       <div className="md:hidden divide-y divide-slate-200 dark:divide-slate-800">
                         {singleSubjectSummary.unitBreakdown.map((u) => (
                           <div key={u.unitTitle} className="p-3.5 space-y-1.5 text-xs tabular-nums">
-                            {/* Line 1: Unit Title + Completion Badge */}
                             <div className="flex items-center justify-between gap-2">
                               <span className="font-black text-slate-900 dark:text-white truncate">
                                 {u.unitTitle}
@@ -1707,7 +1752,6 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                               </span>
                             </div>
 
-                            {/* Line 2: Study Time (Actual / Predicted) + Exercises + Quality */}
                             <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-300">
                               <span>
                                 مطالعه:{' '}
@@ -1779,9 +1823,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                   )}
                 </div>
 
-                {/* ===========================================================
-                    SECTION 11: 3 CHAPTER / UNIT COMPARATIVE BAR CHARTS
-                =========================================================== */}
+                {/* 3 CHAPTER / UNIT COMPARATIVE BAR CHARTS */}
                 {singleSubjectSummary.unitBreakdown.length > 0 && (
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 min-w-0">
                     {/* Chapter Chart 1: مقایسه تعداد تست و تمرین فصل‌ها */}
@@ -1794,13 +1836,17 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                           <BarChart
                             data={singleSubjectSummary.unitBreakdown}
                             margin={{ top: 10, right: 10, left: -18, bottom: 10 }}
+                            barCategoryGap="28%"
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                             <XAxis
                               dataKey="unitTitle"
                               {...getSmartXAxisProps(singleSubjectSummary.unitBreakdown.length)}
                             />
-                            <YAxis tick={{ fontSize: 10 }} />
+                            <YAxis
+                              tickFormatter={(val) => toPersianDigits(val)}
+                              tick={{ fontSize: 10 }}
+                            />
                             <Tooltip
                               formatter={(val: any) => [
                                 `${toPersianDigits(Number(val))} تست و تمرین`,
@@ -1812,7 +1858,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                               name="تست و تمرین"
                               fill="#2563eb"
                               radius={[6, 6, 0, 0]}
-                              maxBarSize={48}
+                              maxBarSize={36}
                             />
                           </BarChart>
                         </ResponsiveContainer>
@@ -1829,18 +1875,21 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                           <BarChart
                             data={singleSubjectSummary.unitBreakdown}
                             margin={{ top: 10, right: 10, left: -18, bottom: 10 }}
+                            barGap={4}
+                            barCategoryGap="26%"
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                             <XAxis
                               dataKey="unitTitle"
                               {...getSmartXAxisProps(singleSubjectSummary.unitBreakdown.length)}
                             />
-                            <YAxis tick={{ fontSize: 10 }} />
+                            <YAxis
+                              tickFormatter={(val) => toPersianDigits(val)}
+                              tick={{ fontSize: 10 }}
+                            />
                             <Tooltip
                               formatter={(val: any, name?: any) => [
-                                `${formatDurationPrimePersian(Number(val))} (${toPersianDigits(
-                                  Number(val)
-                                )} دقیقه)`,
+                                formatDurationPrimePersian(Number(val)),
                                 String(name ?? ''),
                               ]}
                             />
@@ -1850,14 +1899,14 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                               name="پیش‌بینی"
                               fill="#94a3b8"
                               radius={[6, 6, 0, 0]}
-                              maxBarSize={40}
+                              maxBarSize={30}
                             />
                             <Bar
                               dataKey="actualMinutes"
                               name="مطالعه واقعی"
                               fill="#4f46e5"
                               radius={[6, 6, 0, 0]}
-                              maxBarSize={40}
+                              maxBarSize={30}
                             />
                           </BarChart>
                         </ResponsiveContainer>
@@ -1882,6 +1931,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                                 (u) => u.hasQualityData
                               )}
                               margin={{ top: 10, right: 10, left: -18, bottom: 10 }}
+                              barCategoryGap="28%"
                             >
                               <CartesianGrid
                                 strokeDasharray="3 3"
@@ -1895,7 +1945,11 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                                     .length
                                 )}
                               />
-                              <YAxis domain={[0, 10]} tick={{ fontSize: 10 }} />
+                              <YAxis
+                                domain={[0, 10]}
+                                tickFormatter={(val) => toPersianDigits(val)}
+                                tick={{ fontSize: 10 }}
+                              />
                               <Tooltip
                                 formatter={(val: any) => [
                                   `${toPersianDigits(
@@ -1909,7 +1963,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                                 name="کیفیت یادگیری (از ۱۰)"
                                 fill="#9333ea"
                                 radius={[6, 6, 0, 0]}
-                                maxBarSize={48}
+                                maxBarSize={36}
                               />
                             </BarChart>
                           </ResponsiveContainer>
@@ -1924,69 +1978,77 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
         )
       ) : (
         /* ===================================================================
-           RECREATIONAL & ENTERTAINMENT ACTIVITIES REPORT TAB
+           RECREATIONAL & ENTERTAINMENT ACTIVITIES REPORT TAB («فعالیت‌های تفریحی»)
+           All 4 Statistical Cards Redesigned to Strictly 2 Lines Maximum
         =================================================================== */
         <div className="space-y-6 min-w-0">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="rounded-2xl border border-amber-200/80 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/85 via-white to-amber-50/40 dark:from-amber-950/35 dark:via-slate-900 dark:to-amber-950/20 p-3.5 shadow-2xs space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                  مجموع زمان سرگرمی در بازه
-                </span>
-                <Gamepad2 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
+            {/* Card 1: مجموع زمان سرگرمی در بازه */}
+            <div className="h-full rounded-2xl border border-amber-200/80 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/85 via-white to-amber-50/40 dark:from-amber-950/35 dark:via-slate-900 dark:to-amber-950/20 px-3.5 py-3 shadow-2xs flex flex-col justify-between gap-1.5">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white tabular-nums truncate">
+                  <span>مجموع زمان سرگرمی در بازه: </span>
+                  <span className="text-amber-700 dark:text-amber-300">
+                    {formatDurationPrimePersian(periodOverview.totalRestrictedActualMinutes)}
+                  </span>
+                </div>
+                <Gamepad2 className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               </div>
-              <div className="text-lg font-black text-amber-800 dark:text-amber-300 tabular-nums">
-                {formatHoursAndMinutesPersian(periodOverview.totalRestrictedActualMinutes)}
-              </div>
-              <div className="text-[11px] text-slate-600 dark:text-slate-400 tabular-nums">
-                میانگین روزانه: {formatMinutesPersian(periodOverview.avgDailyRestrictedActualMinutes)}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-sky-200/80 dark:border-sky-900/50 bg-gradient-to-br from-sky-50/85 via-white to-sky-50/40 dark:from-sky-950/35 dark:via-slate-900 dark:to-sky-950/20 p-3.5 shadow-2xs space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                  مجموع سقف مجاز پیش‌بینی‌شده
-                </span>
-                <Clock className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-              </div>
-              <div className="text-lg font-black text-sky-800 dark:text-sky-300 tabular-nums">
-                {formatHoursAndMinutesPersian(periodOverview.totalRestrictedAllowedMinutes)}
-              </div>
-              <div className="text-[11px] text-slate-600 dark:text-slate-400 tabular-nums">
-                بر اساس برنامه‌ریزی اولیه فعالیت‌های تفریحی
+              <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 tabular-nums truncate">
+                میانگین روزانه:{' '}
+                <strong className="text-amber-700 dark:text-amber-300">
+                  {formatDurationPrimePersian(periodOverview.avgDailyRestrictedActualMinutes)}
+                </strong>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-rose-200/80 dark:border-rose-900/50 bg-gradient-to-br from-rose-50/85 via-white to-rose-50/40 dark:from-rose-950/35 dark:via-slate-900 dark:to-rose-950/20 p-3.5 shadow-2xs space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                  مجموع تخطی از سقف مجاز
-                </span>
-                <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+            {/* Card 2: مجموع سقف مجاز پیش‌بینی‌شده */}
+            <div className="h-full rounded-2xl border border-sky-200/80 dark:border-sky-900/50 bg-gradient-to-br from-sky-50/85 via-white to-sky-50/40 dark:from-sky-950/35 dark:via-slate-900 dark:to-sky-950/20 px-3.5 py-3 shadow-2xs flex flex-col justify-between gap-1.5">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white tabular-nums truncate">
+                  <span>مجموع سقف مجاز پیش‌بینی‌شده: </span>
+                  <span className="text-sky-700 dark:text-sky-300">
+                    {formatDurationPrimePersian(periodOverview.totalRestrictedAllowedMinutes)}
+                  </span>
+                </div>
+                <Clock className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
               </div>
-              <div className="text-lg font-black text-rose-800 dark:text-rose-300 tabular-nums">
-                {formatMinutesPersian(periodOverview.totalRestrictedOveruseMinutes)}
+              <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 truncate">
+                بر اساس برنامه‌ریزی فعالیت‌های تفریحی
               </div>
-              <div className="text-[11px] text-slate-600 dark:text-slate-400">
+            </div>
+
+            {/* Card 3: مجموع تخطی از سقف مجاز */}
+            <div className="h-full rounded-2xl border border-rose-200/80 dark:border-rose-900/50 bg-gradient-to-br from-rose-50/85 via-white to-rose-50/40 dark:from-rose-950/35 dark:via-slate-900 dark:to-rose-950/20 px-3.5 py-3 shadow-2xs flex flex-col justify-between gap-1.5">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white tabular-nums truncate">
+                  <span>مجموع تخطی از سقف مجاز: </span>
+                  <span className="text-rose-700 dark:text-rose-300">
+                    {formatDurationPrimePersian(periodOverview.totalRestrictedOveruseMinutes)}
+                  </span>
+                </div>
+                <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+              </div>
+              <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 truncate">
                 زمان مصرفی فراتر از سقف تعیین‌شده
               </div>
             </div>
 
-            <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/85 via-white to-emerald-50/40 dark:from-emerald-950/35 dark:via-slate-900 dark:to-emerald-950/20 p-3.5 shadow-2xs space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                  شاخص کنترل سرگرمی‌ها (C)
-                </span>
-                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            {/* Card 4: شاخص کنترل سرگرمی‌ها (C) */}
+            <div className="h-full rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/85 via-white to-emerald-50/40 dark:from-emerald-950/35 dark:via-slate-900 dark:to-emerald-950/20 px-3.5 py-3 shadow-2xs flex flex-col justify-between gap-1.5">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white tabular-nums truncate">
+                  <span>شاخص کنترل سرگرمی‌ها (C): </span>
+                  <span className="text-emerald-700 dark:text-emerald-300">
+                    {periodOverview.averageRestrictedControlIndexC !== null
+                      ? `${toPersianDigits(periodOverview.averageRestrictedControlIndexC)}٪`
+                      : 'ثبت‌نشده'}
+                  </span>
+                </div>
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
               </div>
-              <div className="text-lg font-black text-emerald-800 dark:text-emerald-300 tabular-nums">
-                {periodOverview.averageRestrictedControlIndexC !== null
-                  ? `${toPersianDigits(periodOverview.averageRestrictedControlIndexC)}٪`
-                  : 'ثبت‌نشده'}
-              </div>
-              <div className="text-[11px] text-slate-600 dark:text-slate-400">
-                میانگین پایبندی به سقف مجاز تفریحات دیجیتال
+              <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 truncate">
+                میانگین پایبندی به سقف مجاز تفریحات
               </div>
             </div>
           </div>
@@ -2005,37 +2067,45 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
                     overuse: d.restrictedOveruseMinutes,
                   }))}
                   margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                  barGap={3}
+                  barCategoryGap="24%"
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                   <XAxis
                     dataKey="label"
                     {...getSmartXAxisProps(periodOverview.dailyEvaluations.length)}
                   />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <YAxis
+                    tickFormatter={(val) => toPersianDigits(val)}
+                    tick={{ fontSize: 11 }}
+                  />
                   <Tooltip
                     formatter={(val: any, name?: any) => [
-                      `${toPersianDigits(Number(val))} دقیقه`,
+                      formatDurationPrimePersian(Number(val)),
                       String(name ?? ''),
                     ]}
                   />
                   <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
                   <Bar
                     dataKey="allowed"
-                    name="سقف مجاز (دقیقه)"
+                    name="سقف مجاز"
                     fill="#38bdf8"
                     radius={[6, 6, 0, 0]}
+                    maxBarSize={30}
                   />
                   <Bar
                     dataKey="actual"
-                    name="مصرف واقعی (دقیقه)"
+                    name="مصرف واقعی"
                     fill="#f59e0b"
                     radius={[6, 6, 0, 0]}
+                    maxBarSize={30}
                   />
                   <Bar
                     dataKey="overuse"
-                    name="تخطی از سقف (دقیقه)"
+                    name="تخطی از سقف"
                     fill="#f43f5e"
                     radius={[6, 6, 0, 0]}
+                    maxBarSize={30}
                   />
                 </BarChart>
               </ResponsiveContainer>

@@ -1229,6 +1229,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     <BarChart
                       data={aggregateStudyChartData}
                       margin={{ top: 12, right: 15, left: -10, bottom: 10 }}
+                      barCategoryGap="28%"
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                       {/* 2 columns -> horizontal labels */}
@@ -1237,22 +1238,24 @@ export const PerformanceAnalyticsView: React.FC = () => {
                         angle={0}
                         textAnchor="middle"
                         height={36}
+                        tickFormatter={(val) => toPersianDigits(val)}
                         tick={{ fontSize: 11, fontWeight: 700 }}
                       />
-                      <YAxis tick={{ fontSize: 11 }} />
+                      <YAxis
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        tick={{ fontSize: 11 }}
+                      />
                       <Tooltip
                         formatter={(val: any) => [
-                          `${formatHoursAndMinutesPersian(Number(val))} (${toPersianDigits(
-                            Number(val)
-                          )} دقیقه)`,
+                          formatDurationPrimePersian(Number(val)),
                           'مجموع زمان در بازه',
                         ]}
                       />
                       <Bar
                         dataKey="minutes"
-                        name="مجموع زمان (دقیقه)"
+                        name="مجموع زمان"
                         radius={[8, 8, 0, 0]}
-                        maxBarSize={64}
+                        maxBarSize={42}
                       >
                         {aggregateStudyChartData.map((entry, index) => (
                           <Cell key={`agg-study-${index}`} fill={entry.color} />
@@ -1263,28 +1266,39 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     <BarChart
                       data={chartData}
                       margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                      barGap={4}
+                      barCategoryGap="24%"
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                      <XAxis dataKey="label" {...dailyXAxisProps} />
-                      <YAxis tick={{ fontSize: 11 }} />
+                      <XAxis
+                        dataKey="label"
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        {...dailyXAxisProps}
+                      />
+                      <YAxis
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        tick={{ fontSize: 11 }}
+                      />
                       <Tooltip
                         formatter={(val: any, name?: any) => [
-                          `${toPersianDigits(Number(val))} دقیقه`,
+                          formatDurationPrimePersian(Number(val)),
                           String(name ?? ''),
                         ]}
                       />
                       <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
                       <Bar
                         dataKey="plannedStudyMins"
-                        name="زمان پیش‌بینی (دقیقه)"
+                        name="زمان پیش‌بینی"
                         fill="#94a3b8"
                         radius={[6, 6, 0, 0]}
+                        maxBarSize={34}
                       />
                       <Bar
                         dataKey="actualStudyMins"
-                        name="زمان واقعی مطالعه (دقیقه)"
+                        name="زمان واقعی مطالعه"
                         fill="#4f46e5"
                         radius={[6, 6, 0, 0]}
+                        maxBarSize={34}
                       />
                     </BarChart>
                   )}
@@ -1314,6 +1328,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     <BarChart
                       data={aggregateExercisesChartData}
                       margin={{ top: 12, right: 15, left: -10, bottom: 10 }}
+                      barCategoryGap="28%"
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                       <XAxis
@@ -1321,9 +1336,13 @@ export const PerformanceAnalyticsView: React.FC = () => {
                         angle={0}
                         textAnchor="middle"
                         height={36}
+                        tickFormatter={(val) => toPersianDigits(val)}
                         tick={{ fontSize: 11, fontWeight: 700 }}
                       />
-                      <YAxis tick={{ fontSize: 11 }} />
+                      <YAxis
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        tick={{ fontSize: 11 }}
+                      />
                       <Tooltip
                         formatter={(val: any) => [
                           `${toPersianDigits(Number(val))} تست و تمرین`,
@@ -1334,7 +1353,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
                         dataKey="count"
                         name="تعداد تست/تمرین"
                         radius={[8, 8, 0, 0]}
-                        maxBarSize={64}
+                        maxBarSize={42}
                       >
                         {aggregateExercisesChartData.map((entry, idx) => (
                           <Cell key={`agg-ex-${idx}`} fill={entry.color} />
@@ -1345,10 +1364,19 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     <BarChart
                       data={chartData}
                       margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                      barGap={4}
+                      barCategoryGap="24%"
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                      <XAxis dataKey="label" {...dailyXAxisProps} />
-                      <YAxis tick={{ fontSize: 11 }} />
+                      <XAxis
+                        dataKey="label"
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        {...dailyXAxisProps}
+                      />
+                      <YAxis
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        tick={{ fontSize: 11 }}
+                      />
                       <Tooltip
                         formatter={(val: any, name?: any) => [
                           `${toPersianDigits(Number(val))} تست/تمرین`,
@@ -1361,12 +1389,14 @@ export const PerformanceAnalyticsView: React.FC = () => {
                         name="تست هدف"
                         fill="#cbd5e1"
                         radius={[6, 6, 0, 0]}
+                        maxBarSize={34}
                       />
                       <Bar
                         dataKey="actualExercises"
                         name="تست حل‌شده واقعی"
                         fill="#2563eb"
                         radius={[6, 6, 0, 0]}
+                        maxBarSize={34}
                       />
                     </BarChart>
                   )}
@@ -1398,6 +1428,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     <BarChart
                       data={aggregateQualityChartData}
                       margin={{ top: 12, right: 15, left: -15, bottom: 10 }}
+                      barCategoryGap="28%"
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                       <XAxis
@@ -1405,16 +1436,26 @@ export const PerformanceAnalyticsView: React.FC = () => {
                         angle={0}
                         textAnchor="middle"
                         height={36}
+                        tickFormatter={(val) => toPersianDigits(val)}
                         tick={{ fontSize: 10, fontWeight: 700 }}
                       />
-                      <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} />
+                      <YAxis
+                        domain={[0, 10]}
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        tick={{ fontSize: 11 }}
+                      />
                       <Tooltip
                         formatter={(val: any) => [
                           `${toPersianDigits(Number(val))} از ۱۰`,
                           'کیفیت یادگیری',
                         ]}
                       />
-                      <Bar dataKey="score" name="کیفیت (از ۱۰)" radius={[8, 8, 0, 0]} maxBarSize={56}>
+                      <Bar
+                        dataKey="score"
+                        name="کیفیت (از ۱۰)"
+                        radius={[8, 8, 0, 0]}
+                        maxBarSize={42}
+                      >
                         {aggregateQualityChartData.map((entry, idx) => (
                           <Cell key={`agg-q-${idx}`} fill={entry.color} />
                         ))}
@@ -1426,8 +1467,16 @@ export const PerformanceAnalyticsView: React.FC = () => {
                       margin={{ top: 10, right: 15, left: -15, bottom: 15 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                      <XAxis dataKey="label" {...dailyXAxisProps} />
-                      <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} />
+                      <XAxis
+                        dataKey="label"
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        {...dailyXAxisProps}
+                      />
+                      <YAxis
+                        domain={[0, 10]}
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        tick={{ fontSize: 11 }}
+                      />
                       <Tooltip
                         formatter={(val: any) => [
                           `${toPersianDigits(Number(val))} از ۱۰`,
@@ -1470,6 +1519,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     <BarChart
                       data={aggregateScoreChartData}
                       margin={{ top: 12, right: 15, left: -15, bottom: 10 }}
+                      barCategoryGap="28%"
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                       <XAxis
@@ -1477,9 +1527,14 @@ export const PerformanceAnalyticsView: React.FC = () => {
                         angle={0}
                         textAnchor="middle"
                         height={36}
+                        tickFormatter={(val) => toPersianDigits(val)}
                         tick={{ fontSize: 10, fontWeight: 700 }}
                       />
-                      <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                      <YAxis
+                        domain={[0, 100]}
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        tick={{ fontSize: 11 }}
+                      />
                       <Tooltip
                         formatter={(val: any) => [
                           `${toPersianDigits(Number(val))} از ۱۰۰`,
@@ -1490,7 +1545,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
                         dataKey="score"
                         name="میانگین امتیاز (از ۱۰۰)"
                         radius={[8, 8, 0, 0]}
-                        maxBarSize={56}
+                        maxBarSize={42}
                       >
                         {aggregateScoreChartData.map((entry, idx) => (
                           <Cell key={`agg-score-${idx}`} fill={entry.color} />
@@ -1501,10 +1556,19 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     <ComposedChart
                       data={chartData}
                       margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                      barCategoryGap="24%"
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                      <XAxis dataKey="label" {...dailyXAxisProps} />
-                      <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                      <XAxis
+                        dataKey="label"
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        {...dailyXAxisProps}
+                      />
+                      <YAxis
+                        domain={[0, 100]}
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        tick={{ fontSize: 11 }}
+                      />
                       <Tooltip
                         formatter={(val: any, name?: any) => [
                           `${toPersianDigits(Number(val))} از ۱۰۰`,
@@ -1517,6 +1581,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
                         name="امتیاز نهایی روز (S)"
                         fill="#10b981"
                         radius={[6, 6, 0, 0]}
+                        maxBarSize={36}
                       />
                       <Line
                         type="monotone"
@@ -1553,6 +1618,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     <BarChart
                       data={aggregateRestrictedChartData}
                       margin={{ top: 12, right: 15, left: -15, bottom: 10 }}
+                      barCategoryGap="28%"
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                       <XAxis
@@ -1560,22 +1626,24 @@ export const PerformanceAnalyticsView: React.FC = () => {
                         angle={0}
                         textAnchor="middle"
                         height={36}
+                        tickFormatter={(val) => toPersianDigits(val)}
                         tick={{ fontSize: 10, fontWeight: 700 }}
                       />
-                      <YAxis tick={{ fontSize: 11 }} />
+                      <YAxis
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        tick={{ fontSize: 11 }}
+                      />
                       <Tooltip
                         formatter={(val: any) => [
-                          `${formatHoursAndMinutesPersian(Number(val))} (${toPersianDigits(
-                            Number(val)
-                          )} دقیقه)`,
+                          formatDurationPrimePersian(Number(val)),
                           'مجموع بازه',
                         ]}
                       />
                       <Bar
                         dataKey="minutes"
-                        name="مجموع زمان (دقیقه)"
+                        name="مجموع زمان"
                         radius={[8, 8, 0, 0]}
-                        maxBarSize={56}
+                        maxBarSize={42}
                       >
                         {aggregateRestrictedChartData.map((entry, idx) => (
                           <Cell key={`agg-rest-${idx}`} fill={entry.color} />
@@ -1586,13 +1654,22 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     <BarChart
                       data={chartData}
                       margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                      barGap={3}
+                      barCategoryGap="24%"
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                      <XAxis dataKey="label" {...dailyXAxisProps} />
-                      <YAxis tick={{ fontSize: 11 }} />
+                      <XAxis
+                        dataKey="label"
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        {...dailyXAxisProps}
+                      />
+                      <YAxis
+                        tickFormatter={(val) => toPersianDigits(val)}
+                        tick={{ fontSize: 11 }}
+                      />
                       <Tooltip
                         formatter={(val: any, name?: any) => [
-                          `${toPersianDigits(Number(val))} دقیقه`,
+                          formatDurationPrimePersian(Number(val)),
                           String(name ?? ''),
                         ]}
                       />
@@ -1602,18 +1679,21 @@ export const PerformanceAnalyticsView: React.FC = () => {
                         name="سقف مجاز (پیش‌بینی)"
                         fill="#38bdf8"
                         radius={[6, 6, 0, 0]}
+                        maxBarSize={30}
                       />
                       <Bar
                         dataKey="actualRestrictedMins"
                         name="مصرف واقعی سرگرمی"
                         fill="#f59e0b"
                         radius={[6, 6, 0, 0]}
+                        maxBarSize={30}
                       />
                       <Bar
                         dataKey="overuseRestrictedMins"
                         name="تخطی بیش از حد مجاز"
                         fill="#f43f5e"
                         radius={[6, 6, 0, 0]}
+                        maxBarSize={30}
                       />
                     </BarChart>
                   )}
@@ -1658,7 +1738,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
                             </Pie>
                             <Tooltip
                               formatter={(val: any, name?: any) => [
-                                formatHoursAndMinutesPersian(Number(val)),
+                                formatDurationPrimePersian(Number(val)),
                                 String(name ?? ''),
                               ]}
                             />
@@ -1676,7 +1756,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
                               {item.name}
                             </span>
                             <span className="font-bold text-slate-900 dark:text-white">
-                              {formatHoursAndMinutesPersian(item.value)}
+                              {formatDurationPrimePersian(item.value)}
                             </span>
                           </div>
                         ))}
@@ -1696,6 +1776,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
                       <BarChart
                         data={budgetCategoriesData}
                         margin={{ top: 10, right: 10, left: -15, bottom: 10 }}
+                        barCategoryGap="26%"
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                         {/* 4 columns -> horizontal labels */}
@@ -1704,22 +1785,24 @@ export const PerformanceAnalyticsView: React.FC = () => {
                           angle={0}
                           textAnchor="middle"
                           height={36}
+                          tickFormatter={(val) => toPersianDigits(val)}
                           tick={{ fontSize: 10, fontWeight: 700 }}
                         />
-                        <YAxis tick={{ fontSize: 11 }} />
+                        <YAxis
+                          tickFormatter={(val) => toPersianDigits(val)}
+                          tick={{ fontSize: 11 }}
+                        />
                         <Tooltip
                           formatter={(val: any) => [
-                            `${formatHoursAndMinutesPersian(Number(val))} (${toPersianDigits(
-                              Number(val)
-                            )} دقیقه)`,
+                            formatDurationPrimePersian(Number(val)),
                             'مجموع زمان در بازه',
                           ]}
                         />
                         <Bar
                           dataKey="value"
-                          name="مجموع زمان (دقیقه)"
+                          name="مجموع زمان"
                           radius={[8, 8, 0, 0]}
-                          maxBarSize={48}
+                          maxBarSize={38}
                         >
                           {budgetCategoriesData.map((entry, idx) => (
                             <Cell key={`agg-b-${idx}`} fill={entry.color} />
@@ -1730,13 +1813,21 @@ export const PerformanceAnalyticsView: React.FC = () => {
                       <BarChart
                         data={chartData}
                         margin={{ top: 10, right: 10, left: -15, bottom: 15 }}
+                        barCategoryGap="24%"
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                        <XAxis dataKey="label" {...dailyXAxisProps} />
-                        <YAxis tick={{ fontSize: 11 }} />
+                        <XAxis
+                          dataKey="label"
+                          tickFormatter={(val) => toPersianDigits(val)}
+                          {...dailyXAxisProps}
+                        />
+                        <YAxis
+                          tickFormatter={(val) => toPersianDigits(val)}
+                          tick={{ fontSize: 11 }}
+                        />
                         <Tooltip
                           formatter={(val: any, name?: any) => [
-                            `${toPersianDigits(Number(val))} دقیقه`,
+                            formatDurationPrimePersian(Number(val)),
                             String(name ?? ''),
                           ]}
                         />
@@ -1745,24 +1836,28 @@ export const PerformanceAnalyticsView: React.FC = () => {
                           stackId="budget"
                           name="آموزشی و مطالعه"
                           fill="#4f46e5"
+                          maxBarSize={36}
                         />
                         <Bar
                           dataKey="actualRestrictedMins"
                           stackId="budget"
                           name="تفریحی محدودشونده"
                           fill="#f59e0b"
+                          maxBarSize={36}
                         />
                         <Bar
                           dataKey="essentialActualMins"
                           stackId="budget"
                           name="ضروری و استراحت"
                           fill="#10b981"
+                          maxBarSize={36}
                         />
                         <Bar
                           dataKey="unallocatedBudgetMins"
                           stackId="budget"
                           name="باقی‌مانده ظرفیت"
                           fill="#cbd5e1"
+                          maxBarSize={36}
                         />
                       </BarChart>
                     )}
