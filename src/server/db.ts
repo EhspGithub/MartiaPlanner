@@ -174,7 +174,7 @@ export function initDatabase() {
 
   seedInitialDataIfEmpty();
 
-  // Ensure activity_group is accurately set on existing categories & plans
+  // Ensure activity_group, category titles, and study_activity_types are accurately migrated on existing databases
   try {
     db.prepare(
       "UPDATE activity_categories SET activity_group = 'educational' WHERE is_study = 1"
@@ -183,7 +183,37 @@ export function initDatabase() {
       "UPDATE activity_categories SET activity_group = 'restricted' WHERE is_study = 0 AND (id IN ('cat-phone', 'cat-tv', 'cat-game') OR title LIKE '%گوشی%' OR title LIKE '%تلویزیون%' OR title LIKE '%بازی%' OR title LIKE '%شبکه%' OR title LIKE '%سرگرمی%')"
     ).run();
     db.prepare(
-      "INSERT OR IGNORE INTO activity_categories (id, title, is_study, activity_group, impact_weight, icon, color, sort_order, is_active) VALUES ('cat-food', 'غذا خوردن و تغذیه', 0, 'essential', 1.0, 'Coffee', 'emerald', 3, 1)"
+      "INSERT OR IGNORE INTO activity_categories (id, title, is_study, activity_group, impact_weight, icon, color, sort_order, is_active) VALUES ('cat-food', 'تغذیه', 0, 'essential', 1.0, 'Coffee', 'emerald', 3, 1)"
+    ).run();
+
+    // Migrate default category titles safely without altering IDs or historical plans (Section 5)
+    db.prepare(
+      "UPDATE activity_categories SET title = 'تغذیه' WHERE id = 'cat-food' OR title = 'غذا خوردن و تغذیه'"
+    ).run();
+    db.prepare(
+      "UPDATE activity_categories SET title = 'گوشی' WHERE id = 'cat-phone' OR title = 'استفاده از گوشی'"
+    ).run();
+    db.prepare(
+      "UPDATE activity_categories SET title = 'تلویزیون' WHERE id = 'cat-tv' OR title = 'تماشای تلویزیون'"
+    ).run();
+
+    // Migrate study_activity_types to include «پیش‌خوانی» (st-preview) at sort_order 4 and «بدون فعالیت» at sort_order 5 (Section 4)
+    const existingPreview = db
+      .prepare(
+        "SELECT id FROM study_activity_types WHERE id = 'st-preview' OR title = 'پیش‌خوانی' LIMIT 1"
+      )
+      .get() as { id: string } | undefined;
+    if (!existingPreview) {
+      db.prepare(
+        "INSERT INTO study_activity_types (id, title, description, badge_color, sort_order, is_active) VALUES ('st-preview', 'پیش‌خوانی', 'پیش‌خوانی و مطالعه اولیه درس پیش از تدریس معلم در کلاس.', 'emerald', 4, 1)"
+      ).run();
+    } else {
+      db.prepare(
+        "UPDATE study_activity_types SET sort_order = 4, is_active = 1 WHERE id = ?"
+      ).run(existingPreview.id);
+    }
+    db.prepare(
+      "UPDATE study_activity_types SET sort_order = 5 WHERE id = 'st-none' OR title = 'بدون فعالیت'"
     ).run();
 
     // Seed initial daily time budgets (360 mins = 6 hours) for today and the past 6 days if empty
@@ -223,9 +253,9 @@ function seedInitialDataIfEmpty() {
     const defaultCategories = [
       ['cat-study', 'درس', 1, 'educational', 'BookOpen', 'indigo', 1],
       ['cat-rest', 'استراحت', 0, 'essential', 'Coffee', 'emerald', 2],
-      ['cat-food', 'غذا خوردن و تغذیه', 0, 'essential', 'Coffee', 'emerald', 3],
-      ['cat-phone', 'استفاده از گوشی', 0, 'restricted', 'Smartphone', 'amber', 4],
-      ['cat-tv', 'تماشای تلویزیون', 0, 'restricted', 'Tv', 'sky', 5],
+      ['cat-food', 'تغذیه', 0, 'essential', 'Coffee', 'emerald', 3],
+      ['cat-phone', 'گوشی', 0, 'restricted', 'Smartphone', 'amber', 4],
+      ['cat-tv', 'تلویزیون', 0, 'restricted', 'Tv', 'sky', 5],
       ['cat-game', 'بازی', 0, 'restricted', 'Gamepad2', 'purple', 6],
       ['cat-sport', 'ورزش و تحرک', 0, 'essential', 'Dumbbell', 'teal', 7],
       ['cat-other', 'سایر فعالیت‌ها', 0, 'essential', 'Sparkles', 'slate', 8],
@@ -269,11 +299,18 @@ function seedInitialDataIfEmpty() {
         3,
       ],
       [
+        'st-preview',
+        'پیش‌خوانی',
+        'پیش‌خوانی و مطالعه اولیه درس پیش از تدریس معلم در کلاس.',
+        'emerald',
+        4,
+      ],
+      [
         'st-none',
         'بدون فعالیت',
         'معلم هیچ تکلیف یا امتحانی تعیین نکرده است.',
         'slate',
-        4,
+        5,
       ],
     ];
 
@@ -832,7 +869,7 @@ function seedSamplePlans() {
       id: 'plan-today-6',
       date: todayIso,
       catId: 'cat-phone',
-      catTitle: 'استفاده از گوشی',
+      catTitle: 'گوشی',
       isStudy: 0,
       subjId: null,
       subjName: null,

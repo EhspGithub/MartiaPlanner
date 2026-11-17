@@ -21,6 +21,10 @@ import type {
   DailyTimeBudgetConfig,
 } from '../types.ts';
 import { localSQLiteFallback } from './localSqliteFallback.ts';
+import {
+  getAnalyticsCoefficients,
+  saveAnalyticsCoefficients,
+} from '../utils/analyticsCoefficients.ts';
 
 let serverAvailable: boolean | null = null;
 
@@ -529,6 +533,7 @@ export const api = {
       if (firedRem !== null) clientPreferences.fired_reminders = firedRem;
       const themePref = localStorage.getItem('martia_theme_v1');
       if (themePref !== null) clientPreferences.theme = themePref;
+      clientPreferences.analytics_coefficients = getAnalyticsCoefficients();
     } catch {}
 
     return {
@@ -703,6 +708,9 @@ export const api = {
         }
         if (typeof prefs.theme === 'string') {
           localStorage.setItem('martia_theme_v1', prefs.theme);
+        }
+        if (prefs.analytics_coefficients && typeof prefs.analytics_coefficients === 'object') {
+          saveAnalyticsCoefficients(prefs.analytics_coefficients);
         }
       }
     } catch {}

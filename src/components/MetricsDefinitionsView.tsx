@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   BookOpen,
   Calculator,
@@ -32,14 +32,25 @@ import {
   Variable,
   Target,
   Link2,
+  Table2,
+  Sliders,
+  ArrowLeft,
 } from 'lucide-react';
 import { APP_VERSION } from '../version.ts';
 import { toPersianDigits } from '../utils/jalali.ts';
 import { WeeklySampleCalculationsReport } from './WeeklySampleCalculationsReport.tsx';
 import { MetricsInfographicPoster } from './MetricsInfographicPoster.tsx';
+import { ComprehensiveMetricsTable } from './ComprehensiveMetricsTable.tsx';
+import { EvaluationPhilosophyArticle } from './EvaluationPhilosophyArticle.tsx';
+import {
+  getCoefficientsForDefinitionId,
+  METRIC_DEFINITION_TO_TABLE_ROW_MAP,
+  type AnalyticsCoefficientsConfig,
+} from '../utils/analyticsCoefficients.ts';
 
 const WEEKLY_SAMPLE_ACCORDION_ID = 'metric-20-weekly-sample-calculations';
 const INFOGRAPHIC_POSTER_ACCORDION_ID = 'metric-infographic-poster-overview';
+export const COMPREHENSIVE_TABLE_ACCORDION_ID = 'metric-comprehensive-master-table';
 
 export interface MetricExampleTableRow {
   col1: string;
@@ -853,17 +864,17 @@ const METRICS_DEFINITIONS_DATA: MetricDefinitionRecord[] = [
     ],
     specialHighlightBox: {
       badge: 'کادر اختصاصی کالبدشکافی متغیرها و ضرایب شاخص ۱۴',
-      title: 'پاسخ کامل به ۵ سؤال کلیدی درباره متغیرهای فرمول درس (M_depth، E_s، اثر جلسات رهاشده بر E_s، کلاهک سقف و r_s)',
+      title: 'پاسخ کامل به سؤالات کلیدی درباره متغیرهای فرمول درس (M_depth، E_s، تلاش خام ۲۸٫۵۰، ضریب اثربخشی، جریمه نوبت ازدست‌رفته و XP خالص)',
       description:
-        'در این کادر، نحوه دقیق محاسبه تک‌تک متغیرهای سطح اختصاصی درس، سهم درصدی هر عامل در ضریب عمق یادگیری، نحوه اثر جلسات رهاشده بر امتیاز آموزشی درس (E_s)، مفهوم «کلاهک سقف کیفیت/کمیت (Cap/Clamp)» و منطق تعیین ضرایب تشدید غیبت درس تشریح شده است:',
+        'در این کادر، نحوه دقیق محاسبه تک‌تک متغیرهای سطح اختصاصی درس، یکسان بودن «ضریب اثربخشی» و «ضریب عمق یادگیری (M_depth)»، نحوه به دست آمدن تلاش خام (XP_raw = 28.50)، فرمول جریمه نوبت ازدست‌رفته و XP خالص نهایی درس تشریح شده است:',
       componentsBreakdown: [
         {
           weightBadge: 'مجموع وزن: ۱۰۰٪ در Mastery_s',
-          title: '۱. سهم دقیق هر عامل در ضریب عمق یادگیری (M_depth) چقدر است؟',
+          title: '۱. سهم دقیق هر عامل در ضریب عمق یادگیری (M_depth) چقدر است و آیا «ضریب اثربخشی» همان M_depth است؟',
           formula:
-            'Mastery_s = 0.45×(Q_w/10) + 0.35×(E_s/100) + 0.10×TaskRatio + 0.10×min(1, D_active/25)  ➔  M_depth = 0.28 + 0.97 × Mastery_s',
+            'Mastery_s = 0.45×(Q_w/10) + 0.35×(E_s/100) + 0.10×TaskRatio + 0.10×min(1, D_active/25)  ➔  M_depth = EffectivenessMultiplier = 0.28 + 0.97 × Mastery_s',
           explanation:
-            'شاخص تسلط درس (Mastery_s بین ۰ تا ۱) از ۴ عامل با مجموع وزن ۱۰۰٪ ساخته می‌شود: ۱) کیفیت یادگیری وزنی درس (Q_w): سهم ۴۵٪ | ۲) امتیاز مستقیم آموزشی همان درس (E_s): سهم ۳۵٪ | ۳) نرخ تکمیل جلسات درس (TaskRatio): سهم ۱۰٪ | ۴) استمرار روزهای مطالعه درس تا سقف ۲۵ روز (D_active ÷ 25): سهم ۱۰٪. سپس در فرمول خطی 0.28 + (0.97 × Mastery_s) قرار می‌گیرد.',
+            'بله! «ضریب اثربخشی درس (EffectivenessMultiplier در کد برنامه)» و «ضریب عمق یادگیری درس (M_depth در فرمول‌ها)» صددرصد یک شاخص واحد هستند و هیچ تفاوتی با هم ندارند. برای محاسبه آن، ابتدا شاخص تسلط درس (Mastery_s بین ۰ تا ۱) از ۴ عامل با مجموع وزن ۱۰۰٪ ساخته می‌شود: ۱) کیفیت یادگیری وزنی درس (Q_w): سهم ۴۵٪ | ۲) امتیاز مستقیم آموزشی همان درس (E_s): سهم ۳۵٪ | ۳) نرخ تکمیل جلسات درس (TaskRatio): سهم ۱۰٪ | ۴) استمرار روزهای مطالعه درس تا سقف ۲۵ روز (D_active ÷ 25): سهم ۱۰٪. سپس در رابطه خطی 0.28 + (0.97 × Mastery_s) قرار می‌گیرد.',
         },
         {
           weightBadge: 'E_s = 0.40×T_s + 0.30×Q_s + 0.30×L_s',
@@ -889,20 +900,31 @@ const METRICS_DEFINITIONS_DATA: MetricDefinitionRecord[] = [
           explanation:
             'در نوبت اولی که برنامه یک درس رها می‌شود (k_s = 1)، ضریب جریمه پایه ۱٫۰۰ است. برای نوبت‌های متوالی دوم تا چهارم، به ازای هر نوبت غیبت متوالی دقیقاً ۰٫۳۵ واحد (+35%) به ضریب اضافه می‌شود (۱٫۳۵، ۱٫۷۰، ۲٫۰۵) و از نوبت پنجم به بعد روی سقف ۲٫۵۰ قفل می‌گردد. این گام (+0.35 با سقف 2.5) ملایم‌تر از جریمه کل روزانه (+0.50 با سقف 4.0) طراحی شده تا حساب یک درس خاص با چند جلسه غیبت به کلی صفر نشود. به محض انجام ۱ جلسه مطالعه مؤثر در آن درس، شمارنده k_s به صفر و ضریب به ۱٫۰۰ برمی‌گردد.',
         },
+        {
+          weightBadge: 'کالبدشکافی کامل گام ۴ مثال علوم',
+          title: '۵. تلاش خام (XP_raw = 28.50)، جریمه نوبت ازدست‌رفته و XP خالص درس در گام ۴ دقیقاً چطور محاسبه شده‌اند؟',
+          formula:
+            'XP_raw,s = (N_comp×5) + (N_part×2.5) + (Mins÷50) + (Ex×0.2) + Σ(q_i×0.2) + (D_active×1.0)  |  XP_net,s = round2(XP_raw,s × M_depth) - Penalty_s',
+          explanation:
+            'الف) نحوه به دست آمدن تلاش خام (XP_raw = 28.50): در مثال درس علوم (۲۹۵ دقیقه مطالعه، ۲۳ تست حل‌شده و ۳ روز فعال مطالعه)، اجزای کمّی پایه عبارت‌اند از: ۱) تکمیل ۳ فعالیت کامل: 3 × 5.0 = 15.00 XP | ۲) زمان مطالعه واقعی: 295 ÷ 50 = 5.90 XP | ۳) تست‌های حل‌شده: 23 × 0.2 = 4.60 XP | ۴) پاداش روزهای فعال مطالعه درس: 3 × 1.0 = 3.00 XP که جمع این ۴ جزء دقیقاً 15.00 + 5.90 + 4.60 + 3.00 = 28.50 XP است! (نکته: اگر از ۳ جلسه، ۲ جلسه کامل 10.00 XP و ۱ جلسه ناقص 2.50 XP به همراه پاداش کیفیت 2.50 XP باشد نیز جمع کل دقیقاً 28.50 XP می‌شود؛ و اگر هر ۳ جلسه کامل به علاوه پاداش کیفیت ۳ جلسه یعنی 23.0 × 0.2 = 4.60 XP لحاظ شود، تلاش خام کل برابر 28.50 + 4.60 = 33.10 XP خواهد بود). ب) ضرب در ضریب اثربخشی (همان M_depth): امتیاز خام در ضریب عمق یادگیری/اثربخشی (M_depth = 0.96 تا 0.98) ضرب شده و «XP ناخالص درس (XP_gross,s)» را می‌سازد (28.50 × 0.98 = 27.93 تا 27.96 XP، و در حالت با پاداش کیفیت: 33.10 × 0.96 = 31.78 XP). ج) جریمه نوبت ازدست‌رفته درس (Penalty_{s,d}): از فرمول B_s × r_s(k_s) × (1 - F_{s,d}) به دست می‌آید که B_s برابر ۱۲٪ میانگین XP جلسات فعال قبلی همان درس (مقید در بازه 0.60 تا 4.50 XP) است. در نوبت اول غیبت ضریب r_s(1) = 1.00 است؛ اگر ۶۰٪ جلسه با جریمه پایه کف 0.60 ناتمام بماند (یا بدون کف 0.60 برای میانگین ۳ واحد)، جریمه برابر 0.60 × 1.00 × 0.60 = 0.36 XP است (و اگر جلسه چهارم ۱۰۰٪ رها شود یعنی F_{s,d}=0، با میانگین جلسات قبلی B_s ≈ 1.09 تا 1.27 XP کسر می‌گردد). د) امتیاز خالص درس (XP_net,s): از تفاضل XP_gross,s منهای جریمه به دست می‌آید (27.96 - 0.36 = 27.60 XP در مرحله ۴: مس ساده؛ و در حالت با پاداش کیفیت: 31.78 - 1.27 = 30.51 XP که با عبور از آستانه ۳۰ XP در مرحله ۵: مس پلاس قرار می‌گیرد).',
+        },
       ],
       combinedFormula:
-        'XP_gross,s = round2( XP_raw,s × (0.28 + 0.97 × Mastery_s) )     |     Penalty_{s,d} = round2( B_s × r_s(k_s) × (1 - F_{s,d}) )',
-      exampleTitle: 'مثال عددی واقعی و گام‌به‌گام از درس «علوم تجربی» (و نحوه اثر جلسه رهاشده در مخرج T_s و Q_s)',
+        'XP_gross,s = round2( XP_raw,s × M_depth )   |   Penalty_{s,d} = round2( B_s × r_s(k_s) × (1 - F_{s,d}) )   |   XP_net,s = max( 0 , XP_gross,s - Σ Penalty_{s,d} )',
+      exampleTitle: 'مثال عددی واقعی و گام‌به‌گام از درس «علوم تجربی» (کالبدشکافی کامل گام ۱ تا گام ۴)',
       exampleScenario:
-        'فرض کنید برای درس «علوم تجربی» در مجموع ۴ جلسه برنامه‌ریزی شده است: ۳ جلسه اول انجام شده (مجموع پیش‌بینی ۳۳۵ دقیقه و مطالعه واقعی ۲۹۵ دقیقه؛ مجموع تست هدف ۲۵ و تست حل‌شده ۲۳؛ کیفیت وزنی Q_{w,s} = 7.64 از ۱۰) ولی جلسه چهارم (با ۴۵ دقیقه زمان پیش‌بینی و ۵ تست هدف) رها شده است (۰ دقیقه و ۰ تست واقعی):',
+        'فرض کنید برای درس «علوم تجربی» در مجموع ۴ جلسه در ۴ روز برنامه‌ریزی شده است: ۳ جلسه اول انجام شده (مجموع پیش‌بینی ۳۳۵ دقیقه و مطالعه واقعی ۲۹۵ دقیقه؛ مجموع تست هدف ۲۵ و تست حل‌شده ۲۳؛ کیفیت وزنی Q_{w,s} = 7.64 از ۱۰ در ۳ روز فعال D_active = 3) ولی جلسه چهارم (با ۴۵ دقیقه زمان پیش‌بینی و ۵ تست هدف) رها شده است (۰ دقیقه و ۰ تست واقعی):',
       exampleSteps: [
         'گام ۱ — محاسبه E_s و مشاهده اثر جلسه رهاشده در مخرج T_s و Q_s: اگر جلسه چهارم رها نمی‌شد، مخرج زمان ۳۳۵ دقیقه (T_s = 295÷335 = 88%) و مخرج تست ۲۵ تست (Q_s = 23÷25 = 92%) بود و E_s برابر round(0.40×88 + 0.30×92 + 0.30×76) = 86% می‌شد. اما چون جلسه چهارم (۴۵ دقیقه و ۵ تست) رها شده است، زمان و تست هدف آن به مخرج کسرها اضافه می‌شود ولی به صورت کسر عدد ۰ اضافه می‌گردد: ۱) زمان کل با جلسه رهاشده: T_s = round( (295 + 0) ÷ (335 + 45) × 100 ) = round(295 ÷ 380 × 100) = 78% (وزن ۴۰٪) | ۲) تست کل با جلسه رهاشده: Q_s = round( (23 + 0) ÷ (25 + 5) × 100 ) = round(23 ÷ 30 × 100) = 77% (وزن ۳۰٪) | ۳) کیفیت وزنی جلسات مطالعه: L_s = round(7.64 × 10) = 76% (وزن ۳۰٪) ⬅ در نتیجه با همان ۳ عامل داریم: E_s = round(0.40×78 + 0.30×77 + 0.30×76) = round(31.2 + 23.1 + 22.8) = round(77.1) = 77% تا 78%!',
         'گام ۲ — محاسبه ۴ جزء شاخص تسلط درس (Mastery_s): ۱) سهم ۴۵٪ کیفیت یادگیری: 0.45 × (7.64 ÷ 10) = 0.3438 | ۲) سهم ۳۵٪ امتیاز آموزشی درس: 0.35 × (78 ÷ 100) = 0.2730 | ۳) سهم ۱۰٪ تکمیل جلسات (۳ از ۴ جلسه = 0.75): 0.10 × 0.75 = 0.0750 | ۴) سهم ۱۰٪ استمرار روزها (۳ روز فعال از سقف ۲۵ روز = 0.12): 0.10 × 0.12 = 0.0120 ⬅ جمع کل Mastery_s = 0.3438 + 0.2730 + 0.0750 + 0.0120 = 0.7038.',
-        'گام ۳ — محاسبه ضریب عمق یادگیری (M_depth): M_depth = round2( 0.28 + 0.97 × 0.7038 ) = round2( 0.28 + 0.6827 ) = 0.96x تا 0.98x.',
-        'گام ۴ — محاسبه XP ناخالص، جریمه نوبت ازدست‌رفته و XP خالص درس: تلاش خام درس XP_raw = 28.50 واحد است که پس از ضرب در ضریب اثربخشی و کسر 0.36 XP بابت ۱ نوبت غیبت (B_s × r_s(1) × 1.0 با ضریب نوبت اول 1.00)، XP خالص درس علوم برابر 27.6 XP (مرحله ۵: مس پلاس) ثبت می‌شود.',
+        'گام ۳ — محاسبه ضریب عمق یادگیری / اثربخشی درس (M_depth = EffectivenessMultiplier): توجه کنید که «ضریب اثربخشی» دقیقاً نام دیگر «ضریب عمق یادگیری (M_depth)» است: M_depth = round2( 0.28 + 0.97 × 0.7038 ) = round2( 0.28 + 0.6827 ) = 0.96x (و بدون احتساب جلسه چهارم برابر 0.98x).',
+        'گام ۴ (الف) — نحوه محاسبه تلاش خام درس (XP_raw,s = 28.50 واحد): تلاش خام از جمع اجزای فعالیت‌های انجام‌شده در درس علوم به دست می‌آید: ۱) تکمیل فعالیت‌ها: ۳ جلسه کامل × ۵ = 15.00 XP (یا ۲ کامل 10.00 + ۱ ناقص 2.50 + پاداش کیفیت 2.50 = 15.00 XP) | ۲) زمان مطالعه واقعی (۲۹۵ دقیقه ÷ ۵۰): 5.90 XP | ۳) تست‌های حل‌شده (۲۳ تست × ۰٫۲): 4.60 XP | ۴) پاداش ۳ روز فعال مطالعه درس (۳ روز × ۱٫۰): 3.00 XP ⬅ جمع تلاش خام پایه: 15.00 + 5.90 + 4.60 + 3.00 = 28.50 XP (و اگر هر ۳ جلسه کامل بوده و پاداش کیفیت ۳ جلسه Σ(q_i×0.2) = 23×0.2 = 4.60 XP هم جداگانه به آن افزوده شود، تلاش خام کل برابر 28.50 + 4.60 = 33.10 XP می‌شود).',
+        'گام ۴ (ب) — محاسبه XP ناخالص درس (XP_gross,s): تلاش خام درس در ضریب عمق یادگیری (همان ضریب اثربخشی M_depth) ضرب می‌شود: در پایه 28.50 داریم 28.50 × 0.98 = 27.93 تا 27.96 XP (یا با ضریب 0.96 برابر 27.36 XP)؛ و در حالت کامل با پاداش کیفیت داریم: 33.10 × 0.96 = 31.78 XP.',
+        'گام ۴ (ج) — محاسبه جریمه نوبت ازدست‌رفته درس (Penalty_{s,d}): طبق فرمول Penalty = round2( B_s × r_s(k_s) × (1 - F_{s,d}) )، چون اولین نوبت غیبت در درس علوم است، ضریب تشدید نوبت اول r_s(1) = 1.00 می‌باشد. جریمه پایه B_s برابر ۱۲٪ میانگین XP جلسات فعال قبلی درس (مقید بین حداقل 0.60 و حداکثر 4.50 XP) است: در حالت کسری 0.36 XP (معادل 0.60 × 1.00 × 0.60 برای ۶۰٪ ناتمام یا ۱۲٪ میانگین ۳ واحد بدون کف)، مقدار 0.36 XP کسر می‌شود؛ و در حالت رها شدن ۱۰۰٪ جلسه چهارم (1 - F_{s,d} = 1.0) با میانگین واقعی ۳ جلسه قبلی (31.78 ÷ 3 = 10.59 XP ⬅ B_s = 0.12 × 10.59 = 1.27 XP)، جریمه نوبت اول برابر 1.27 × 1.00 × 1.00 = 1.27 XP است.',
+        'گام ۴ (د) — محاسبه XP خالص نهایی درس (XP_net,s) و تعیین مرحله از جدول ۳۹ مرحله‌ای: از تفاضل XP ناخالص و جریمه نوبت ازدست‌رفته، امتیاز خالص درس به دست می‌آید: در حالت اول 27.96 - 0.36 = 27.60 XP (که در جدول ۰ تا ۲٬۰۰۰ XP دروس، در بازه ۲۱ تا ۲۹٫۹۹ یعنی «مرحله ۴: مس ساده / Copper» قرار می‌گیرد) و در حالت کامل با پاداش کیفیت ۳ جلسه: 31.78 - 1.27 = 30.51 XP که با عبور از آستانه ۳۰ XP دقیقاً در «مرحله ۵: مس پلاس / Copper Plus» (بازه ۳۰ تا ۴۰٫۹۹ XP) ثبت می‌شود.',
       ],
       realSampleNote:
-        'همین مکانیزم در درس «ریاضی» هفته نمونه (۱۶ تا ۲۲ آبان) نیز برقرار است: در ۴ جلسه انجام‌شده ریاضی، ۳۵۰ دقیقه از ۳۳۰ دقیقه پیش‌بینی خوانده شده (۱۰۰٪) و ۱۱۴ تست از ۱۱۰ تست هدف حل شده (۱۰۰٪) با کیفیت ۸٫۸۹ (L_s = 89%)؛ اما چون ۱ جلسه ریاضی در سه‌شنبه ۱۹ آبان (۷۵ دقیقه و ۲۰ تست هدف) رها شده است، مخرج زمان به 330 + 75 = 405 دقیقه (T_s = 350÷405 = 86%) و مخرج تست به 110 + 20 = 130 تست (Q_s = 114÷130 = 88%) رسیده و E_s ریاضی از 97% به round(0.40×86 + 0.30×88 + 0.30×89) = 88% تبدیل شده است.',
+        'در داده‌های نمونه یک‌هفته‌ای (۱۶ تا ۲۲ آبان ۱۴۰۵) نیز می‌توانید هر دو حالت را زنده ببینید: ۱) درس «علوم تجربی» در هفته نمونه ۴ جلسه کامل دارد (۳۰۵ دقیقه، ۹۸ تست، مجموع کیفیت ۳۶ و ۴ روز فعال: تلاش خام = 20 + 6.10 + 19.60 + 7.20 + 4.0 = 56.90 XP، ضریب M_depth = 1.06، جریمه = 0 و XP خالص = 60.31 XP در مرحله ۷: آهن)؛ ۲) درس «ریاضی» ۴ جلسه کامل + ۱ جلسه رهاشده در سه‌شنبه ۱۹ آبان دارد (تلاش خام = 60.90 XP، ضریب M_depth = 1.01، امتیاز ناخالص = 61.51 XP، جریمه ۱ نوبت غیبت در سه‌شنبه B_s × r_s(1) × 1.0 = 1.85 XP و XP خالص نهایی = 61.51 - 1.85 = 59.66 XP در مرحله ۷: آهن).',
     },
     numericalExample: {
       scenario:
@@ -1384,17 +1406,86 @@ function getMetricIconConfig(id: string): {
 
 export type GuideTabKey = 'definitions' | 'user_guide';
 
+export interface GuideExternalNavRequest {
+  targetAccordionId: string;
+  highlightedTableRowId?: string | null;
+  timestamp: number;
+}
+
 export interface MetricsDefinitionsViewProps {
   initialTab?: GuideTabKey;
+  externalNavRequest?: GuideExternalNavRequest | null;
+  onNavigateToCoefficient?: (coeffKey: keyof AnalyticsCoefficientsConfig) => void;
 }
 
 export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
   initialTab = 'definitions',
+  externalNavRequest,
+  onNavigateToCoefficient,
 }) => {
   const [activeGuideTab, setActiveGuideTab] = useState<GuideTabKey>(initialTab);
   // Single-select accordion state: at most ONE card (definition or weekly sample calculations) can be open at any moment
   const [openAccordionId, setOpenAccordionId] = useState<string | null>(null);
+  const [highlightedTableRowId, setHighlightedTableRowId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const jumpToDefinitionAccordion = (definitionId: string) => {
+    setActiveGuideTab('definitions');
+    setSearchQuery('');
+    setHighlightedTableRowId(null);
+    setOpenAccordionId(definitionId);
+    window.setTimeout(() => {
+      const el = document.getElementById(`accordion-card-${definitionId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 120);
+  };
+
+  const jumpToTableRow = (rowId: string) => {
+    setActiveGuideTab('definitions');
+    setSearchQuery('');
+    setOpenAccordionId(COMPREHENSIVE_TABLE_ACCORDION_ID);
+    setHighlightedTableRowId(rowId);
+    window.setTimeout(() => {
+      const rowEl = document.getElementById(`master-table-${rowId}`);
+      const tableEl = document.getElementById(`accordion-card-${COMPREHENSIVE_TABLE_ACCORDION_ID}`);
+      if (rowEl) {
+        rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (tableEl) {
+        tableEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 180);
+  };
+
+  useEffect(() => {
+    if (!externalNavRequest) return;
+    setActiveGuideTab('definitions');
+    setSearchQuery('');
+    const normalizedTarget =
+      externalNavRequest.targetAccordionId === 'metric-0-comprehensive-table'
+        ? COMPREHENSIVE_TABLE_ACCORDION_ID
+        : externalNavRequest.targetAccordionId;
+    setOpenAccordionId(normalizedTarget);
+    setHighlightedTableRowId(externalNavRequest.highlightedTableRowId || null);
+
+    const timer = window.setTimeout(() => {
+      if (externalNavRequest.highlightedTableRowId) {
+        const rowEl = document.getElementById(
+          `master-table-${externalNavRequest.highlightedTableRowId}`
+        );
+        if (rowEl) {
+          rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+      }
+      const cardEl = document.getElementById(`accordion-card-${normalizedTarget}`);
+      if (cardEl) {
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 160);
+    return () => window.clearTimeout(timer);
+  }, [externalNavRequest]);
 
   const normalizedQuery = useMemo(() => normalizeSearchText(searchQuery), [searchQuery]);
   const isSearchActive = normalizedQuery.length > 0;
@@ -1472,6 +1563,10 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
 
   const openInfographicPoster = () => {
     setOpenAccordionId(INFOGRAPHIC_POSTER_ACCORDION_ID);
+  };
+
+  const openComprehensiveTable = () => {
+    setOpenAccordionId(COMPREHENSIVE_TABLE_ACCORDION_ID);
   };
 
   const collapseAll = () => {
@@ -1618,11 +1713,19 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
             </div>
 
             {/* Row 2: Action Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              <button
+                type="button"
+                onClick={openComprehensiveTable}
+                className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 dark:hover:bg-violet-900/60 text-violet-800 dark:text-violet-200 border border-violet-200 dark:border-violet-800 px-3.5 py-2.5 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer min-h-[42px]"
+              >
+                <Table2 className="w-4 h-4 shrink-0" />
+                <span>جدول جامع شاخص‌ها و روابط محاسباتی</span>
+              </button>
               <button
                 type="button"
                 onClick={openInfographicPoster}
-                className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-4 py-2.5 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer min-h-[42px]"
+                className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-3.5 py-2.5 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer min-h-[42px]"
               >
                 <Layers className="w-4 h-4 shrink-0" />
                 <span>پوستر اینفوگرافیک شاخص‌ها (در یک نگاه)</span>
@@ -1630,7 +1733,7 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
               <button
                 type="button"
                 onClick={openWeeklySampleCard}
-                className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-4 py-2.5 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer min-h-[42px]"
+                className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-3.5 py-2.5 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer min-h-[42px]"
               >
                 <Calculator className="w-4 h-4 shrink-0" />
                 <span>محاسبات داده‌های نمونه یک‌هفته‌ای</span>
@@ -1639,12 +1742,73 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
                 type="button"
                 onClick={collapseAll}
                 disabled={!openAccordionId}
-                className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 px-4 py-2.5 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer min-h-[42px]"
+                className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 px-3.5 py-2.5 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer min-h-[42px]"
               >
-                <span>بستن تعریف باز</span>
+                <span>بستن بخش باز</span>
               </button>
             </div>
           </div>
+
+          {/* =====================================================================
+              COMPREHENSIVE 7-COLUMN MASTER TABLE ACCORDION (SECTION 1)
+          ===================================================================== */}
+          {!isSearchActive && (
+            <div
+              id={`accordion-card-${COMPREHENSIVE_TABLE_ACCORDION_ID}`}
+              className="rounded-3xl border-2 border-violet-300 dark:border-violet-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden transition-all scroll-mt-20"
+            >
+              <button
+                type="button"
+                onClick={() => toggleAccordion(COMPREHENSIVE_TABLE_ACCORDION_ID)}
+                aria-expanded={openAccordionId === COMPREHENSIVE_TABLE_ACCORDION_ID}
+                className="w-full flex items-center justify-between gap-3 px-4 sm:px-6 py-4 text-right hover:bg-violet-50/50 dark:hover:bg-violet-950/25 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-11 h-11 rounded-2xl border border-violet-300 dark:border-violet-700 bg-gradient-to-br from-violet-500/25 to-indigo-500/15 text-violet-700 dark:text-violet-300 flex items-center justify-center shrink-0 shadow-2xs">
+                    <Table2 className="w-5 h-5 stroke-[2.2]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                        جدول جامع شاخص‌ها، متغیرها و روابط محاسباتی
+                      </h2>
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-lg border bg-violet-100 dark:bg-violet-950/80 text-violet-800 dark:text-violet-200 border-violet-300 dark:border-violet-700">
+                        ۷ ستون مرجع کامل + گراف وابستگی و ضرایب زنده
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 truncate">
+                      فهرست سلسله‌مراتبی تمام شاخص‌های اصلی، زیرشاخص‌ها، متغیرهای فرمولی، شمارنده‌ها و ضرایب قابل‌تنظیم به همراه نماد، فرمول، عوامل مؤثر، ارتباط با و مثال
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="hidden sm:inline-block text-xs font-bold text-violet-700 dark:text-violet-400">
+                    {openAccordionId === COMPREHENSIVE_TABLE_ACCORDION_ID
+                      ? 'بستن جدول جامع'
+                      : 'باز کردن جدول جامع'}
+                  </span>
+                  <div
+                    className={`w-8 h-8 rounded-xl bg-violet-50 dark:bg-violet-950 border border-violet-200 dark:border-violet-800 flex items-center justify-center text-violet-700 dark:text-violet-300 transition-transform duration-200 ${
+                      openAccordionId === COMPREHENSIVE_TABLE_ACCORDION_ID ? 'rotate-180' : ''
+                    }`}
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </div>
+                </div>
+              </button>
+
+              {openAccordionId === COMPREHENSIVE_TABLE_ACCORDION_ID && (
+                <div className="px-3 sm:px-5 pb-6 pt-4 border-t border-violet-200/80 dark:border-violet-800/80 bg-slate-50/50 dark:bg-slate-950/40">
+                  <ComprehensiveMetricsTable
+                    highlightedRowId={highlightedTableRowId}
+                    onNavigateToDefinition={jumpToDefinitionAccordion}
+                    onNavigateToCoefficient={onNavigateToCoefficient}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* =====================================================================
               INFOGRAPHIC POSTER ACCORDION (AT-A-GLANCE VISUAL ARCHITECTURE)
@@ -1729,10 +1893,14 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
                     ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                     : 'bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800';
 
+                const relatedCoeffs = getCoefficientsForDefinitionId(metric.id);
+                const mappedTableRowId = METRIC_DEFINITION_TO_TABLE_ROW_MAP[metric.id];
+
                 return (
                   <div
                     key={metric.id}
-                    className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden transition-all"
+                    id={`accordion-card-${metric.id}`}
+                    className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden transition-all scroll-mt-20"
                   >
                     {/* Accordion Header — الف) عنوان شاخص */}
                     <button
@@ -1787,6 +1955,42 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
                     {/* Accordion Body: Complete 9-Part Reference Specification */}
                     {isOpen && (
                       <div className="px-4 sm:px-6 pb-5 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4 text-xs sm:text-sm leading-relaxed">
+                        {/* Smart Bidirectional Navigation Bar: Jump to Comprehensive Table or Configurable Coefficients */}
+                        {(mappedTableRowId || (relatedCoeffs.length > 0 && onNavigateToCoefficient)) && (
+                          <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 p-3.5 flex flex-wrap items-center justify-between gap-2.5">
+                            <div className="flex items-center gap-2 text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                              <Link2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                              <span>پیوندهای هوشمند به جدول جامع و تنظیم ضرایب این شاخص:</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {mappedTableRowId && (
+                                <button
+                                  type="button"
+                                  onClick={() => jumpToTableRow(mappedTableRowId)}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-violet-100/90 hover:bg-violet-200/80 dark:bg-violet-950/80 dark:hover:bg-violet-900/90 text-violet-900 dark:text-violet-200 border border-violet-300 dark:border-violet-700 text-[11px] font-extrabold transition-all cursor-pointer"
+                                >
+                                  <Table2 className="w-3.5 h-3.5 shrink-0" />
+                                  <span>مشاهده در جدول جامع</span>
+                                  <ArrowLeft className="w-3 h-3 shrink-0" />
+                                </button>
+                              )}
+                              {onNavigateToCoefficient &&
+                                relatedCoeffs.map((coeff) => (
+                                  <button
+                                    key={coeff.key}
+                                    type="button"
+                                    onClick={() => onNavigateToCoefficient(coeff.key)}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-100/90 hover:bg-amber-200/80 dark:bg-amber-950/80 dark:hover:bg-amber-900/90 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700 text-[11px] font-extrabold transition-all cursor-pointer"
+                                    title={`انتقال به تنظیمات ضریب «${coeff.titleFa}»`}
+                                  >
+                                    <Sliders className="w-3 h-3 shrink-0" />
+                                    <span>تنظیم ضریب {coeff.symbol}</span>
+                                    <ArrowLeft className="w-3 h-3 shrink-0" />
+                                  </button>
+                                ))}
+                            </div>
+                          </div>
+                        )}
                         {/* الف و ب) عنوان شاخص و تعریف ساده + ج) هدف از محاسبه */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
                           <div className="rounded-2xl bg-indigo-50/55 dark:bg-indigo-950/25 border border-indigo-200/70 dark:border-indigo-900/50 p-4 space-y-1.5">
@@ -2315,6 +2519,15 @@ export const MetricsDefinitionsView: React.FC<MetricsDefinitionsViewProps> = ({
               </p>
             </div>
           </div>
+
+          {/* =====================================================================
+              COMPREHENSIVE 10-CHAPTER SCIENTIFIC & PSYCHOLOGICAL TREATISE
+              (Strictly inside «تب راهنما» — never in «تب تعاریف»)
+          ===================================================================== */}
+          <EvaluationPhilosophyArticle
+            onSwitchToDefinitionsTab={() => setActiveGuideTab('definitions')}
+            onNavigateToDefinition={jumpToDefinitionAccordion}
+          />
         </div>
       )}
     </div>

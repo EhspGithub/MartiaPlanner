@@ -71,9 +71,9 @@ function createInitialDatabaseSeed(): LocalSQLiteDatabaseDump {
   const categories: ActivityCategory[] = [
     { id: 'cat-study', title: 'درس', is_study: 1, activity_group: 'educational', impact_weight: 1.0, icon: 'BookOpen', color: 'indigo', sort_order: 1, is_active: 1 },
     { id: 'cat-rest', title: 'استراحت', is_study: 0, activity_group: 'essential', impact_weight: 1.0, icon: 'Coffee', color: 'emerald', sort_order: 2, is_active: 1 },
-    { id: 'cat-food', title: 'غذا خوردن و تغذیه', is_study: 0, activity_group: 'essential', impact_weight: 1.0, icon: 'Coffee', color: 'emerald', sort_order: 3, is_active: 1 },
-    { id: 'cat-phone', title: 'استفاده از گوشی', is_study: 0, activity_group: 'restricted', impact_weight: 1.0, icon: 'Smartphone', color: 'amber', sort_order: 4, is_active: 1 },
-    { id: 'cat-tv', title: 'تماشای تلویزیون', is_study: 0, activity_group: 'restricted', impact_weight: 1.0, icon: 'Tv', color: 'sky', sort_order: 5, is_active: 1 },
+    { id: 'cat-food', title: 'تغذیه', is_study: 0, activity_group: 'essential', impact_weight: 1.0, icon: 'Coffee', color: 'emerald', sort_order: 3, is_active: 1 },
+    { id: 'cat-phone', title: 'گوشی', is_study: 0, activity_group: 'restricted', impact_weight: 1.0, icon: 'Smartphone', color: 'amber', sort_order: 4, is_active: 1 },
+    { id: 'cat-tv', title: 'تلویزیون', is_study: 0, activity_group: 'restricted', impact_weight: 1.0, icon: 'Tv', color: 'sky', sort_order: 5, is_active: 1 },
     { id: 'cat-game', title: 'بازی', is_study: 0, activity_group: 'restricted', impact_weight: 1.0, icon: 'Gamepad2', color: 'purple', sort_order: 6, is_active: 1 },
     { id: 'cat-sport', title: 'ورزش و تحرک', is_study: 0, activity_group: 'essential', impact_weight: 1.0, icon: 'Dumbbell', color: 'teal', sort_order: 7, is_active: 1 },
     { id: 'cat-other', title: 'سایر فعالیت‌ها', is_study: 0, activity_group: 'essential', impact_weight: 1.0, icon: 'Sparkles', color: 'slate', sort_order: 8, is_active: 1 },
@@ -83,7 +83,8 @@ function createInitialDatabaseSeed(): LocalSQLiteDatabaseDump {
     { id: 'st-homework', title: 'تکلیف', description: 'معلم برای جلسه بعد تکلیف تعیین کرده است.', badge_color: 'amber', sort_order: 1, is_active: 1 },
     { id: 'st-exam', title: 'امتحان', description: 'جلسه بعد از این درس امتحان یا پرسش کلاسی گرفته می‌شود.', badge_color: 'rose', sort_order: 2, is_active: 1 },
     { id: 'st-review', title: 'پس‌خوانی', description: 'درس تدریس شده ولی تکلیف یا امتحانی ندارد و باید مرور و مطالعه شود.', badge_color: 'indigo', sort_order: 3, is_active: 1 },
-    { id: 'st-none', title: 'بدون فعالیت', description: 'معلم هیچ تکلیف یا امتحانی تعیین نکرده است.', badge_color: 'slate', sort_order: 4, is_active: 1 },
+    { id: 'st-preview', title: 'پیش‌خوانی', description: 'پیش‌خوانی و مطالعه اولیه درس پیش از تدریس معلم در کلاس.', badge_color: 'emerald', sort_order: 4, is_active: 1 },
+    { id: 'st-none', title: 'بدون فعالیت', description: 'معلم هیچ تکلیف یا امتحانی تعیین نکرده است.', badge_color: 'slate', sort_order: 5, is_active: 1 },
   ];
 
   const priorities: PriorityLevel[] = [
@@ -462,17 +463,31 @@ function loadDB(): LocalSQLiteDatabaseDump {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as LocalSQLiteDatabaseDump;
-      // Ensure categories have activity_group and cat-food exists
+      // Ensure categories have activity_group, cat-food exists, and default titles are migrated (Section 5)
       if (Array.isArray(parsed.categories)) {
-        parsed.categories = parsed.categories.map((c) => ({
-          ...c,
-          activity_group: classifyCategoryActivityGroup(c),
-          impact_weight: c.impact_weight ?? 1.0,
-        }));
+        parsed.categories = parsed.categories.map((c) => {
+          let updatedTitle = c.title;
+          if (c.id === 'cat-food' || c.title === 'غذا خوردن و تغذیه') {
+            updatedTitle = 'تغذیه';
+          } else if (c.id === 'cat-phone' || c.title === 'استفاده از گوشی') {
+            updatedTitle = 'گوشی';
+          } else if (c.id === 'cat-tv' || c.title === 'تماشای تلویزیون') {
+            updatedTitle = 'تلویزیون';
+          }
+          const updatedCat = {
+            ...c,
+            title: updatedTitle,
+            impact_weight: c.impact_weight ?? 1.0,
+          };
+          return {
+            ...updatedCat,
+            activity_group: classifyCategoryActivityGroup(updatedCat),
+          };
+        });
         if (!parsed.categories.some((c) => c.id === 'cat-food')) {
           parsed.categories.push({
             id: 'cat-food',
-            title: 'غذا خوردن و تغذیه',
+            title: 'تغذیه',
             is_study: 0,
             activity_group: 'essential',
             impact_weight: 1.0,
@@ -482,6 +497,33 @@ function loadDB(): LocalSQLiteDatabaseDump {
             is_active: 1,
           });
         }
+      }
+      // Ensure studyTypes includes «پیش‌خوانی» (st-preview) at sort_order 4 and «بدون فعالیت» at sort_order 5 (Section 4)
+      if (Array.isArray(parsed.studyTypes)) {
+        const hasPreview = parsed.studyTypes.some(
+          (st) => st.id === 'st-preview' || st.title === 'پیش‌خوانی'
+        );
+        if (!hasPreview) {
+          parsed.studyTypes.push({
+            id: 'st-preview',
+            title: 'پیش‌خوانی',
+            description: 'پیش‌خوانی و مطالعه اولیه درس پیش از تدریس معلم در کلاس.',
+            badge_color: 'emerald',
+            sort_order: 4,
+            is_active: 1,
+          });
+        }
+        parsed.studyTypes = parsed.studyTypes
+          .map((st) => {
+            if (st.id === 'st-preview' || st.title === 'پیش‌خوانی') {
+              return { ...st, sort_order: 4, is_active: 1 };
+            }
+            if (st.id === 'st-none' || st.title === 'بدون فعالیت') {
+              return { ...st, sort_order: 5 };
+            }
+            return st;
+          })
+          .sort((a, b) => a.sort_order - b.sort_order);
       }
       if (!parsed.timeBudgets) {
         parsed.timeBudgets = {};

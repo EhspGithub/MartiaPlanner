@@ -29,6 +29,7 @@ import {
   calculateXpFromPlans,
   evaluateGlobalXpLedger,
   analyzeXpVelocityAndProgress,
+  ANALYTICS_COEFFICIENTS_CHANGED_EVENT,
 } from '../utils/analyticsEngine.ts';
 import {
   WeeklyAnalyticalReport,
@@ -52,9 +53,13 @@ export const DashboardView: React.FC = () => {
   const todayIso = getTodayISO();
 
   useEffect(() => {
-    const onQuotesUpdated = () => setQuoteRevision((r) => r + 1);
-    window.addEventListener(QUOTES_UPDATED_EVENT, onQuotesUpdated);
-    return () => window.removeEventListener(QUOTES_UPDATED_EVENT, onQuotesUpdated);
+    const onQuotesOrCoeffsUpdated = () => setQuoteRevision((r) => r + 1);
+    window.addEventListener(QUOTES_UPDATED_EVENT, onQuotesOrCoeffsUpdated);
+    window.addEventListener(ANALYTICS_COEFFICIENTS_CHANGED_EVENT, onQuotesOrCoeffsUpdated);
+    return () => {
+      window.removeEventListener(QUOTES_UPDATED_EVENT, onQuotesOrCoeffsUpdated);
+      window.removeEventListener(ANALYTICS_COEFFICIENTS_CHANGED_EVENT, onQuotesOrCoeffsUpdated);
+    };
   }, []);
 
   useEffect(() => {
@@ -81,25 +86,31 @@ export const DashboardView: React.FC = () => {
   }, [range, todayIso]);
 
   const globalXpLedger = useMemo(
-    () => evaluateGlobalXpLedger(allTimePlans, todayIso),
-    [allTimePlans, todayIso]
+    () => {
+      void quoteRevision;
+      return evaluateGlobalXpLedger(allTimePlans, todayIso);
+    },
+    [allTimePlans, todayIso, quoteRevision]
   );
 
   const rangeXpBreakdown = useMemo(() => {
+    void quoteRevision;
     const filtered = allTimePlans.filter((p) => p.plan_date === todayIso);
     return calculateXpFromPlans(filtered);
-  }, [allTimePlans, todayIso]);
+  }, [allTimePlans, todayIso, quoteRevision]);
 
   const levelProgress = globalXpLedger.currentStageProgress;
 
   const xpVelocityAnalysis = useMemo(
-    () =>
-      analyzeXpVelocityAndProgress({
+    () => {
+      void quoteRevision;
+      return analyzeXpVelocityAndProgress({
         allTimePlans,
         todayIso,
         levelProgress,
-      }),
-    [allTimePlans, todayIso, levelProgress]
+      });
+    },
+    [allTimePlans, todayIso, levelProgress, quoteRevision]
   );
 
   const filteredHistoryEvents = useMemo(() => {

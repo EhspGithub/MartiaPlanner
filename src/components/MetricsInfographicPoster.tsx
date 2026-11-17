@@ -653,7 +653,7 @@ export const MetricsInfographicPoster: React.FC = () => {
                 XP_raw,s = (Comp×5) + (Part×2.5) + (Mins÷50) + (Ex×0.2) + Σ(q×0.2) + (D_active,s × 1.0)
               </div>
               <p className="text-[11px] text-slate-300 leading-5">
-                علاوه بر ۵ منبع پایه فعالیت‌های همان درس، به ازای هر روز مجزایی که آن درس مطالعه شده (<code dir="ltr">D_active,s</code>)، <strong>+۱.۰ واحد XP</strong> پاداش تنوع زمانی به تلاش خام درس اضافه می‌شود.
+                علاوه بر ۵ منبع پایه فعالیت‌های همان درس، به ازای هر روز مجزایی که آن درس مطالعه شده (<code dir="ltr">D_active,s</code>)، <strong>+۱.۰ واحد XP</strong> پاداش تنوع زمانی اضافه می‌شود (در مثال علوم: <code dir="ltr">15 + 5.90 + 4.60 + 3.00 = 28.50 XP</code> پایه و با پاداش کیفیت <code dir="ltr">+4.60 = 33.10 XP</code>).
               </p>
             </div>
 
@@ -661,7 +661,7 @@ export const MetricsInfographicPoster: React.FC = () => {
             <div className="rounded-2xl bg-slate-900 border border-cyan-500/40 p-4 space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-cyan-400">
-                  ۲. ضریب عمق یادگیری (M_depth) و کلاهک سقف
+                  ۲. ضریب عمق یادگیری = ضریب اثربخشی (M_depth)
                 </span>
                 <span className="text-[10px] font-mono text-cyan-300" dir="ltr">
                   0.75x .. 1.25x (Cap)
@@ -673,10 +673,10 @@ export const MetricsInfographicPoster: React.FC = () => {
               >
                 Mastery_s = 0.45×(Q_w/10) + 0.35×(E_s/100) + 0.10×TaskRatio + 0.10×min(1, D_active/25)
                 <br />
-                M_depth = round2(0.28 + 0.97 × Mastery_s)
+                M_depth = EffectivenessMultiplier = round2(0.28 + 0.97 × Mastery_s)
               </div>
               <p className="text-[11px] text-slate-300 leading-5">
-                <strong>سهم عوامل (۱۰۰٪):</strong> ۴۵٪ کیفیت وزنی + ۳۵٪ امتیاز آموزشی درس (<code dir="ltr">E_s</code>) + ۱۰٪ تکمیل جلسات + ۱۰٪ استمرار روزها (با <strong>کلاهک سقف ۲۵ روز</strong> <code dir="ltr">min(1, D/25)</code>). در تسلط کامل (۱.۰) به سقف <strong>۱.۲۵×</strong> و در تسلط ۴۸٪ به <strong>۰.۷۵×</strong> می‌رسد (و برای <code dir="ltr">Q_w &lt; 4</code> ضریب مطالعه سطحی <code dir="ltr">×0.65</code> اعمال می‌شود).
+                <strong>ضریب اثربخشی دقیقاً همان ضریب عمق یادگیری (<code dir="ltr">M_depth</code>) است!</strong> سهم عوامل (۱۰۰٪): ۴۵٪ کیفیت وزنی + ۳۵٪ امتیاز آموزشی درس (<code dir="ltr">E_s</code>) + ۱۰٪ تکمیل جلسات + ۱۰٪ استمرار روزها (با <strong>کلاهک سقف ۲۵ روز</strong> <code dir="ltr">min(1, D/25)</code>). در تسلط کامل (۱.۰) به سقف <strong>۱.۲۵×</strong> و در تسلط ۴۸٪ به <strong>۰.۷۵×</strong> می‌رسد.
               </p>
             </div>
 
@@ -705,11 +705,11 @@ export const MetricsInfographicPoster: React.FC = () => {
               </p>
             </div>
 
-            {/* Card 4: B_s & r_s(k_s) (+0.35 step) */}
+            {/* Card 4: B_s, r_s(k_s) & XP_net,s */}
             <div className="rounded-2xl bg-slate-900 border border-rose-500/40 p-4 space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-rose-400">
-                  ۴. جریمه پایه درس (B_s) و ضرایب تشدید r_s(k_s)
+                  ۴. جریمه نوبت ازدست‌رفته و XP خالص درس
                 </span>
                 <span className="text-[10px] font-mono text-rose-300" dir="ltr">
                   Step +0.35 (Max 2.5x)
@@ -719,33 +719,35 @@ export const MetricsInfographicPoster: React.FC = () => {
                 dir="ltr"
                 className="bg-slate-950 rounded-xl p-2.5 font-mono text-[11px] text-rose-300 border border-slate-800 leading-5"
               >
+                XP_gross,s = round2(XP_raw,s × M_depth)
+                <br />
                 B_s = clamp(0.12 × XP_avg_session, 0.60, 4.50)
                 <br />
-                r_s(k_s) = min(2.50, 1.00 + 0.35 × (k_s - 1))
+                r_s(k_s) = [1.00 , 1.35 , 1.70 , 2.05 , 2.50]
                 <br />
-                r_s = [1.00 , 1.35 , 1.70 , 2.05 , 2.50]
+                XP_net,s = max(0, XP_gross,s - Σ(B_s × r_s × (1 - F_s,d)))
               </div>
               <p className="text-[11px] text-slate-300 leading-5">
-                در نوبت اول غیبت درس ضریب <strong>۱.۰۰</strong> است و به ازای هر نوبت غیبت متوالی بعدی <strong>+۰.۳۵ واحد</strong> اضافه می‌شود تا در نوبت پنجم به سقف <strong>۲.۵۰×</strong> برسد. با ۱ جلسه مطالعه مؤثر، شمارنده به ۰ و ضریب به ۱.۰۰ بازنشانی می‌شود.
+                از حاصل‌ضرب تلاش خام در <code dir="ltr">M_depth</code>، امتیاز ناخالص (<code dir="ltr">XP_gross,s</code>) به دست می‌آید و با کسر جریمه نوبت‌های ازدست‌رفته (<code dir="ltr">B_s × r_s(k_s) × (1 - F_s,d)</code> با گام +0.35)، امتیاز خالص نهایی درس (<code dir="ltr">XP_net,s</code>) و پله ۱ تا ۳۹ آن درس تعیین می‌شود.
               </p>
             </div>
           </div>
 
-          {/* Step-by-Step Numerical Example Strip for Subject E_s & M_depth */}
+          {/* Step-by-Step Numerical Example Strip for Subject E_s, M_depth, XP_raw, Penalty & XP_net */}
           {showSampleNumbers && (
             <div className="rounded-2xl bg-emerald-950/25 border border-emerald-500/40 p-4 space-y-2 text-xs text-slate-200 tabular-nums">
               <div className="flex items-center gap-2 font-black text-emerald-300">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>
-                  مثال واقعی اثر جلسه رهاشده بر E_s و ضریب M_depth (درس ریاضی و علوم در هفته نمونه ۱۶ تا ۲۲ آبان):
+                  مثال واقعی گام‌به‌گام از درس علوم و ریاضی (تلاش خام XP_raw، ضریب M_depth، جریمه نوبت ازدست‌رفته و XP خالص درس):
                 </span>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 text-[11px] leading-6">
                 <div className="bg-slate-950/90 rounded-xl p-3 border border-slate-800">
-                  <strong className="text-indigo-300">۱. درس ریاضی (۴ جلسه کامل + ۱ جلسه رهاشده در سه‌شنبه):</strong> در ۴ جلسه انجام‌شده، ۳۵۰ دقیقه از ۳۳۰ دقیقه خوانده شده (۱۰۰٪) و ۱۱۴ تست از ۱۱۰ تست حل شده (۱۰۰٪) با کیفیت ۸.۸۹ (L_s = 89%). اما جلسه پنجم (۷۵ دقیقه و ۲۰ تست هدف) رها شده است ← مخرج زمان به <code dir="ltr">330 + 75 = 405</code> دقیقه (<code dir="ltr">T_s = 350÷405 = 86%</code>) و مخرج تست به <code dir="ltr">110 + 20 = 130</code> تست (<code dir="ltr">Q_s = 114÷130 = 88%</code>) می‌رسد؛ در نتیجه <code dir="ltr">E_s = round(0.40×86 + 0.30×88 + 0.30×89) = 88%</code> (به‌جای ۹۷٪ بدون جلسه رهاشده!).
+                  <strong className="text-indigo-300">۱. درس ریاضی در هفته نمونه (۴ جلسه کامل + ۱ جلسه رهاشده در سه‌شنبه):</strong> در ۴ جلسه انجام‌شده، ۳۵۰ دقیقه از ۳۳۰ دقیقه خوانده شده (۱۰۰٪) و ۱۱۴ تست از ۱۱۰ تست حل شده (۱۰۰٪) با کیفیت ۸.۸۹ (L_s = 89%). چون جلسه پنجم (۷۵ دقیقه و ۲۰ تست) رها شده، مخرج زمان به <code dir="ltr">405</code> دقیقه (<code dir="ltr">T_s = 86%</code>) و مخرج تست به <code dir="ltr">130</code> تست (<code dir="ltr">Q_s = 88%</code>) رسیده و <code dir="ltr">E_s = 88%</code> شده است. تلاش خام: <code dir="ltr">20 (۴ کامل) + 7.0 (زمان) + 22.8 (تست) + 7.1 (کیفیت) + 4.0 (۴ روز فعال) = 60.90 XP</code> ← ضرب در <code dir="ltr">M_depth = 1.01</code> برابر <code dir="ltr">XP_gross = 61.51 XP</code> ← کسر جریمه ۱ نوبت غیبت (<code dir="ltr">1.85 XP</code>) ← <code dir="ltr">XP_net = 59.66 XP</code> (مرحله ۷: آهن).
                 </div>
                 <div className="bg-slate-950/90 rounded-xl p-3 border border-slate-800">
-                  <strong className="text-cyan-300">۲. درس علوم (محاسبه Mastery_s و M_depth):</strong> با کیفیت وزنی <code dir="ltr">Q_w = 7.64</code> (سهم ۴۵٪ = ۰.۳۴۳۸)، امتیاز آموزشی با احتساب جلسه رهاشده <code dir="ltr">E_s = 78%</code> (سهم ۳۵٪ = ۰.۲۷۳۰)، تکمیل ۳ از ۴ جلسه (سهم ۱۰٪ = ۰.۰۷۵۰) و ۳ روز فعال از سقف ۲۵ روز (سهم ۱۰٪ = ۰.۰۱۲۰) ← جمع <code dir="ltr">Mastery_s = 0.7038</code> ← ضریب عمق یادگیری <code dir="ltr">M_depth = 0.28 + 0.97 × 0.7038 = 0.96x .. 0.98x</code>.
+                  <strong className="text-cyan-300">۲. کالبدشکافی مثال درس علوم (۳ جلسه انجام‌شده + ۱ جلسه رهاشده):</strong> تلاش خام پایه از ۴ جزء کمّی: <code dir="ltr">15.0 (۳ جلسه×۵) + 5.90 (۲۹۵ دقیقه÷۵۰) + 4.60 (۲۳ تست×۰.۲) + 3.0 (۳ روز فعال×۱) = 28.50 XP</code> (و با پاداش کیفیت ۳ جلسه <code dir="ltr">+4.60 = 33.10 XP</code>). با <code dir="ltr">Mastery_s = 0.7038</code>، ضریب عمق یادگیری (همان ضریب اثربخشی) <code dir="ltr">M_depth = 0.28 + 0.97×0.7038 = 0.96x..0.98x</code> است. پس از ضرب در <code dir="ltr">M_depth</code> و کسر جریمه نوبت اول غیبت (<code dir="ltr">r_s(1) = 1.00</code>؛ در حالت کسری <code dir="ltr">0.36 XP</code> برابر <code dir="ltr">27.96 - 0.36 = 27.60 XP</code> در مرحله ۴: مس ساده، و در حالت با پاداش کیفیت <code dir="ltr">31.78 - 1.27 = 30.51 XP</code> در مرحله ۵: مس پلاس با آستانه ۳۰ XP) ثبت می‌شود.
                 </div>
               </div>
             </div>

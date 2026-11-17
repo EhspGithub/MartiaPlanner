@@ -25,14 +25,26 @@ import { PlannerView } from './components/PlannerView.tsx';
 import { ReportsHubView } from './components/ReportsHubView.tsx';
 import { SubjectsView } from './components/SubjectsView.tsx';
 import { SettingsView } from './components/SettingsView.tsx';
-import { MetricsDefinitionsView } from './components/MetricsDefinitionsView.tsx';
+import {
+  MetricsDefinitionsView,
+  COMPREHENSIVE_TABLE_ACCORDION_ID,
+  type GuideExternalNavRequest,
+} from './components/MetricsDefinitionsView.tsx';
 import { PWAInstallButton } from './components/PWAInstallButton.tsx';
+import type { AnalyticsCoefficientsConfig } from './utils/analyticsCoefficients.ts';
 
 type ActiveMenu = 'dashboard' | 'planner' | 'reports' | 'guide' | 'settings' | 'subjects';
 
 export default function App() {
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>('planner');
   const [initialReportSubjectId, setInitialReportSubjectId] = useState<string | null>(null);
+  const [guideNavRequest, setGuideNavRequest] = useState<GuideExternalNavRequest | null>(null);
+  const [highlightedCoeffKey, setHighlightedCoeffKey] = useState<
+    keyof AnalyticsCoefficientsConfig | null
+  >(null);
+  const [settingsInitialSubTab, setSettingsInitialSubTab] = useState<
+    'backup' | 'coefficients'
+  >('backup');
   const [isMorePopoverOpen, setIsMorePopoverOpen] = useState<boolean>(false);
   const moreDesktopRef = useRef<HTMLDivElement | null>(null);
   const moreMobileRef = useRef<HTMLDivElement | null>(null);
@@ -41,6 +53,33 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isDark, setIsDark] = useState<boolean>(false);
+
+  const handleNavigateToCoefficient = useCallback(
+    (coeffKey: keyof AnalyticsCoefficientsConfig) => {
+      setSettingsInitialSubTab('coefficients');
+      setHighlightedCoeffKey(coeffKey);
+      setActiveMenu('settings');
+    },
+    []
+  );
+
+  const handleNavigateToDefinitionFromSettings = useCallback((definitionId: string) => {
+    setGuideNavRequest({
+      targetAccordionId: definitionId,
+      highlightedTableRowId: null,
+      timestamp: Date.now(),
+    });
+    setActiveMenu('guide');
+  }, []);
+
+  const handleNavigateToTableRowFromSettings = useCallback((rowId: string) => {
+    setGuideNavRequest({
+      targetAccordionId: COMPREHENSIVE_TABLE_ACCORDION_ID,
+      highlightedTableRowId: rowId,
+      timestamp: Date.now(),
+    });
+    setActiveMenu('guide');
+  }, []);
 
   // Sync dark mode class on <html>
   useEffect(() => {
@@ -327,7 +366,12 @@ export default function App() {
               />
             )}
 
-            {activeMenu === 'guide' && <MetricsDefinitionsView />}
+            {activeMenu === 'guide' && (
+              <MetricsDefinitionsView
+                externalNavRequest={guideNavRequest}
+                onNavigateToCoefficient={handleNavigateToCoefficient}
+              />
+            )}
 
             {activeMenu === 'subjects' && (
               <SubjectsView
@@ -342,6 +386,10 @@ export default function App() {
                 studyTypes={bootstrapData.studyTypes}
                 priorities={bootstrapData.priorities}
                 onRefreshBootstrap={loadBootstrap}
+                initialSubTab={settingsInitialSubTab}
+                highlightedCoeffKey={highlightedCoeffKey}
+                onNavigateToDefinition={handleNavigateToDefinitionFromSettings}
+                onNavigateToTableRow={handleNavigateToTableRowFromSettings}
               />
             )}
           </>

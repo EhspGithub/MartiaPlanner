@@ -28,6 +28,13 @@ import {
   formatDurationPrimePersian,
 } from './jalali.ts';
 
+import {
+  getAnalyticsCoefficients,
+  getAnalyticsCoefficientsSignature,
+} from './analyticsCoefficients.ts';
+
+export * from './analyticsCoefficients.ts';
+
 // ============================================================================
 // 1. CONFIGURABLE SCORING WEIGHTS (Section 5.4, Section 8, Section 12)
 // ============================================================================
@@ -46,6 +53,20 @@ export const DEFAULT_ANALYTICS_WEIGHTS: AnalyticsWeightsConfig = {
   educationalCompositeWeight: 0.8,
   restrictedControlWeight: 0.2,
 };
+
+export function getActiveAnalyticsWeights(
+  customWeights?: AnalyticsWeightsConfig
+): AnalyticsWeightsConfig {
+  if (customWeights) return customWeights;
+  const c = getAnalyticsCoefficients();
+  return {
+    studyTimeWeight: c.studyTimeWeightPct / 100,
+    exercisesWeight: c.exercisesWeightPct / 100,
+    learningQualityWeight: c.learningQualityWeightPct / 100,
+    educationalCompositeWeight: c.educationalCompositeWeightPct / 100,
+    restrictedControlWeight: c.restrictedControlWeightPct / 100,
+  };
+}
 
 // ============================================================================
 // 2. THREE-TIER ACTIVITY CLASSIFICATION (Section 6)
@@ -520,14 +541,15 @@ export function calculateEducationalCompositeScoreE(
   Q: number | null,
   L: number | null,
   hasLoggedEducationalActivity: boolean,
-  weights: AnalyticsWeightsConfig = DEFAULT_ANALYTICS_WEIGHTS
+  weights?: AnalyticsWeightsConfig
 ): number | null {
   if (!hasLoggedEducationalActivity) return null;
+  const activeWeights = getActiveAnalyticsWeights(weights);
 
   const components: Array<{ val: number; w: number }> = [];
-  if (T !== null) components.push({ val: T, w: weights.studyTimeWeight });
-  if (Q !== null) components.push({ val: Q, w: weights.exercisesWeight });
-  if (L !== null) components.push({ val: L, w: weights.learningQualityWeight });
+  if (T !== null) components.push({ val: T, w: activeWeights.studyTimeWeight });
+  if (Q !== null) components.push({ val: Q, w: activeWeights.exercisesWeight });
+  if (L !== null) components.push({ val: L, w: activeWeights.learningQualityWeight });
 
   if (components.length === 0) return null;
 
@@ -653,14 +675,15 @@ export function calculateRestrictedControlIndexC(
 export function calculateFinalDailyScoreS(
   E: number | null,
   C: number | null,
-  weights: AnalyticsWeightsConfig = DEFAULT_ANALYTICS_WEIGHTS
+  weights?: AnalyticsWeightsConfig
 ): number | null {
   if (E === null && C === null) return null;
   if (E !== null && C === null) return Math.round(E);
   if (E === null && C !== null) return Math.round(C);
 
-  const wE = weights.educationalCompositeWeight;
-  const wC = weights.restrictedControlWeight;
+  const activeWeights = getActiveAnalyticsWeights(weights);
+  const wE = activeWeights.educationalCompositeWeight;
+  const wC = activeWeights.restrictedControlWeight;
   const totalW = wE + wC;
   if (totalW <= 0) return Math.round(E!);
 
@@ -744,7 +767,7 @@ export function evaluateDayPerformance(params: {
     budgetConfig,
     goalConfig,
     categoriesMap,
-    weights = DEFAULT_ANALYTICS_WEIGHTS,
+    weights,
   } = params;
 
   const dayPlans = plans.filter((p) => p.plan_date === dateIso);
@@ -1011,7 +1034,7 @@ export function evaluatePeriodPerformance(params: {
     budgetsMap,
     goalsMap,
     categoriesMap,
-    weights = DEFAULT_ANALYTICS_WEIGHTS,
+    weights,
   } = params;
 
   const plansByDateMap = new Map<string, DailyPlanItem[]>();
@@ -1766,6 +1789,7 @@ export function getLevelRankMeta(level: number): {
  * - Learning quality bonus: +(quality * 0.2) XP on each evaluated study session (max 2 XP/session)
  */
 export function calculateXpFromPlans(plans: DailyPlanItem[]): XpBreakdown {
+  const coeffs = getAnalyticsCoefficients();
   let completedCount = 0;
   let partialCount = 0;
   let actualStudyMinutes = 0;
@@ -1789,23 +1813,23 @@ export function calculateXpFromPlans(plans: DailyPlanItem[]): XpBreakdown {
 
       const q = parseLearningQuality0To10(plan.performance.learning_quality);
       if (q !== null && mins > 0) {
-        rawQualityBonusXp += q * XP_SCALE_WEIGHTS.QUALITY_POINT_MULTIPLIER;
+        rawQualityBonusXp += q * coeffs.xpQualityPointMultiplier;
         qualityEvaluatedCount += 1;
       }
     }
   }
 
   const completedActivitiesXp = roundXp2(
-    completedCount * XP_SCALE_WEIGHTS.COMPLETED_ACTIVITY
+    completedCount * coeffs.xpCompletedActivity
   );
   const partialActivitiesXp = roundXp2(
-    partialCount * XP_SCALE_WEIGHTS.PARTIAL_ACTIVITY
+    partialCount * coeffs.xpPartialActivity
   );
   const studyMinutesXp = roundXp2(
-    actualStudyMinutes / XP_SCALE_WEIGHTS.STUDY_MINUTES_DIVISOR
+    actualStudyMinutes / Math.max(1, coeffs.xpStudyMinutesDivisor)
   );
   const exercisesXp = roundXp2(
-    exercisesCount * XP_SCALE_WEIGHTS.EXERCISE_UNIT
+    exercisesCount * coeffs.xpExerciseUnit
   );
   const qualityBonusXp = roundXp2(rawQualityBonusXp);
 
@@ -2002,13 +2026,13 @@ export interface GlobalXpLedgerResult {
  */
 export function getGlobalInactivityMultiplierR(consecutiveDay: number): number {
   if (consecutiveDay <= 0) return 0;
-  if (consecutiveDay === 1) return 1.0;
-  if (consecutiveDay === 2) return 1.5;
-  if (consecutiveDay === 3) return 2.0;
-  if (consecutiveDay === 4) return 2.5;
-  if (consecutiveDay === 5) return 3.0;
-  if (consecutiveDay === 6) return 3.5;
-  return 4.0;
+  const coeffs = getAnalyticsCoefficients();
+  return roundXp2(
+    Math.min(
+      coeffs.globalStreakEscalationCap,
+      1.0 + coeffs.globalStreakEscalationStep * (consecutiveDay - 1)
+    )
+  );
 }
 
 /**
@@ -2016,11 +2040,13 @@ export function getGlobalInactivityMultiplierR(consecutiveDay: number): number {
  */
 export function getSubjectInactivityMultiplierR(consecutiveMissedSession: number): number {
   if (consecutiveMissedSession <= 0) return 0;
-  if (consecutiveMissedSession === 1) return 1.0;
-  if (consecutiveMissedSession === 2) return 1.35;
-  if (consecutiveMissedSession === 3) return 1.7;
-  if (consecutiveMissedSession === 4) return 2.05;
-  return 2.5;
+  const coeffs = getAnalyticsCoefficients();
+  return roundXp2(
+    Math.min(
+      coeffs.subjectStreakEscalationCap,
+      1.0 + coeffs.subjectStreakEscalationStep * (consecutiveMissedSession - 1)
+    )
+  );
 }
 
 let cachedGlobalLedgerKey = '';
@@ -2039,7 +2065,7 @@ function buildPlansSignature(plans: DailyPlanItem[], todayIso: string): string {
       hash = Math.imul(hash, 16777619);
     }
   }
-  return `${todayIso}:${plans.length}:${hash >>> 0}`;
+  return `${todayIso}:${plans.length}:${hash >>> 0}:${getAnalyticsCoefficientsSignature()}`;
 }
 
 /**
@@ -2198,21 +2224,30 @@ export function evaluateGlobalXpLedger(
         : actualStudyMins > 0
         ? 1
         : 0;
+    const coeffs = getAnalyticsCoefficients();
     const taskFulfillment =
-      (completedStudyCount + partialStudyCount * 0.5) / studyPlans.length;
+      (completedStudyCount + partialStudyCount * coeffs.partialTaskCreditFactor) /
+      studyPlans.length;
+    const wFTime = coeffs.dailyFulfillmentTimeWeightPct;
+    const wFTask = coeffs.dailyFulfillmentTaskWeightPct;
+    const wFTotal = Math.max(1, wFTime + wFTask);
     const fulfillmentRatio = roundXp2(
-      Math.min(1, Math.max(0, 0.6 * timeFulfillment + 0.4 * taskFulfillment))
+      Math.min(
+        1,
+        Math.max(0, (wFTime * timeFulfillment + wFTask * taskFulfillment) / wFTotal)
+      )
     );
 
     const qualEval = calculateWeightedLearningQualityL(studyPlans);
     const hasAcceptableQuality =
-      qualEval.weightedAverage0To10 === null || qualEval.weightedAverage0To10 >= 4;
+      qualEval.weightedAverage0To10 === null ||
+      qualEval.weightedAverage0To10 >= coeffs.effectiveDayMinQualityScore;
 
     // Effective educational activity threshold (Section 1-4):
-    // >= 50% fulfillment of planned educational tasks/time, OR >= 30 mins of real study with acceptable quality
+    // >= threshold% fulfillment of planned educational tasks/time, OR >= min mins of real study with acceptable quality
     const isEffectivelyActive =
-      fulfillmentRatio >= 0.5 ||
-      (actualStudyMins >= 30 &&
+      fulfillmentRatio >= coeffs.effectiveDayFulfillmentThresholdPct / 100 ||
+      (actualStudyMins >= coeffs.effectiveDayMinStudyMinutes &&
         completedStudyCount + partialStudyCount >= 1 &&
         hasAcceptableQuality);
 
@@ -2241,7 +2276,15 @@ export function evaluateGlobalXpLedger(
       activeDayEarnedXps.length > 0
         ? activeDayEarnedXps.reduce((a, b) => a + b, 0) / activeDayEarnedXps.length
         : 12.0;
-    const basePenaltyB = roundXp2(Math.max(1.0, Math.min(10.0, avgActiveDailyXp * 0.1)));
+    const basePenaltyB = roundXp2(
+      Math.max(
+        coeffs.globalBasePenaltyMinXp,
+        Math.min(
+          coeffs.globalBasePenaltyMaxXp,
+          avgActiveDailyXp * (coeffs.globalBasePenaltyRatePct / 100)
+        )
+      )
+    );
     const multiplierR = getGlobalInactivityMultiplierR(consecutiveInactiveDays);
     const unfulfilledRatioM = roundXp2(Math.max(0, 1 - fulfillmentRatio));
 
@@ -2348,12 +2391,19 @@ export function evaluateGlobalXpLedger(
     });
   }
 
+  const coeffsFinal = getAnalyticsCoefficients();
   const avgActiveDailyXpFinal =
     activeDayEarnedXps.length > 0
       ? activeDayEarnedXps.reduce((a, b) => a + b, 0) / activeDayEarnedXps.length
       : 12.0;
   const currentBasePenaltyB = roundXp2(
-    Math.max(1.0, Math.min(10.0, avgActiveDailyXpFinal * 0.1))
+    Math.max(
+      coeffsFinal.globalBasePenaltyMinXp,
+      Math.min(
+        coeffsFinal.globalBasePenaltyMaxXp,
+        avgActiveDailyXpFinal * (coeffsFinal.globalBasePenaltyRatePct / 100)
+      )
+    )
   );
   const currentStreakMultiplierR = getGlobalInactivityMultiplierR(consecutiveInactiveDays);
 
@@ -2526,21 +2576,22 @@ export function calculateSubjectProgression(params: {
 
       const q = parseLearningQuality0To10(p.performance.learning_quality);
       if (q !== null && mins > 0) {
-        rawQualityXp += q * XP_SCALE_WEIGHTS.QUALITY_POINT_MULTIPLIER;
+        rawQualityXp += q * getAnalyticsCoefficients().xpQualityPointMultiplier;
       }
     } else if (p.status !== 'pending') {
       activeDaysSet.add(p.plan_date);
     }
   }
 
+  const coeffs = getAnalyticsCoefficients();
   const distinctActiveDays = activeDaysSet.size;
   const rawBase =
-    completedCount * XP_SCALE_WEIGHTS.COMPLETED_ACTIVITY +
-    partialCount * XP_SCALE_WEIGHTS.PARTIAL_ACTIVITY +
-    totalStudyMinutes / XP_SCALE_WEIGHTS.STUDY_MINUTES_DIVISOR +
-    totalExercises * XP_SCALE_WEIGHTS.EXERCISE_UNIT +
+    completedCount * coeffs.xpCompletedActivity +
+    partialCount * coeffs.xpPartialActivity +
+    totalStudyMinutes / Math.max(1, coeffs.xpStudyMinutesDivisor) +
+    totalExercises * coeffs.xpExerciseUnit +
     rawQualityXp +
-    distinctActiveDays * 1.0;
+    distinctActiveDays * coeffs.xpSubjectActiveDayBonus;
 
   const rawEffortXp = roundXp2(rawBase);
 
@@ -2560,7 +2611,7 @@ export function calculateSubjectProgression(params: {
 
   const taskCompletionRatio =
     subjectPlans.length > 0
-      ? (completedCount + partialCount * 0.5) / subjectPlans.length
+      ? (completedCount + partialCount * coeffs.partialTaskCreditFactor) / subjectPlans.length
       : 0;
   const timeAdherencePct =
     predictedMinutes > 0 ? Math.round((totalStudyMinutes / predictedMinutes) * 100) : 0;
@@ -2572,17 +2623,32 @@ export function calculateSubjectProgression(params: {
     const qualityNorm =
       qualEval.weightedAverage0To10 !== null ? qualEval.weightedAverage0To10 / 10 : 0.55;
     const adherenceNorm = educationalScoreE !== null ? educationalScoreE / 100 : 0.5;
-    const consistencyNorm = Math.min(1, distinctActiveDays / 25);
+    const consistencyNorm = Math.min(
+      1,
+      distinctActiveDays / Math.max(1, coeffs.subjectConsistencyMaxDaysCap)
+    );
 
+    const masteryWTotal = Math.max(
+      1,
+      coeffs.subjectMasteryQualityWeightPct +
+        coeffs.subjectMasteryEduWeightPct +
+        coeffs.subjectMasteryTaskWeightPct +
+        coeffs.subjectMasteryConsistencyWeightPct
+    );
     const masteryIndex =
-      0.45 * qualityNorm +
-      0.35 * adherenceNorm +
-      0.1 * taskCompletionRatio +
-      0.1 * consistencyNorm;
+      (coeffs.subjectMasteryQualityWeightPct * qualityNorm +
+        coeffs.subjectMasteryEduWeightPct * adherenceNorm +
+        coeffs.subjectMasteryTaskWeightPct * taskCompletionRatio +
+        coeffs.subjectMasteryConsistencyWeightPct * consistencyNorm) /
+      masteryWTotal;
 
-    effectivenessMultiplier = 0.28 + 0.97 * masteryIndex;
-    if (qualEval.weightedAverage0To10 !== null && qualEval.weightedAverage0To10 < 4) {
-      effectivenessMultiplier *= 0.65;
+    effectivenessMultiplier =
+      coeffs.subjectDepthBaseIntercept + coeffs.subjectDepthSlope * masteryIndex;
+    if (
+      qualEval.weightedAverage0To10 !== null &&
+      qualEval.weightedAverage0To10 < coeffs.effectiveDayMinQualityScore
+    ) {
+      effectivenessMultiplier *= coeffs.subjectShallowQualityPenaltyFactor;
     }
     effectivenessMultiplier = roundXp2(effectivenessMultiplier);
     grossSubjectXp = roundXp2(rawEffortXp * effectivenessMultiplier);
@@ -2625,19 +2691,19 @@ export function calculateSubjectProgression(params: {
         dayEx += ex;
         const q = parseLearningQuality0To10(sp.performance.learning_quality);
         if (q !== null && m > 0) {
-          dayQualXp += q * XP_SCALE_WEIGHTS.QUALITY_POINT_MULTIPLIER;
+          dayQualXp += q * coeffs.xpQualityPointMultiplier;
         }
       }
     }
 
     const isDayActive = dayActMins > 0 || dayEx > 0 || dayComp > 0 || dayPart > 0;
     const dayRawBase =
-      dayComp * XP_SCALE_WEIGHTS.COMPLETED_ACTIVITY +
-      dayPart * XP_SCALE_WEIGHTS.PARTIAL_ACTIVITY +
-      dayActMins / XP_SCALE_WEIGHTS.STUDY_MINUTES_DIVISOR +
-      dayEx * XP_SCALE_WEIGHTS.EXERCISE_UNIT +
+      dayComp * coeffs.xpCompletedActivity +
+      dayPart * coeffs.xpPartialActivity +
+      dayActMins / Math.max(1, coeffs.xpStudyMinutesDivisor) +
+      dayEx * coeffs.xpExerciseUnit +
       dayQualXp +
-      (isDayActive ? 1.0 : 0);
+      (isDayActive ? coeffs.xpSubjectActiveDayBonus : 0);
 
     const dayPositiveSubjectXp = roundXp2(dayRawBase * effectivenessMultiplier);
 
@@ -2697,11 +2763,18 @@ export function calculateSubjectProgression(params: {
 
     const timeRatio =
       dayPredMins > 0 ? Math.min(1, dayActMins / dayPredMins) : dayActMins > 0 ? 1 : 0;
-    const taskRatio = (dayComp + dayPart * 0.5) / daySubjPlans.length;
-    const sessionFulfillment = roundXp2(0.6 * timeRatio + 0.4 * taskRatio);
+    const taskRatio =
+      (dayComp + dayPart * coeffs.partialTaskCreditFactor) / daySubjPlans.length;
+    const wFTimeSubj = coeffs.dailyFulfillmentTimeWeightPct;
+    const wFTaskSubj = coeffs.dailyFulfillmentTaskWeightPct;
+    const wFTotalSubj = Math.max(1, wFTimeSubj + wFTaskSubj);
+    const sessionFulfillment = roundXp2(
+      (wFTimeSubj * timeRatio + wFTaskSubj * taskRatio) / wFTotalSubj
+    );
 
     const isEffectiveStudySession =
-      sessionFulfillment >= 0.5 || (dayActMins >= 25 && dayComp + dayPart >= 1);
+      sessionFulfillment >= coeffs.effectiveDayFulfillmentThresholdPct / 100 ||
+      (dayActMins >= coeffs.subjectEffectiveMinStudyMinutes && dayComp + dayPart >= 1);
 
     if (isEffectiveStudySession) {
       consecutiveMissedSessions = 0;
@@ -2728,7 +2801,15 @@ export function calculateSubjectProgression(params: {
       activeSessionEarnedXps.length > 0
         ? activeSessionEarnedXps.reduce((a, b) => a + b, 0) / activeSessionEarnedXps.length
         : 6.5;
-    const baseSubjPenaltyB = roundXp2(Math.max(0.6, Math.min(4.5, avgSessionXp * 0.12)));
+    const baseSubjPenaltyB = roundXp2(
+      Math.max(
+        coeffs.subjectBasePenaltyMinXp,
+        Math.min(
+          coeffs.subjectBasePenaltyMaxXp,
+          avgSessionXp * (coeffs.subjectBasePenaltyRatePct / 100)
+        )
+      )
+    );
     const subjMultiplierR = getSubjectInactivityMultiplierR(consecutiveMissedSessions);
     const unfulfilledM = roundXp2(Math.max(0, 1 - sessionFulfillment));
     const rawSubjPenalty = roundXp2(baseSubjPenaltyB * subjMultiplierR * unfulfilledM);
@@ -2845,7 +2926,9 @@ export function calculateSubjectProgression(params: {
 
   if (
     consecutiveMissedSessions >= 3 ||
-    (daysSinceLastStudy !== null && daysSinceLastStudy > 12 && sortedDates.length >= 2)
+    (daysSinceLastStudy !== null &&
+      daysSinceLastStudy > coeffs.subjectCriticalDaysThreshold &&
+      sortedDates.length >= 2)
   ) {
     continuityStatus = 'critical';
     continuityStatusLabelFa = 'استمرار ضعیف';
@@ -2861,7 +2944,7 @@ export function calculateSubjectProgression(params: {
       : `۲ نوبت متوالی از برنامه درس «${subjectName}» انجام نشده و شامل جریمه عدم استمرار شده است`;
   } else if (
     consecutiveMissedSessions === 1 ||
-    (daysSinceLastStudy !== null && daysSinceLastStudy > 6)
+    (daysSinceLastStudy !== null && daysSinceLastStudy > coeffs.subjectAttentionDaysThreshold)
   ) {
     continuityStatus = 'attention';
     continuityStatusLabelFa = 'نیازمند توجه';
@@ -3125,12 +3208,22 @@ export function analyzeXpVelocityAndProgress(params: {
       ? sorted7dXp.slice(1, 6).reduce((s, v) => s + v, 0) / 5
       : dailyRate7dCalendar;
 
+  const vCoeffs = getAnalyticsCoefficients();
+  const vWTotal = Math.max(
+    1,
+    vCoeffs.velocityCalendarWeightPct +
+      vCoeffs.velocityAccountableWeightPct +
+      vCoeffs.velocityTrimmedWeightPct
+  );
   const dailyRate7dEffective =
     effectiveNet7d > 0
       ? Math.max(
           0.1,
           roundRate1(
-            dailyRate7dCalendar * 0.45 + accountableRate7d * 0.35 + trimmedSum7d * 0.2
+            (dailyRate7dCalendar * vCoeffs.velocityCalendarWeightPct +
+              accountableRate7d * vCoeffs.velocityAccountableWeightPct +
+              trimmedSum7d * vCoeffs.velocityTrimmedWeightPct) /
+              vWTotal
           )
         )
       : 0;
@@ -3361,11 +3454,11 @@ export function analyzeXpVelocityAndProgress(params: {
   const targetRecoveryStudyMins = 60;
   const targetRecoveryTests = 15;
   const recoveryChallengeXp = roundXp2(
-    XP_SCALE_WEIGHTS.COMPLETED_ACTIVITY +
-      targetRecoveryStudyMins / XP_SCALE_WEIGHTS.STUDY_MINUTES_DIVISOR +
-      targetRecoveryTests * XP_SCALE_WEIGHTS.EXERCISE_UNIT +
-      8 * XP_SCALE_WEIGHTS.QUALITY_POINT_MULTIPLIER
-  ); // 10.8 XP
+    vCoeffs.xpCompletedActivity +
+      targetRecoveryStudyMins / Math.max(1, vCoeffs.xpStudyMinutesDivisor) +
+      targetRecoveryTests * vCoeffs.xpExerciseUnit +
+      8 * vCoeffs.xpQualityPointMultiplier
+  ); // 10.8 XP at default coefficients
   const nextGoalName =
     levelProgress.nextStageNameEn || levelProgress.stageNameEn;
   const recoveryChallengeTextPersian = hasPerformanceDropWarning

@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   ArchiveRestore,
   FlaskConical,
+  Sliders,
 } from 'lucide-react';
 import type {
   ActivityCategory,
@@ -44,12 +45,25 @@ import {
   setSmartReminderEnabled,
   SMART_REMINDER_EVENT_NAME,
 } from './StudyReminderManager.tsx';
+import { CoefficientsSettingsPanel } from './CoefficientsSettingsPanel.tsx';
+import type { AnalyticsCoefficientsConfig } from '../utils/analyticsCoefficients.ts';
 
 interface SettingsViewProps {
   categories: ActivityCategory[];
   studyTypes: StudyActivityType[];
   priorities: PriorityLevel[];
   onRefreshBootstrap: () => Promise<void>;
+  initialSubTab?:
+    | 'backup'
+    | 'sampleData'
+    | 'coefficients'
+    | 'categories'
+    | 'studyTypes'
+    | 'priorities'
+    | 'github';
+  highlightedCoeffKey?: keyof AnalyticsCoefficientsConfig | null;
+  onNavigateToDefinition?: (definitionId: string) => void;
+  onNavigateToTableRow?: (rowId: string) => void;
 }
 
 const ACTIVITY_GROUP_LABELS: Record<ActivityGroupType, string> = {
@@ -82,10 +96,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   studyTypes,
   priorities,
   onRefreshBootstrap,
+  initialSubTab,
+  highlightedCoeffKey,
+  onNavigateToDefinition,
+  onNavigateToTableRow,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'backup' | 'sampleData' | 'categories' | 'studyTypes' | 'priorities' | 'github'
-  >('backup');
+    | 'backup'
+    | 'sampleData'
+    | 'coefficients'
+    | 'categories'
+    | 'studyTypes'
+    | 'priorities'
+    | 'github'
+  >(initialSubTab || 'backup');
+
+  useEffect(() => {
+    if (initialSubTab) {
+      setActiveSubTab(initialSubTab);
+    }
+  }, [initialSubTab]);
+
+  useEffect(() => {
+    if (highlightedCoeffKey) {
+      setActiveSubTab('coefficients');
+    }
+  }, [highlightedCoeffKey]);
 
   // Smart Study Reminder visibility setting
   const [smartReminderEnabledState, setSmartReminderEnabledState] = useState<boolean>(() =>
@@ -838,6 +874,19 @@ git push -u origin main`;
 
         <button
           type="button"
+          onClick={() => setActiveSubTab('coefficients')}
+          className={`flex items-center justify-center sm:justify-start gap-1.5 px-3 sm:px-4 py-2.5 text-[11px] sm:text-xs font-extrabold rounded-xl border transition-all cursor-pointer min-h-[40px] ${
+            activeSubTab === 'coefficients'
+              ? 'bg-white dark:bg-slate-900 border-indigo-400 dark:border-indigo-500 text-indigo-600 dark:text-indigo-400 shadow-xs'
+              : 'bg-white/60 dark:bg-slate-900/40 sm:bg-transparent border-slate-300/80 dark:border-slate-700/80 sm:border-transparent text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <Sliders className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">تنظیم ضرایب</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveSubTab('github')}
           className={`flex items-center justify-center sm:justify-start gap-1.5 px-3 sm:px-4 py-2.5 text-[11px] sm:text-xs font-semibold rounded-xl border transition-all cursor-pointer min-h-[40px] ${
             activeSubTab === 'github'
@@ -849,6 +898,20 @@ git push -u origin main`;
           <span className="truncate">اتصال به GitHub و خروجی</span>
         </button>
       </div>
+
+      {/* =====================================================================
+          TAB: COEFFICIENTS SETTINGS («تنظیم ضرایب»)
+      ===================================================================== */}
+      {activeSubTab === 'coefficients' && (
+        <CoefficientsSettingsPanel
+          highlightedCoeffKey={highlightedCoeffKey}
+          onNavigateToDefinition={onNavigateToDefinition}
+          onNavigateToTableRow={onNavigateToTableRow}
+          onCoefficientsUpdated={() => {
+            void onRefreshBootstrap();
+          }}
+        />
+      )}
 
       {/* =====================================================================
           TAB 1 (DEFAULT): SECTION 4 — COMPREHENSIVE BACKUP & RESTORE

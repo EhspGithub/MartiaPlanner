@@ -38,8 +38,30 @@ initDatabase();
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-// In-memory store for OAuth tokens received via GitHub OAuth popup flow
-let storedGitHubToken: string | null = process.env.GITHUB_TOKEN || null;
+const GITHUB_TOKEN_CACHE_FILE = path.join(path.dirname(DB_FILE_PATH), '.github_token');
+
+function loadCachedGitHubToken(): string | null {
+  if (process.env.GITHUB_TOKEN && process.env.GITHUB_TOKEN.trim()) {
+    return process.env.GITHUB_TOKEN.trim();
+  }
+  try {
+    if (fs.existsSync(GITHUB_TOKEN_CACHE_FILE)) {
+      const t = fs.readFileSync(GITHUB_TOKEN_CACHE_FILE, 'utf-8').trim();
+      if (t) return t;
+    }
+  } catch {}
+  return null;
+}
+
+function saveCachedGitHubToken(token: string) {
+  try {
+    fs.mkdirSync(path.dirname(GITHUB_TOKEN_CACHE_FILE), { recursive: true });
+    fs.writeFileSync(GITHUB_TOKEN_CACHE_FILE, token.trim(), { encoding: 'utf-8', mode: 0o600 });
+  } catch {}
+}
+
+// Persistent + in-memory store for GitHub token
+let storedGitHubToken: string | null = loadCachedGitHubToken();
 
 // ============================================================================
 // 1. BOOTSTRAP & SYSTEM METADATA API
@@ -2013,7 +2035,12 @@ app.get(['/auth/github/callback', '/auth/github/callback/'], githubCallbackHandl
 app.post('/api/github/push', async (req, res) => {
   try {
     const { token, repoName = 'MartiaPlanner', version, commitMessage, isPrivate = false } = req.body;
-    const finalToken = (token && String(token).trim()) || storedGitHubToken;
+    const providedToken = token && String(token).trim();
+    if (providedToken) {
+      storedGitHubToken = providedToken;
+      saveCachedGitHubToken(providedToken);
+    }
+    const finalToken = providedToken || storedGitHubToken || loadCachedGitHubToken();
 
     if (!finalToken) {
       return res.status(400).json({
