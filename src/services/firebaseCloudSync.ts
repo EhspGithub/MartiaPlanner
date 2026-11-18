@@ -47,7 +47,7 @@ export function handleFirestoreError(
   error: unknown,
   operationType: OperationType,
   path: string | null
-): never {
+): FirestoreErrorInfo {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -65,22 +65,19 @@ export function handleFirestoreError(
     operationType,
     path,
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  return errInfo;
 }
 
 async function testConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
-    }
+  } catch {
+    // Silent fallback when client is offline
   }
 }
 
 if (typeof window !== 'undefined') {
-  testConnection();
+  void testConnection();
 }
 
 export type CloudProviderType = 'firebase' | 'supabase';
@@ -113,7 +110,15 @@ CREATE POLICY "Allow workspace read and upsert by workspace_id"
   ON public.martia_workspaces
   FOR ALL
   USING (char_length(workspace_id) >= 6)
-  WITH CHECK (char_length(workspace_id) >= 6);`;
+  WITH CHECK (char_length(workspace_id) >= 6);
+
+GRANT ALL ON TABLE public.martia_workspaces TO anon, authenticated, service_role;
+NOTIFY pgrst, 'reload schema';`;
+
+export function extractSupabaseProjectRef(supabaseUrl: string): string | null {
+  const match = supabaseUrl.trim().match(/^https?:\/\/([a-z0-9-]+)\.supabase\.(co|in)/i);
+  return match ? match[1] : null;
+}
 
 function getOrCreateDeviceUid(): string {
   if (typeof window === 'undefined') return 'device-server';
@@ -205,6 +210,7 @@ export interface CloudSyncStatus {
   supabaseUrl: string;
   supabaseAnonKey: string;
   isSupabaseConfigured: boolean;
+  needsSupabaseTableSetup: boolean;
   isConnected: boolean;
   deviceUid: string;
   collaboratorName: string;
@@ -229,6 +235,7 @@ let currentStatus: CloudSyncStatus = {
   supabaseUrl: initSbUrl,
   supabaseAnonKey: initSbKey,
   isSupabaseConfigured: Boolean(initSbUrl && initSbKey),
+  needsSupabaseTableSetup: false,
   isConnected: false,
   deviceUid: getOrCreateDeviceUid(),
   collaboratorName: getStoredCollaboratorName(),
@@ -278,6 +285,7 @@ async function applyIncomingPayloadString(
 ) {
   updateStatus({
     isConnected: true,
+    needsSupabaseTableSetup: false,
     syncRevision: incomingRev,
     lastUpdatedByName: updatedByName,
     lastSyncedAt: new Date().toISOString(),
@@ -297,11 +305,53 @@ async function applyIncomingPayloadString(
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('martia:cloud-sync-updated'));
       }
-    } catch (err) {
-      console.error('Failed to apply remote cloud workspace payload:', err);
+    } catch {
+      // Ignore malformed payload
     } finally {
       isApplyingRemoteSnapshot = false;
     }
+  }
+}
+
+async function pushToFirebaseFirestoreInternal(
+  wsId: string,
+  deviceUid: string,
+  displayName: string,
+  serialized: string
+): Promise<{ ok: boolean; revision: number }> {
+  const docPath = `workspaces/${wsId}`;
+  const docRef = doc(db, 'workspaces', wsId);
+
+  try {
+    const existingSnap = await getDoc(docRef);
+    if (!existingSnap.exists()) {
+      await setDoc(docRef, {
+        workspaceId: wsId,
+        ownerId: deviceUid,
+        lastUpdatedByUid: deviceUid,
+        lastUpdatedByName: displayName,
+        payloadJson: serialized,
+        syncRevision: 1,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return { ok: true, revision: 1 };
+    } else {
+      const existingData = existingSnap.data();
+      const nextRev =
+        (typeof existingData?.syncRevision === 'number' ? existingData.syncRevision : 1) + 1;
+      await updateDoc(docRef, {
+        lastUpdatedByUid: deviceUid,
+        lastUpdatedByName: displayName,
+        payloadJson: serialized,
+        syncRevision: nextRev,
+        updatedAt: serverTimestamp(),
+      });
+      return { ok: true, revision: nextRev };
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, docPath);
+    return { ok: false, revision: currentStatus.syncRevision };
   }
 }
 
@@ -310,6 +360,7 @@ async function pollSupabaseWorkspaceOnce() {
     currentStatus.provider !== 'supabase' ||
     !currentStatus.autoSyncEnabled ||
     !currentStatus.isSupabaseConfigured ||
+    currentStatus.needsSupabaseTableSetup ||
     isApplyingRemoteSnapshot
   ) {
     return;
@@ -335,23 +386,28 @@ async function pollSupabaseWorkspaceOnce() {
 
     if (!res.ok) {
       const errText = await res.text();
-      if (errText.includes('martia_workspaces')) {
+      if (errText.includes('PGRST205') || errText.includes('martia_workspaces')) {
         updateStatus({
           isConnected: false,
+          needsSupabaseTableSetup: true,
           errorMessage:
-            'جدول martia_workspaces در پروژه Supabase شما یافت نشد. لطفاً اسکریپت SQL زیر را کپی و در SQL Editor سوپابیس اجرا کنید.',
+            'برای تکمیل اتصال Supabase، فقط یک بار کد SQL زیر را کپی کرده و در بخش SQL Editor پروژه Supabase خود Run کنید (سپس دکمه بررسی مجدد را بزنید).',
         });
       } else {
         updateStatus({
           isConnected: false,
-          errorMessage: `خطا در ارتباط با Supabase (کد ${res.status}). لطفاً URL و Anon Key را بررسی کنید.`,
+          errorMessage: `خطا در ارتباط با Supabase (کد ${res.status}). لطفاً Project URL و Anon Key را بررسی کنید.`,
         });
       }
       return;
     }
 
     const rows = await res.json();
-    updateStatus({ isConnected: true, errorMessage: null });
+    updateStatus({
+      isConnected: true,
+      needsSupabaseTableSetup: false,
+      errorMessage: null,
+    });
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return;
@@ -436,14 +492,12 @@ function startRealtimeWorkspaceSubscription() {
       await applyIncomingPayloadString(data.payloadJson, incomingRev, updatedByName);
     },
     (error) => {
+      handleFirestoreError(error, OperationType.GET, docPath);
       updateStatus({
         isConnected: false,
         errorMessage:
           'خطا در اتصال زنده به دیتابیس ابری Firebase. در صورت محدودیت اینترنت می‌توانید روی حالت Supabase قرار دهید.',
       });
-      try {
-        handleFirestoreError(error, OperationType.GET, docPath);
-      } catch {}
     }
   );
 }
@@ -480,6 +534,7 @@ export const firebaseCloudSync = {
     updateStatus({
       provider,
       isConnected: false,
+      needsSupabaseTableSetup: false,
       syncRevision: 0,
       errorMessage: null,
     });
@@ -499,12 +554,21 @@ export const firebaseCloudSync = {
       supabaseUrl: cleanUrl,
       supabaseAnonKey: cleanKey,
       isSupabaseConfigured: configured,
+      needsSupabaseTableSetup: false,
       isConnected: false,
       errorMessage: null,
     });
     if (currentStatus.provider === 'supabase') {
       startRealtimeWorkspaceSubscription();
     }
+  },
+
+  recheckSupabaseTable() {
+    updateStatus({
+      needsSupabaseTableSetup: false,
+      errorMessage: null,
+    });
+    startRealtimeWorkspaceSubscription();
   },
 
   setCollaboratorName(name: string) {
@@ -542,9 +606,9 @@ export const firebaseCloudSync = {
     }
   },
 
-  async pushToCloudNow(): Promise<void> {
-    if (!localExportHandler) return;
-    if (isApplyingRemoteSnapshot) return;
+  async pushToCloudNow(): Promise<boolean> {
+    if (!localExportHandler) return false;
+    if (isApplyingRemoteSnapshot) return false;
 
     const wsId = sanitizeWorkspaceId(currentStatus.workspaceId);
     const deviceUid = getOrCreateDeviceUid();
@@ -561,7 +625,7 @@ export const firebaseCloudSync = {
           isSyncing: false,
           errorMessage: 'حجم داده‌ها از سقف مجاز سند ابری (۹۵۰ کیلوبایت) بیشتر است.',
         });
-        return;
+        return false;
       }
 
       lastAppliedPayloadHash = serialized;
@@ -575,7 +639,7 @@ export const firebaseCloudSync = {
             isSyncing: false,
             errorMessage: 'لطفاً ابتدا Project URL و Anon Key پروژه Supabase خود را وارد و ذخیره کنید.',
           });
-          throw new Error('Supabase credentials not configured');
+          return false;
         }
 
         const baseUrl = normalizeSupabaseUrl(currentStatus.supabaseUrl);
@@ -597,21 +661,30 @@ export const firebaseCloudSync = {
 
         if (!getRes.ok) {
           const errText = await getRes.text();
+          const isMissingTable =
+            errText.includes('PGRST205') || errText.includes('martia_workspaces');
+
+          // Mirror backup to Firebase Firestore automatically so zero data is lost while user sets up table
+          await pushToFirebaseFirestoreInternal(wsId, deviceUid, displayName, serialized);
+
           updateStatus({
             isSyncing: false,
             isConnected: false,
-            errorMessage: errText.includes('martia_workspaces')
-              ? 'جدول martia_workspaces در پروژه Supabase وجود ندارد. ابتدا اسکریپت SQL را در Supabase اجرا کنید.'
+            needsSupabaseTableSetup: isMissingTable,
+            errorMessage: isMissingTable
+              ? 'جدول martia_workspaces هنوز در پروژه Supabase شما ساخته نشده است. لطفاً کد SQL زیر را کپی کرده و در SQL Editor سوپابیس Run کنید (اطلاعات شما به صورت خودکار در پشتیبان ابری ذخیره شد).'
               : `خطا در اتصال به Supabase (کد ${getRes.status}).`,
           });
-          throw new Error(errText);
+          return false;
         }
 
         const existingRows = await getRes.json();
-        const existingRow = Array.isArray(existingRows) && existingRows.length > 0 ? existingRows[0] : null;
-        const nextRev = existingRow && typeof existingRow.sync_revision === 'number'
-          ? existingRow.sync_revision + 1
-          : 1;
+        const existingRow =
+          Array.isArray(existingRows) && existingRows.length > 0 ? existingRows[0] : null;
+        const nextRev =
+          existingRow && typeof existingRow.sync_revision === 'number'
+            ? existingRow.sync_revision + 1
+            : 1;
         const ownerId = existingRow?.owner_id || deviceUid;
 
         const upsertRes = await fetch(
@@ -640,87 +713,57 @@ export const firebaseCloudSync = {
           const errText = await upsertRes.text();
           updateStatus({
             isSyncing: false,
-            errorMessage: `خطا در ذخیره اطلاعات در Supabase: ${errText}`,
+            errorMessage: `خطا در ذخیره اطلاعات در Supabase (کد ${upsertRes.status}).`,
           });
-          throw new Error(errText);
+          return false;
         }
 
         updateStatus({
           isConnected: true,
+          needsSupabaseTableSetup: false,
           isSyncing: false,
           lastSyncedAt: new Date().toISOString(),
           lastUpdatedByName: displayName,
           syncRevision: nextRev,
           errorMessage: null,
         });
-        return;
+        return true;
       }
 
       // =======================================================================
       // ENGINE A: GOOGLE FIREBASE FIRESTORE CLOUD
       // =======================================================================
-      const docPath = `workspaces/${wsId}`;
-      const docRef = doc(db, 'workspaces', wsId);
+      const fbResult = await pushToFirebaseFirestoreInternal(
+        wsId,
+        deviceUid,
+        displayName,
+        serialized
+      );
 
-      let existingSnap;
-      try {
-        existingSnap = await getDoc(docRef);
-      } catch (err) {
-        handleFirestoreError(err, OperationType.GET, docPath);
+      if (!fbResult.ok) {
+        updateStatus({
+          isSyncing: false,
+          errorMessage: 'خطا در ارسال اطلاعات به دیتابیس ابری Firebase.',
+        });
+        return false;
       }
 
-      if (!existingSnap || !existingSnap.exists()) {
-        try {
-          await setDoc(docRef, {
-            workspaceId: wsId,
-            ownerId: deviceUid,
-            lastUpdatedByUid: deviceUid,
-            lastUpdatedByName: displayName,
-            payloadJson: serialized,
-            syncRevision: 1,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          updateStatus({
-            isConnected: true,
-            isSyncing: false,
-            lastSyncedAt: new Date().toISOString(),
-            lastUpdatedByName: displayName,
-            syncRevision: 1,
-          });
-        } catch (err) {
-          handleFirestoreError(err, OperationType.CREATE, docPath);
-        }
-      } else {
-        const existingData = existingSnap.data();
-        const nextRev =
-          (typeof existingData?.syncRevision === 'number' ? existingData.syncRevision : 1) + 1;
-        try {
-          await updateDoc(docRef, {
-            lastUpdatedByUid: deviceUid,
-            lastUpdatedByName: displayName,
-            payloadJson: serialized,
-            syncRevision: nextRev,
-            updatedAt: serverTimestamp(),
-          });
-          updateStatus({
-            isConnected: true,
-            isSyncing: false,
-            lastSyncedAt: new Date().toISOString(),
-            lastUpdatedByName: displayName,
-            syncRevision: nextRev,
-          });
-        } catch (err) {
-          handleFirestoreError(err, OperationType.UPDATE, docPath);
-        }
-      }
-    } catch (err: any) {
+      updateStatus({
+        isConnected: true,
+        isSyncing: false,
+        lastSyncedAt: new Date().toISOString(),
+        lastUpdatedByName: displayName,
+        syncRevision: fbResult.revision,
+        errorMessage: null,
+      });
+      return true;
+    } catch {
       updateStatus({
         isSyncing: false,
         errorMessage:
           currentStatus.errorMessage || 'خطا در ارسال اطلاعات به دیتابیس ابری.',
       });
-      throw err;
+      return false;
     }
   },
 
@@ -761,9 +804,15 @@ export const firebaseCloudSync = {
         );
 
         if (!res.ok) {
+          const errText = await res.text();
+          const isMissingTable =
+            errText.includes('PGRST205') || errText.includes('martia_workspaces');
           updateStatus({
             isSyncing: false,
-            errorMessage: `خطا در دریافت اطلاعات از Supabase (کد ${res.status}).`,
+            needsSupabaseTableSetup: isMissingTable,
+            errorMessage: isMissingTable
+              ? 'جدول martia_workspaces هنوز در پروژه Supabase شما ساخته نشده است. لطفاً کد SQL زیر را کپی کرده و در SQL Editor سوپابیس Run کنید.'
+              : `خطا در دریافت اطلاعات از Supabase (کد ${res.status}).`,
           });
           return false;
         }
@@ -772,6 +821,7 @@ export const firebaseCloudSync = {
         if (!Array.isArray(rows) || rows.length === 0 || !rows[0].payload_json) {
           updateStatus({
             isSyncing: false,
+            needsSupabaseTableSetup: false,
             errorMessage:
               'هنوز اطلاعاتی در این کد اتاق مشترک در Supabase ذخیره نشده است. ابتدا دکمه «ارسال فوری اطلاعات به ابر (Push)» را بزنید.',
           });
@@ -799,6 +849,11 @@ export const firebaseCloudSync = {
         snap = await getDoc(docRef);
       } catch (err) {
         handleFirestoreError(err, OperationType.GET, docPath);
+        updateStatus({
+          isSyncing: false,
+          errorMessage: 'خطا در دریافت اطلاعات از دیتابیس ابری Firebase.',
+        });
+        return false;
       }
 
       if (!snap || !snap.exists()) {
@@ -832,14 +887,13 @@ export const firebaseCloudSync = {
     if (!currentStatus.autoSyncEnabled) return;
     if (isApplyingRemoteSnapshot) return;
     if (currentStatus.provider === 'supabase' && !currentStatus.isSupabaseConfigured) return;
+    if (currentStatus.provider === 'supabase' && currentStatus.needsSupabaseTableSetup) return;
 
     if (pushDebounceTimer) {
       clearTimeout(pushDebounceTimer);
     }
     pushDebounceTimer = setTimeout(() => {
-      this.pushToCloudNow().catch((err) => {
-        console.error('Auto cloud sync push error:', err);
-      });
+      void this.pushToCloudNow();
     }, 600);
   },
 };

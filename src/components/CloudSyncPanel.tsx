@@ -15,10 +15,12 @@ import {
   Code2,
   ChevronDown,
   ChevronUp,
+  ExternalLink,
 } from 'lucide-react';
 import {
   firebaseCloudSync,
   SUPABASE_SETUP_SQL_SCRIPT,
+  extractSupabaseProjectRef,
   type CloudSyncStatus,
   type CloudProviderType,
 } from '../services/firebaseCloudSync.ts';
@@ -43,9 +45,17 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
   useEffect(() => {
     const unsub = firebaseCloudSync.subscribeStatus((newStatus) => {
       setStatus(newStatus);
+      if (newStatus.needsSupabaseTableSetup) {
+        setShowSqlGuide(true);
+      }
     });
     return unsub;
   }, []);
+
+  const supabaseProjectRef = extractSupabaseProjectRef(sbUrlInput || status.supabaseUrl);
+  const supabaseSqlEditorUrl = supabaseProjectRef
+    ? `https://supabase.com/dashboard/project/${supabaseProjectRef}/sql/new`
+    : 'https://supabase.com/dashboard/projects';
 
   const handleSelectProvider = (provider: CloudProviderType) => {
     setActionError(null);
@@ -72,7 +82,7 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
       return;
     }
     firebaseCloudSync.setSupabaseCredentials(cleanUrl, cleanKey);
-    setActionMessage('تنظیمات اتصال به پروژه Supabase شما با موفقیت ذخیره و فعال شد.');
+    setActionMessage('تنظیمات اتصال به پروژه Supabase شما ذخیره شد و در حال بررسی جدول است...');
   };
 
   const handleCopySqlScript = async () => {
@@ -81,6 +91,19 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
       setCopiedSql(true);
       setTimeout(() => setCopiedSql(false), 2500);
     } catch {}
+  };
+
+  const handleRecheckTableAfterSql = async () => {
+    setActionError(null);
+    setActionMessage(null);
+    firebaseCloudSync.recheckSupabaseTable();
+    const ok = await firebaseCloudSync.pushToCloudNow();
+    if (ok) {
+      setActionMessage(
+        'جدول martia_workspaces در پروژه Supabase شما شناسایی شد و اطلاعات شما با موفقیت در آن ذخیره گردید!'
+      );
+      setShowSqlGuide(false);
+    }
   };
 
   const handleSaveCollaboratorName = () => {
@@ -111,37 +134,28 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
   };
 
   const handlePushNow = async () => {
-    try {
-      setActionError(null);
-      setActionMessage(null);
-      firebaseCloudSync.setCollaboratorName(nameInput);
-      await firebaseCloudSync.pushToCloudNow();
+    setActionError(null);
+    setActionMessage(null);
+    firebaseCloudSync.setCollaboratorName(nameInput);
+    const ok = await firebaseCloudSync.pushToCloudNow();
+    if (ok) {
       setActionMessage(
         `تمامی اطلاعات شما با موفقیت در دیتابیس ابری (${
           status.provider === 'firebase' ? 'Firebase Firestore' : 'Supabase'
         }) ذخیره شد و هم‌اکنون روی گوشی و ویندوز سایر اعضای این اتاق مشترک قابل مشاهده است.`
       );
-    } catch (err: any) {
-      setActionError(
-        status.errorMessage ||
-          'خطا در ارسال اطلاعات به دیتابیس ابری. لطفاً اتصال اینترنت یا تنظیمات موتور انتخابی را بررسی کنید.'
-      );
     }
   };
 
   const handlePullNow = async () => {
-    try {
-      setActionError(null);
-      setActionMessage(null);
-      const ok = await firebaseCloudSync.pullFromCloudNow();
-      if (ok) {
-        if (onDataSynced) {
-          await onDataSynced();
-        }
-        setActionMessage('آخرین اطلاعات ذخیره‌شده در دیتابیس ابری با موفقیت دریافت و جایگزین شد.');
+    setActionError(null);
+    setActionMessage(null);
+    const ok = await firebaseCloudSync.pullFromCloudNow();
+    if (ok) {
+      if (onDataSynced) {
+        await onDataSynced();
       }
-    } catch (err: any) {
-      setActionError('خطا در دریافت اطلاعات از دیتابیس ابری.');
+      setActionMessage('آخرین اطلاعات ذخیره‌شده در دیتابیس ابری با موفقیت دریافت و جایگزین شد.');
     }
   };
 
@@ -176,6 +190,8 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
                 <span>
                   {status.isConnected
                     ? `متصل به ${status.provider === 'firebase' ? 'Firebase Firestore' : 'Supabase'}`
+                    : status.provider === 'supabase' && status.needsSupabaseTableSetup
+                    ? 'نیازمند اجرای ۱ بار اسکریپت ساخت جدول در Supabase'
                     : status.provider === 'supabase' && !status.isSupabaseConfigured
                     ? 'منتظر وارد کردن کلیدهای Supabase'
                     : status.autoSyncEnabled
@@ -187,7 +203,7 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
             <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed text-justify">
               شما می‌توانید به دلخواه خود بین دو سرویس ابری قدرتمند{' '}
               <strong className="text-indigo-700 dark:text-indigo-300">
-                Google Firebase Firestore (از پیش متصل و آماده)
+                Google Firebase Firestore (از پیش متصل و آماده بدون هیچ تنظیمات)
               </strong>{' '}
               یا{' '}
               <strong className="text-emerald-700 dark:text-emerald-300">
@@ -294,29 +310,50 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
             </button>
           </div>
 
-          {showSqlGuide && (
-            <div className="rounded-2xl bg-slate-950 text-slate-100 p-4 border border-slate-800 space-y-3">
+          {(showSqlGuide || status.needsSupabaseTableSetup) && (
+            <div className="rounded-2xl bg-slate-950 text-slate-100 p-4 border-2 border-amber-500/60 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-xs font-extrabold text-emerald-400">
-                  فقط یک بار کد زیر را در بخش SQL Editor پروژه Supabase خود Paste و Run کنید:
+                <div className="text-xs font-extrabold text-amber-300">
+                  گام نهایی (فقط ۱ بار): کد SQL زیر را کپی کرده و در صفحه SQL Editor پروژه Supabase خود Paste و Run کنید:
                 </div>
-                <button
-                  type="button"
-                  onClick={handleCopySqlScript}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black cursor-pointer"
-                >
-                  {copiedSql ? (
-                    <>
-                      <Check className="w-3.5 h-3.5" />
-                      <span>کپی شد!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>کپی کد SQL ساخت جدول</span>
-                    </>
-                  )}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopySqlScript}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black cursor-pointer"
+                  >
+                    {copiedSql ? (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>کپی شد!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>۱. کپی کد SQL ساخت جدول</span>
+                      </>
+                    )}
+                  </button>
+
+                  <a
+                    href={supabaseSqlEditorUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black"
+                  >
+                    <span>۲. باز کردن مستقیم SQL Editor سوپابیس</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={handleRecheckTableAfterSql}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>۳. اجرا کردم — بررسی و ذخیره در Supabase</span>
+                  </button>
+                </div>
               </div>
               <pre
                 dir="ltr"
@@ -481,8 +518,8 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
             </div>
           )}
           {(actionError || status.errorMessage) && (
-            <div className="rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-800 px-3.5 py-2.5 text-xs font-bold text-rose-800 dark:text-rose-200 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 px-3.5 py-2.5 text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
               <span>{actionError || status.errorMessage}</span>
             </div>
           )}
