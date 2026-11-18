@@ -48,6 +48,7 @@ import {
 import { CoefficientsSettingsPanel } from './CoefficientsSettingsPanel.tsx';
 import { CloudSyncPanel } from './CloudSyncPanel.tsx';
 import type { AnalyticsCoefficientsConfig } from '../utils/analyticsCoefficients.ts';
+import { downloadStandaloneAppHtml } from '../utils/standaloneHtmlExport.ts';
 
 interface SettingsViewProps {
   categories: ActivityCategory[];
@@ -203,6 +204,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     };
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [standaloneHtmlDownloading, setStandaloneHtmlDownloading] = useState<
+    'pure' | 'embedded' | null
+  >(null);
+  const [standaloneHtmlStatus, setStandaloneHtmlStatus] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   // Section 3: External Release Notes (CHANGELOG.md) Modal Viewer state
   const [isChangelogModalOpen, setIsChangelogModalOpen] = useState<boolean>(false);
@@ -1794,30 +1802,100 @@ git push -u origin main`;
               </button>
             </form>
 
-            {/* Standalone HTML File Card */}
-            <div className="rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 p-4 space-y-2">
-              <div className="flex items-center justify-between">
+            {/* Standalone HTML File Card — Authenticated Blob Download (Cookie/Interstitial-Proof) */}
+            <div className="rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 p-4 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-xs font-bold text-indigo-900 dark:text-indigo-200">
                   <Download className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                  <span>دانلود فایل مستقل HTML (بدون نیاز به سرور)</span>
+                  <span>دانلود فایل مستقل HTML (بدون نیاز به سرور و اینترنت)</span>
                 </div>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 shrink-0">
                   v{APP_VERSION}
                 </span>
               </div>
-              <p className="text-xs text-indigo-700/80 dark:text-indigo-300/80 leading-relaxed">
-                این فایل (MartiaPlanner-v{APP_VERSION}.html) شامل کل کدهای فرانت‌اند، استایل‌ها و پایگاه داده محلی است و با دوبار کلیک در هر مرورگری بدون نیاز به نصب یا اینترنت اجرا می‌شود.
+              <p className="text-xs text-indigo-700/80 dark:text-indigo-300/80 leading-relaxed text-justify">
+                این دانلود با روش احراز هویت‌شده درون‌برنامه‌ای (Authenticated Blob Fetch) و اعتبارسنجی باندل انجام می‌شود تا روی مرورگر کروم موبایل و ویندوز، به‌جای فایل خطای کوکی امنیتی، خود برنامه کامل ذخیره شود.
               </p>
               <div className="pt-1 flex items-center gap-2 flex-wrap">
-                <a
-                  href={`/MartiaPlanner-v${APP_VERSION}.html`}
-                  download={`MartiaPlanner-v${APP_VERSION}.html`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors shadow-xs"
+                <button
+                  type="button"
+                  disabled={standaloneHtmlDownloading !== null}
+                  onClick={async () => {
+                    setStandaloneHtmlDownloading('pure');
+                    setStandaloneHtmlStatus(null);
+                    try {
+                      const res = await downloadStandaloneAppHtml({ includeUserData: false });
+                      const sizeMb = (res.sizeBytes / (1024 * 1024)).toFixed(2);
+                      setStandaloneHtmlStatus({
+                        type: 'success',
+                        text: `فایل مستقل خام «${res.fileName}» (${sizeMb} مگابایت) با راستی‌آزمایی کامل دانلود شد.`,
+                      });
+                    } catch (err: any) {
+                      setStandaloneHtmlStatus({
+                        type: 'error',
+                        text: err?.message || 'خطا در دانلود فایل مستقل HTML',
+                      });
+                    } finally {
+                      setStandaloneHtmlDownloading(null);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-xs font-bold transition-colors shadow-xs cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>دانلود مستقیم MartiaPlanner-v{APP_VERSION}.html</span>
-                </a>
+                  <span>
+                    {standaloneHtmlDownloading === 'pure'
+                      ? 'در حال دریافت و راستی‌آزمایی...'
+                      : `دانلود نسخه مستقل خام (MartiaPlanner-v${APP_VERSION}.html)`}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={standaloneHtmlDownloading !== null}
+                  onClick={async () => {
+                    setStandaloneHtmlDownloading('embedded');
+                    setStandaloneHtmlStatus(null);
+                    try {
+                      const res = await downloadStandaloneAppHtml({ includeUserData: true });
+                      const sizeMb = (res.sizeBytes / (1024 * 1024)).toFixed(2);
+                      setStandaloneHtmlStatus({
+                        type: 'success',
+                        text: `نسخه قابل حمل «${res.fileName}» همراه با تمام داده‌های فعلی (${sizeMb} مگابایت) با موفقیت ذخیره شد.`,
+                      });
+                    } catch (err: any) {
+                      setStandaloneHtmlStatus({
+                        type: 'error',
+                        text: err?.message || 'خطا در بسته‌بندی فایل قابل حمل HTML',
+                      });
+                    } finally {
+                      setStandaloneHtmlDownloading(null);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>
+                    {standaloneHtmlDownloading === 'embedded'
+                      ? 'در حال بسته‌بندی برنامه + داده‌ها...'
+                      : 'دانلود برنامه + داده‌های فعلی (HTML قابل حمل)'}
+                  </span>
+                </button>
               </div>
+              {standaloneHtmlStatus && (
+                <div
+                  className={`rounded-lg px-3 py-2 text-[11px] font-bold flex items-start gap-2 ${
+                    standaloneHtmlStatus.type === 'success'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                      : 'bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'
+                  }`}
+                >
+                  {standaloneHtmlStatus.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  )}
+                  <span>{standaloneHtmlStatus.text}</span>
+                </div>
+              )}
             </div>
           </div>
 

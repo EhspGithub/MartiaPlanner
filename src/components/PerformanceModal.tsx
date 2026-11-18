@@ -21,6 +21,7 @@ import {
   classifyPlanActivityGroup,
   parseLearningQuality0To10,
 } from '../utils/analyticsEngine.ts';
+import { firebaseCloudSync } from '../services/firebaseCloudSync.ts';
 
 interface PerformanceModalProps {
   plan: DailyPlanItem | null;
@@ -78,6 +79,18 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [showPriorityWarning, setShowPriorityWarning] = useState(false);
   const [showTransferConfirm, setShowTransferConfirm] = useState(false);
+  const [isReadOnlyObserver, setIsReadOnlyObserver] = useState<boolean>(() =>
+    firebaseCloudSync.isReadOnlyObserver()
+  );
+
+  useEffect(() => {
+    const unsub = firebaseCloudSync.subscribeStatus((st) => {
+      setIsReadOnlyObserver(
+        st.connectionMode === 'cloud' && st.workspaceRole === 'observer'
+      );
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (plan) {
@@ -230,6 +243,10 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnlyObserver) {
+      setError('حالت فقط‌خواندنی (والدین / مشاور) فعال است؛ امکان ثبت یا تغییر عملکرد وجود ندارد.');
+      return;
+    }
     const validated = validateForm();
     if (!validated) return;
 
@@ -243,6 +260,10 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
   };
 
   const handleReset = async () => {
+    if (isReadOnlyObserver) {
+      setError('حالت فقط‌خواندنی (والدین / مشاور) فعال است؛ امکان حذف عملکرد وجود ندارد.');
+      return;
+    }
     try {
       setSubmitting(true);
       await onResetPerformance(plan.id);
@@ -255,6 +276,10 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
   };
 
   const handleConfirmTransfer = async () => {
+    if (isReadOnlyObserver) {
+      setError('حالت فقط‌خواندنی (والدین / مشاور) فعال است؛ امکان انتقال فعالیت وجود ندارد.');
+      return;
+    }
     if (!onTransferToNextDay) return;
     try {
       setSubmitting(true);
@@ -474,6 +499,13 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
           /* Scrollable Form Body + Pinned Footer */
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
             <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
+              {isReadOnlyObserver && (
+                <div className="rounded-xl bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 px-3 py-2 text-[11px] font-extrabold text-sky-800 dark:text-sky-200 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+                  <span>حالت «والدین / مشاور (فقط‌خواندنی)» فعال است — فقط مشاهده جزئیات مجاز است.</span>
+                </div>
+              )}
+
               {error && (
                 <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-2.5 text-xs text-rose-700 dark:text-rose-300">
                   {error}
@@ -671,7 +703,7 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
               </div>
 
               {/* Section 6: Transfer to Next Day Button */}
-              {onTransferToNextDay && plan.status !== 'completed' && (
+              {onTransferToNextDay && plan.status !== 'completed' && !isReadOnlyObserver && (
                 <button
                   type="button"
                   onClick={() => setShowTransferConfirm(true)}
@@ -685,7 +717,7 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
 
             {/* Pinned Footer Actions */}
             <div className="shrink-0 flex items-center justify-between gap-2 px-5 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/95">
-              {plan.performance ? (
+              {plan.performance && !isReadOnlyObserver ? (
                 <button
                   type="button"
                   disabled={submitting}
@@ -705,15 +737,17 @@ export const PerformanceModal: React.FC<PerformanceModalProps> = ({
                   onClick={onClose}
                   className="rounded-xl border border-slate-300 dark:border-slate-700 px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[38px]"
                 >
-                  انصراف
+                  {isReadOnlyObserver ? 'بستن' : 'انصراف'}
                 </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-extrabold text-white hover:bg-indigo-700 shadow-sm shadow-indigo-600/20 transition-all cursor-pointer min-h-[38px]"
-                >
-                  {submitting ? 'در حال ذخیره...' : 'ثبت عملکرد'}
-                </button>
+                {!isReadOnlyObserver && (
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-extrabold text-white hover:bg-indigo-700 shadow-sm shadow-indigo-600/20 transition-all cursor-pointer min-h-[38px]"
+                  >
+                    {submitting ? 'در حال ذخیره...' : 'ثبت عملکرد'}
+                  </button>
+                )}
               </div>
             </div>
           </form>

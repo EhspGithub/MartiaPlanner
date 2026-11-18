@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Plus,
   Calendar,
@@ -34,6 +34,7 @@ import {
   Timer,
   ChevronDown,
   CalendarArrowUp,
+  Eye,
 } from 'lucide-react';
 import type {
   ActivityCategory,
@@ -70,6 +71,7 @@ import {
   getSmartReminderEnabled,
   SMART_REMINDER_EVENT_NAME,
 } from './StudyReminderManager.tsx';
+import { firebaseCloudSync } from '../services/firebaseCloudSync.ts';
 
 interface PlannerViewProps {
   categories: ActivityCategory[];
@@ -79,6 +81,7 @@ interface PlannerViewProps {
   onDataMutated: () => void;
   onNavigateToDefinitions?: () => void;
   onInspectSubject?: (subjectId: string) => void;
+  refreshTrigger?: number;
 }
 
 const REMINDER_TIME_OPTIONS: string[] = [
@@ -139,6 +142,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   subjects,
   onDataMutated,
   onInspectSubject,
+  refreshTrigger = 0,
 }) => {
   const todayIso = getTodayISO();
 
@@ -146,6 +150,18 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   const [selectedDate, setSelectedDate] = useState<string>(todayIso);
   const [weekRefDate, setWeekRefDate] = useState<string>(todayIso);
   const [sortBy, setSortBy] = useState<'priority' | 'custom'>('priority');
+  const [isReadOnlyObserver, setIsReadOnlyObserver] = useState<boolean>(() =>
+    firebaseCloudSync.isReadOnlyObserver()
+  );
+
+  useEffect(() => {
+    const unsub = firebaseCloudSync.subscribeStatus((st) => {
+      setIsReadOnlyObserver(
+        st.connectionMode === 'cloud' && st.workspaceRole === 'observer'
+      );
+    });
+    return unsub;
+  }, []);
 
   // Section 1, 2: Accordion & Smart Reminder visibility states
   const [smartReminderEnabled, setSmartReminderEnabled] = useState<boolean>(() =>
@@ -170,6 +186,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   const [savingBudget, setSavingBudget] = useState<boolean>(false);
 
   const [loading, setLoading] = useState<boolean>(true);
+  const hasLoadedOnceRef = useRef<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const [showPlanForm, setShowPlanForm] = useState<boolean>(false);
@@ -216,7 +233,9 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
 
   const loadDailyData = async (dateStr: string) => {
     try {
-      setLoading(true);
+      if (!hasLoadedOnceRef.current) {
+        setLoading(true);
+      }
       setError(null);
       const [plansData, goalData, budgetData] = await Promise.all([
         api.getPlansByDate(dateStr),
@@ -226,6 +245,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       setDailyPlans(plansData);
       setDailyGoal(goalData);
       setTimeBudget(budgetData);
+      hasLoadedOnceRef.current = true;
       if (budgetData && budgetData.budget_minutes !== null && budgetData.budget_minutes > 0) {
         const bm = budgetData.budget_minutes;
         if (bm % 60 === 0) {
@@ -250,12 +270,15 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
 
   const loadWeeklyPlans = async () => {
     try {
-      setLoading(true);
+      if (!hasLoadedOnceRef.current) {
+        setLoading(true);
+      }
       setError(null);
       const start = weekDays[0].isoDate;
       const end = weekDays[6].isoDate;
       const data = await api.getPlansByRange(start, end);
       setWeeklyPlans(data);
+      hasLoadedOnceRef.current = true;
     } catch (err: any) {
       setError(err.message || 'خطا در بارگذاری برنامه هفتگی');
     } finally {
@@ -269,10 +292,11 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
     } else {
       loadDailyData(selectedDate);
     }
-  }, [activeTab, selectedDate, weekRefDate]);
+  }, [activeTab, selectedDate, weekRefDate, refreshTrigger]);
 
   const handleSaveTimeBudget = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnlyObserver) return;
     const rawNum = Number(budgetInputValue);
     if (budgetInputValue === '' || isNaN(rawNum) || rawNum < 0) return;
     const totalMins =
@@ -302,6 +326,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
   const isFormStudyActivity = Number(selectedCategoryObj?.is_study) === 1;
 
   const openCreateForm = (targetDate?: string) => {
+    if (isReadOnlyObserver) return;
     if (targetDate && activeTab === 'weekly') {
       setSelectedDate(targetDate);
     }
@@ -581,6 +606,15 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {isReadOnlyObserver && (
+        <div className="rounded-2xl border border-sky-200 dark:border-sky-800 bg-sky-50/90 dark:bg-sky-950/50 px-4 py-3 flex items-center gap-2.5 text-xs font-extrabold text-sky-900 dark:text-sky-200 shadow-2xs">
+          <Eye className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+          <span>
+            حالت «والدین / مشاور (ناظر فقط‌خواندنی)» فعال است — داده‌های زنده دانش‌آموز را بدون امکان تغییر، حذف یا ارسال مشاهده می‌کنید.
+          </span>
+        </div>
+      )}
+
       {/* =====================================================================
           REDESIGNED STUDENT PLANNER HERO CONTAINER
       ===================================================================== */}
@@ -746,11 +780,17 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
           <div className="flex justify-center pt-1">
             <button
               type="button"
+              disabled={isReadOnlyObserver}
               onClick={() => openCreateForm()}
-              className="w-full max-w-xs sm:max-w-sm flex items-center justify-center gap-2 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 px-6 py-3 text-xs sm:text-sm font-black shadow-lg shadow-amber-400/25 active:scale-95 transition-all cursor-pointer whitespace-nowrap min-h-[46px]"
+              title={
+                isReadOnlyObserver
+                  ? 'در نقش ناظر (والدین/مشاور) ثبت فعالیت جدید غیرفعال است'
+                  : 'ثبت فعالیت جدید'
+              }
+              className="w-full max-w-xs sm:max-w-sm flex items-center justify-center gap-2 rounded-2xl bg-amber-400 hover:bg-amber-300 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 px-6 py-3 text-xs sm:text-sm font-black shadow-lg shadow-amber-400/25 active:scale-95 transition-all cursor-pointer whitespace-nowrap min-h-[46px]"
             >
               <Plus className="w-4 h-4 stroke-[2.8] shrink-0" />
-              <span>ثبت فعالیت جدید</span>
+              <span>{isReadOnlyObserver ? 'حالت مشاهده (فقط‌خواندنی)' : 'ثبت فعالیت جدید'}</span>
             </button>
           </div>
 
@@ -978,10 +1018,10 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                     </select>
                     <button
                       type="submit"
-                      disabled={savingBudget}
-                      className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 text-xs font-extrabold transition-colors cursor-pointer whitespace-nowrap min-h-[38px]"
+                      disabled={savingBudget || isReadOnlyObserver}
+                      className="rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-1.5 text-xs font-extrabold transition-colors cursor-pointer whitespace-nowrap min-h-[38px]"
                     >
-                      {savingBudget ? '...' : 'ثبت ظرفیت'}
+                      {savingBudget ? '...' : isReadOnlyObserver ? 'فقط‌خواندنی' : 'ثبت ظرفیت'}
                     </button>
                   </form>
                 </div>
@@ -1182,14 +1222,16 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
                 درس‌هایی که امروز در مدرسه تدریس شدن، تکالیف، امتحانات یا حتی زمان استراحت و بازی خودت رو با دکمه زیر اضافه کن.
               </p>
-              <button
-                type="button"
-                onClick={() => openCreateForm()}
-                className="mt-2 inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-xs font-extrabold text-white hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>ثبت اولین فعالیت این روز</span>
-              </button>
+              {!isReadOnlyObserver && (
+                <button
+                  type="button"
+                  onClick={() => openCreateForm()}
+                  className="mt-2 inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-xs font-extrabold text-white hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>ثبت اولین فعالیت این روز</span>
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1273,45 +1315,47 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                           </div>
 
                           {/* 4 Action Buttons on Left */}
-                          <div
-                            className="flex items-center gap-0.5 bg-black/15 rounded-xl px-1 py-0.5 shrink-0"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => handleMoveOrder(index, 'up')}
-                              disabled={index === 0}
-                              className="p-1 rounded-lg text-white/80 hover:text-white disabled:opacity-30 cursor-pointer"
-                              title="جابه‌جایی به بالا"
+                          {!isReadOnlyObserver && (
+                            <div
+                              className="flex items-center gap-0.5 bg-black/15 rounded-xl px-1 py-0.5 shrink-0"
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              <ArrowUp className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleMoveOrder(index, 'down')}
-                              disabled={index === sortedDailyPlans.length - 1}
-                              className="p-1 rounded-lg text-white/80 hover:text-white disabled:opacity-30 cursor-pointer"
-                              title="جابه‌جایی به پایین"
-                            >
-                              <ArrowDown className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openEditForm(plan)}
-                              className="p-1 rounded-lg text-white/80 hover:text-white cursor-pointer"
-                              title="ویرایش برنامه"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeletingPlan(plan)}
-                              className="p-1 rounded-lg text-white/80 hover:text-rose-200 cursor-pointer"
-                              title="حذف فعالیت"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                              <button
+                                type="button"
+                                onClick={() => handleMoveOrder(index, 'up')}
+                                disabled={index === 0}
+                                className="p-1 rounded-lg text-white/80 hover:text-white disabled:opacity-30 cursor-pointer"
+                                title="جابه‌جایی به بالا"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleMoveOrder(index, 'down')}
+                                disabled={index === sortedDailyPlans.length - 1}
+                                className="p-1 rounded-lg text-white/80 hover:text-white disabled:opacity-30 cursor-pointer"
+                                title="جابه‌جایی به پایین"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openEditForm(plan)}
+                                className="p-1 rounded-lg text-white/80 hover:text-white cursor-pointer"
+                                title="ویرایش برنامه"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingPlan(plan)}
+                                className="p-1 rounded-lg text-white/80 hover:text-rose-200 cursor-pointer"
+                                title="حذف فعالیت"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -1434,18 +1478,20 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                             ) : (
                               <div />
                             )}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setTransferringPlan(plan);
-                              }}
-                              className="inline-flex items-center gap-1 rounded-xl border border-indigo-200 dark:border-indigo-800/70 bg-indigo-50/80 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-2.5 py-1 text-[11px] font-extrabold text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
-                              title="انتقال این فعالیت به برنامه روز بعد"
-                            >
-                              <CalendarArrowUp className="w-3.5 h-3.5 shrink-0" />
-                              <span>انتقال به روز بعد</span>
-                            </button>
+                            {!isReadOnlyObserver && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setTransferringPlan(plan);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-xl border border-indigo-200 dark:border-indigo-800/70 bg-indigo-50/80 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-2.5 py-1 text-[11px] font-extrabold text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                                title="انتقال این فعالیت به برنامه روز بعد"
+                              >
+                                <CalendarArrowUp className="w-3.5 h-3.5 shrink-0" />
+                                <span>انتقال به روز بعد</span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       ) : (
@@ -1542,7 +1588,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                                 <div />
                               )}
 
-                              {plan.status !== 'completed' && (
+                              {plan.status !== 'completed' && !isReadOnlyObserver && (
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -1647,14 +1693,16 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
                         </span>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => openCreateForm(day.isoDate)}
-                        className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
-                        title={`افزودن فعالیت برای ${day.fullLabel}`}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
+                      {!isReadOnlyObserver && (
+                        <button
+                          type="button"
+                          onClick={() => openCreateForm(day.isoDate)}
+                          className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
+                          title={`افزودن فعالیت برای ${day.fullLabel}`}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
 
                     {dayPlans.length === 0 ? (

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import {
   LayoutDashboard,
   CalendarCheck2,
@@ -15,23 +15,34 @@ import {
   Moon,
   HelpCircle,
   ChevronDown,
+  Eye,
+  CloudOff,
 } from 'lucide-react';
 import type { AppBootstrapData } from './types.ts';
 import { api } from './services/api.ts';
+import { firebaseCloudSync, type CloudSyncStatus } from './services/firebaseCloudSync.ts';
 import { APP_VERSION } from './version.ts';
 import { toPersianDigits } from './utils/jalali.ts';
 import { DashboardView } from './components/DashboardView.tsx';
 import { PlannerView } from './components/PlannerView.tsx';
 import { ReportsHubView } from './components/ReportsHubView.tsx';
-import { SubjectsView } from './components/SubjectsView.tsx';
-import { SettingsView } from './components/SettingsView.tsx';
-import {
-  MetricsDefinitionsView,
-  COMPREHENSIVE_TABLE_ACCORDION_ID,
-  type GuideExternalNavRequest,
-} from './components/MetricsDefinitionsView.tsx';
+import type { GuideExternalNavRequest } from './components/MetricsDefinitionsView.tsx';
 import { PWAInstallButton } from './components/PWAInstallButton.tsx';
 import type { AnalyticsCoefficientsConfig } from './utils/analyticsCoefficients.ts';
+
+const SubjectsView = lazy(() =>
+  import('./components/SubjectsView.tsx').then((m) => ({ default: m.SubjectsView }))
+);
+const SettingsView = lazy(() =>
+  import('./components/SettingsView.tsx').then((m) => ({ default: m.SettingsView }))
+);
+const MetricsDefinitionsView = lazy(() =>
+  import('./components/MetricsDefinitionsView.tsx').then((m) => ({
+    default: m.MetricsDefinitionsView,
+  }))
+);
+
+const COMPREHENSIVE_TABLE_ACCORDION_ID = 'metric-comprehensive-master-table';
 
 type ActiveMenu = 'dashboard' | 'planner' | 'reports' | 'guide' | 'settings' | 'subjects';
 
@@ -53,7 +64,25 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isDark, setIsDark] = useState<boolean>(false);
-  const [cloudSyncTick, setCloudSyncTick] = useState<number>(0);
+  const [dataMutationTick, setDataMutationTick] = useState<number>(0);
+  const [visitedMenus, setVisitedMenus] = useState<Set<ActiveMenu>>(() => new Set(['planner']));
+  const [cloudStatus, setCloudStatus] = useState<CloudSyncStatus>(() =>
+    firebaseCloudSync.getStatus()
+  );
+
+  useEffect(() => {
+    const unsub = firebaseCloudSync.subscribeStatus(setCloudStatus);
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    setVisitedMenus((prev) => {
+      if (prev.has(activeMenu)) return prev;
+      const next = new Set(prev);
+      next.add(activeMenu);
+      return next;
+    });
+  }, [activeMenu]);
 
   const handleNavigateToCoefficient = useCallback(
     (coeffKey: keyof AnalyticsCoefficientsConfig) => {
@@ -113,6 +142,7 @@ export default function App() {
       api.invalidateCache('bootstrap', fromCloudSync);
       const data = await api.getBootstrap();
       setBootstrapData(data);
+      setDataMutationTick((prev) => prev + 1);
     } catch (err: any) {
       setError(err.message || 'خطا در برقراری ارتباط با پایگاه داده SQLite');
     } finally {
@@ -122,6 +152,7 @@ export default function App() {
 
   const handlePlanMutated = useCallback(() => {
     api.invalidateCache('plans');
+    setDataMutationTick((prev) => prev + 1);
   }, []);
 
   useEffect(() => {
@@ -130,7 +161,7 @@ export default function App() {
 
   useEffect(() => {
     const onCloudUpdated = () => {
-      setCloudSyncTick((prev) => prev + 1);
+      setDataMutationTick((prev) => prev + 1);
       loadBootstrap(true);
     };
     window.addEventListener('martia:cloud-sync-updated', onCloudUpdated);
@@ -351,60 +382,113 @@ export default function App() {
           </div>
         )}
 
+        {/* Quiet operational banner strictly in Cloud mode when offline-queued, disconnected, or read-only observer */}
+        {cloudStatus.connectionMode === 'cloud' &&
+          (cloudStatus.workspaceRole === 'observer' ||
+            cloudStatus.hasPendingOfflineChanges ||
+            !cloudStatus.isNetworkOnline) && (
+            <div className="mb-4 rounded-2xl border border-indigo-200/80 dark:border-indigo-800/70 bg-white/85 dark:bg-slate-900/90 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-bold shadow-2xs">
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                {cloudStatus.workspaceRole === 'observer' ? (
+                  <Eye className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+                ) : (
+                  <CloudOff className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                )}
+                <span>
+                  {cloudStatus.workspaceRole === 'observer'
+                    ? 'حالت مشترک: ناظر فقط‌خواندنی (والدین / مشاور)'
+                    : !cloudStatus.isNetworkOnline
+                    ? 'حالت مشترک (آفلاین موقت) — تغییرات در صف همگام‌سازی ذخیره می‌شوند'
+                    : 'تغییرات آفلاین در انتظار همگام‌سازی خودکار با فضای ابری است'}
+                </span>
+              </div>
+              {cloudStatus.hasPendingOfflineChanges && cloudStatus.isNetworkOnline && (
+                <button
+                  type="button"
+                  onClick={() => firebaseCloudSync.pushToCloudNow()}
+                  className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-extrabold cursor-pointer"
+                >
+                  ارسال صف تغییرات
+                </button>
+              )}
+            </div>
+          )}
+
         {!loading && bootstrapData && (
-          <>
-            {activeMenu === 'dashboard' && <DashboardView key={`dash-${cloudSyncTick}`} />}
-
-            {activeMenu === 'planner' && (
-              <PlannerView
-                key={`plan-${cloudSyncTick}`}
-                categories={bootstrapData.categories}
-                studyTypes={bootstrapData.studyTypes}
-                priorities={bootstrapData.priorities}
-                subjects={bootstrapData.subjects}
-                onDataMutated={handlePlanMutated}
-                onNavigateToDefinitions={() => setActiveMenu('guide')}
-                onInspectSubject={handleInspectSubjectFromPlanner}
-              />
+          <Suspense
+            fallback={
+              <div className="space-y-4 py-8">
+                <div className="h-8 w-56 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse" />
+                <div className="h-48 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 animate-pulse" />
+              </div>
+            }
+          >
+            {visitedMenus.has('dashboard') && (
+              <div className={activeMenu === 'dashboard' ? 'block' : 'hidden'}>
+                <DashboardView refreshTrigger={dataMutationTick} />
+              </div>
             )}
 
-            {activeMenu === 'reports' && (
-              <ReportsHubView
-                key={`rep-${cloudSyncTick}`}
-                subjects={bootstrapData.subjects}
-                categories={bootstrapData.categories}
-                onNavigateToPlanner={() => setActiveMenu('planner')}
-                initialSubjectId={initialReportSubjectId}
-              />
+            {visitedMenus.has('planner') && (
+              <div className={activeMenu === 'planner' ? 'block' : 'hidden'}>
+                <PlannerView
+                  categories={bootstrapData.categories}
+                  studyTypes={bootstrapData.studyTypes}
+                  priorities={bootstrapData.priorities}
+                  subjects={bootstrapData.subjects}
+                  onDataMutated={handlePlanMutated}
+                  onNavigateToDefinitions={() => setActiveMenu('guide')}
+                  onInspectSubject={handleInspectSubjectFromPlanner}
+                  refreshTrigger={dataMutationTick}
+                />
+              </div>
             )}
 
-            {activeMenu === 'guide' && (
-              <MetricsDefinitionsView
-                externalNavRequest={guideNavRequest}
-                onNavigateToCoefficient={handleNavigateToCoefficient}
-              />
+            {visitedMenus.has('reports') && (
+              <div className={activeMenu === 'reports' ? 'block' : 'hidden'}>
+                <ReportsHubView
+                  subjects={bootstrapData.subjects}
+                  categories={bootstrapData.categories}
+                  onNavigateToPlanner={() => setActiveMenu('planner')}
+                  initialSubjectId={initialReportSubjectId}
+                  refreshTrigger={dataMutationTick}
+                />
+              </div>
             )}
 
-            {activeMenu === 'subjects' && (
-              <SubjectsView
-                subjects={bootstrapData.subjects}
-                onRefreshBootstrap={loadBootstrap}
-              />
+            {visitedMenus.has('guide') && (
+              <div className={activeMenu === 'guide' ? 'block' : 'hidden'}>
+                <MetricsDefinitionsView
+                  externalNavRequest={guideNavRequest}
+                  onNavigateToCoefficient={handleNavigateToCoefficient}
+                />
+              </div>
             )}
 
-            {activeMenu === 'settings' && (
-              <SettingsView
-                categories={bootstrapData.categories}
-                studyTypes={bootstrapData.studyTypes}
-                priorities={bootstrapData.priorities}
-                onRefreshBootstrap={loadBootstrap}
-                initialSubTab={settingsInitialSubTab}
-                highlightedCoeffKey={highlightedCoeffKey}
-                onNavigateToDefinition={handleNavigateToDefinitionFromSettings}
-                onNavigateToTableRow={handleNavigateToTableRowFromSettings}
-              />
+            {visitedMenus.has('subjects') && (
+              <div className={activeMenu === 'subjects' ? 'block' : 'hidden'}>
+                <SubjectsView
+                  subjects={bootstrapData.subjects}
+                  onRefreshBootstrap={loadBootstrap}
+                />
+              </div>
             )}
-          </>
+
+            {visitedMenus.has('settings') && (
+              <div className={activeMenu === 'settings' ? 'block' : 'hidden'}>
+                <SettingsView
+                  categories={bootstrapData.categories}
+                  studyTypes={bootstrapData.studyTypes}
+                  priorities={bootstrapData.priorities}
+                  onRefreshBootstrap={loadBootstrap}
+                  initialSubTab={settingsInitialSubTab}
+                  highlightedCoeffKey={highlightedCoeffKey}
+                  onNavigateToDefinition={handleNavigateToDefinitionFromSettings}
+                  onNavigateToTableRow={handleNavigateToTableRowFromSettings}
+                />
+              </div>
+            )}
+          </Suspense>
         )}
       </main>
 

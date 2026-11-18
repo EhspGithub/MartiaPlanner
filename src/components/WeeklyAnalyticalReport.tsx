@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   FileSpreadsheet,
   TrendingUp,
@@ -760,12 +760,15 @@ export const SmartAdvisoryAccordionCard: React.FC<SmartAdvisoryAccordionCardProp
   );
 };
 
-export const WeeklyAnalyticalReport: React.FC = () => {
+export const WeeklyAnalyticalReport: React.FC<{ refreshTrigger?: number }> = ({
+  refreshTrigger = 0,
+}) => {
   const todayIso = getTodayISO();
   const [weekRefDate, setWeekRefDate] = useState<string>(todayIso);
   const [plans, setPlans] = useState<DailyPlanItem[]>([]);
   const [goalsByDay, setGoalsByDay] = useState<DailyStudyGoalConfig[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const hasLoadedOnceRef = useRef<boolean>(false);
 
   const weekDays = useMemo(() => getPersianWeekDays(weekRefDate), [weekRefDate]);
   const startDate = weekDays[0].isoDate;
@@ -773,7 +776,9 @@ export const WeeklyAnalyticalReport: React.FC = () => {
 
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
+    if (!hasLoadedOnceRef.current) {
+      setLoading(true);
+    }
 
     Promise.all([
       api.getPlansByRange(startDate, endDate),
@@ -783,6 +788,7 @@ export const WeeklyAnalyticalReport: React.FC = () => {
         if (mounted) {
           setPlans(plansData);
           setGoalsByDay(goalsData);
+          hasLoadedOnceRef.current = true;
           setLoading(false);
         }
       })
@@ -795,7 +801,7 @@ export const WeeklyAnalyticalReport: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [startDate, endDate]);
+  }, [startDate, endDate, refreshTrigger]);
 
   const analysis = useMemo(() => {
     const studyPlans = plans.filter((p) => Number(p.is_study) === 1);

@@ -73,6 +73,7 @@ interface ReportsHubViewProps {
   categories: ActivityCategory[];
   onNavigateToPlanner?: () => void;
   initialSubjectId?: string | null;
+  refreshTrigger?: number;
 }
 
 type ReportCategoryTab = 'subjects' | 'recreation';
@@ -127,6 +128,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
   categories,
   onNavigateToPlanner,
   initialSubjectId,
+  refreshTrigger = 0,
 }) => {
   const todayIso = getTodayISO();
 
@@ -178,6 +180,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
   const [allTimePlans, setAllTimePlans] = useState<DailyPlanItem[]>([]);
   const [budgets, setBudgets] = useState<DailyTimeBudgetConfig[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const hasLoadedOnceRef = useRef<boolean>(false);
   const singleReportSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Sync selectedSingleSubjectId & comparedSubjectIds when subjects list changes
@@ -270,10 +273,12 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
   );
 
   // Fetch all-time plans (for independent permanent Subject Levels & Staircase Map)
-  // plus budgets for the active timeframe
+  // plus budgets for the active timeframe (silently on subsequent refreshes)
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    if (!hasLoadedOnceRef.current) {
+      setLoading(true);
+    }
     Promise.all([
       api.getPlansByRange('2020-01-01', '2099-12-31'),
       api.getTimeBudgetsByRange(activeDateRange.start, activeDateRange.end),
@@ -282,6 +287,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
         if (!active) return;
         setAllTimePlans(allPlansRes);
         setBudgets(budgetsRes);
+        hasLoadedOnceRef.current = true;
         setLoading(false);
       })
       .catch(() => {
@@ -290,7 +296,7 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
     return () => {
       active = false;
     };
-  }, [activeDateRange.start, activeDateRange.end]);
+  }, [activeDateRange.start, activeDateRange.end, refreshTrigger]);
 
   // Slice plans cleanly to the active timeframe for interval reports & charts
   const plans = useMemo(
@@ -363,12 +369,39 @@ export const ReportsHubView: React.FC<ReportsHubViewProps> = ({
       }
     }
 
+    // Pre-bucket studyPlans in one O(N) pass instead of filtering inside loop
+    const plansBySubjectId = new Map<string, DailyPlanItem[]>();
+    const plansBySubjectName = new Map<string, DailyPlanItem[]>();
+    for (const p of studyPlans) {
+      if (p.subject_id) {
+        const b = plansBySubjectId.get(p.subject_id);
+        if (b) b.push(p);
+        else plansBySubjectId.set(p.subject_id, [p]);
+      }
+      if (p.subject_name_snapshot) {
+        const nb = plansBySubjectName.get(p.subject_name_snapshot);
+        if (nb) nb.push(p);
+        else plansBySubjectName.set(p.subject_name_snapshot, [p]);
+      }
+    }
+
     const summaries: SubjectAnalyticalSummary[] = [];
 
     for (const entry of subjectEntries.values()) {
-      const subjPlans = studyPlans.filter(
-        (p) => p.subject_id === entry.id || p.subject_name_snapshot === entry.name
-      );
+      const byId = plansBySubjectId.get(entry.id) || [];
+      const byName = plansBySubjectName.get(entry.name) || [];
+      let subjPlans: DailyPlanItem[];
+      if (byId.length === 0) {
+        subjPlans = byName;
+      } else if (byName.length === 0) {
+        subjPlans = byId;
+      } else {
+        const seen = new Set(byId.map((p) => p.id));
+        subjPlans = [...byId];
+        for (const p of byName) {
+          if (!seen.has(p.id)) subjPlans.push(p);
+        }
+      }
 
       let completedCount = 0;
       let partialCount = 0;

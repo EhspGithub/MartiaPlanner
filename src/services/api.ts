@@ -26,6 +26,15 @@ import {
   saveAnalyticsCoefficients,
 } from '../utils/analyticsCoefficients.ts';
 import { firebaseCloudSync } from './firebaseCloudSync.ts';
+import { safeGetItem, safeSetItem } from '../utils/safeStorage.ts';
+
+function assertWriteAllowed() {
+  if (firebaseCloudSync.isReadOnlyObserver()) {
+    throw new Error(
+      'حالت ناظر فقط‌خواندنی (والدین) فعال است و امکان تغییر یا حذف اطلاعات وجود ندارد.'
+    );
+  }
+}
 
 let serverAvailable: boolean | null = null;
 
@@ -68,7 +77,7 @@ export function invalidateApiCache(
     goalByDateCache.clear();
   }
   if (!skipCloudPush) {
-    firebaseCloudSync.scheduleAutoPush();
+    firebaseCloudSync.notifyLocalMutation();
   }
 }
 
@@ -106,8 +115,13 @@ async function request<T>(
   options: RequestInit | undefined,
   fallbackFn: () => T | Promise<T>
 ): Promise<T> {
-  // When opened directly via file:// (Single-File Portable HTML), use local engine immediately
-  if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
+  // When opened directly via file://, content://, or Single-File Portable HTML, use local engine immediately
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.protocol === 'file:' ||
+      window.location.protocol === 'content:' ||
+      Boolean((window as any).__MARTIA_SINGLEFILE_MODE__))
+  ) {
     serverAvailable = false;
     return await fallbackFn();
   }
@@ -241,6 +255,7 @@ export const api = {
     reminder_time?: string | null;
     description: string;
   }): Promise<DailyPlanItem> {
+    assertWriteAllowed();
     const created = await request(
       '/api/plans',
       { method: 'POST', body: JSON.stringify(payload) },
@@ -264,6 +279,7 @@ export const api = {
       description?: string;
     }
   ): Promise<DailyPlanItem> {
+    assertWriteAllowed();
     const updated = await request(
       `/api/plans/${encodeURIComponent(id)}`,
       { method: 'PUT', body: JSON.stringify(payload) },
@@ -274,6 +290,7 @@ export const api = {
   },
 
   async reorderPlans(planIds: string[]): Promise<{ success: boolean }> {
+    assertWriteAllowed();
     const res = await request(
       '/api/plans/reorder',
       { method: 'POST', body: JSON.stringify({ planIds }) },
@@ -284,6 +301,7 @@ export const api = {
   },
 
   async transferPlanToNextDay(id: string): Promise<DailyPlanItem> {
+    assertWriteAllowed();
     const res = await request(
       `/api/plans/${encodeURIComponent(id)}/transfer-next-day`,
       { method: 'POST' },
@@ -294,6 +312,7 @@ export const api = {
   },
 
   async deletePlan(id: string): Promise<{ success: boolean }> {
+    assertWriteAllowed();
     const res = await request(
       `/api/plans/${encodeURIComponent(id)}`,
       { method: 'DELETE' },
@@ -313,6 +332,7 @@ export const api = {
       notes?: string;
     }
   ): Promise<DailyPlanItem> {
+    assertWriteAllowed();
     const normalizedPayload = {
       ...payload,
       notes: payload.notes ?? '',
@@ -327,6 +347,7 @@ export const api = {
   },
 
   async deletePerformance(planId: string): Promise<DailyPlanItem> {
+    assertWriteAllowed();
     const deleted = await request(
       `/api/plans/${encodeURIComponent(planId)}/performance`,
       { method: 'DELETE' },
@@ -359,6 +380,7 @@ export const api = {
     color_code: string;
     initial_units?: string[];
   }): Promise<Subject> {
+    assertWriteAllowed();
     const created = await request(
       '/api/subjects',
       { method: 'POST', body: JSON.stringify(payload) },
@@ -372,6 +394,7 @@ export const api = {
     id: string,
     payload: { name: string; grade_level?: string; unit_type_label?: string; color_code?: string }
   ): Promise<Subject> {
+    assertWriteAllowed();
     const updated = await request(
       `/api/subjects/${encodeURIComponent(id)}`,
       { method: 'PUT', body: JSON.stringify(payload) },
@@ -382,6 +405,7 @@ export const api = {
   },
 
   async deleteSubject(id: string): Promise<{ success: boolean }> {
+    assertWriteAllowed();
     const res = await request(
       `/api/subjects/${encodeURIComponent(id)}`,
       { method: 'DELETE' },
@@ -392,6 +416,7 @@ export const api = {
   },
 
   async createUnit(subjectId: string, title: string): Promise<SubjectUnit> {
+    assertWriteAllowed();
     const created = await request(
       `/api/subjects/${encodeURIComponent(subjectId)}/units`,
       { method: 'POST', body: JSON.stringify({ title }) },
@@ -405,6 +430,7 @@ export const api = {
     unitId: string,
     payload: { title?: string; sort_order?: number }
   ): Promise<SubjectUnit> {
+    assertWriteAllowed();
     const updated = await request(
       `/api/units/${encodeURIComponent(unitId)}`,
       { method: 'PUT', body: JSON.stringify(payload) },
@@ -415,6 +441,7 @@ export const api = {
   },
 
   async reorderUnits(subjectId: string, unitIds: string[]): Promise<{ success: boolean }> {
+    assertWriteAllowed();
     const res = await request(
       `/api/subjects/${encodeURIComponent(subjectId)}/units/reorder`,
       { method: 'POST', body: JSON.stringify({ unitIds }) },
@@ -425,6 +452,7 @@ export const api = {
   },
 
   async deleteUnit(unitId: string): Promise<{ success: boolean }> {
+    assertWriteAllowed();
     const res = await request(
       `/api/units/${encodeURIComponent(unitId)}`,
       { method: 'DELETE' },
@@ -440,6 +468,7 @@ export const api = {
     activity_group?: ActivityGroupType;
     impact_weight?: number;
   }): Promise<ActivityCategory> {
+    assertWriteAllowed();
     const created = await request(
       '/api/settings/categories',
       { method: 'POST', body: JSON.stringify(payload) },
@@ -458,6 +487,7 @@ export const api = {
       impact_weight?: number;
     }
   ): Promise<ActivityCategory> {
+    assertWriteAllowed();
     const updated = await request(
       `/api/settings/categories/${encodeURIComponent(id)}`,
       { method: 'PUT', body: JSON.stringify(payload) },
@@ -468,6 +498,7 @@ export const api = {
   },
 
   async deleteCategory(id: string): Promise<{ success: boolean }> {
+    assertWriteAllowed();
     const res = await request(
       `/api/settings/categories/${encodeURIComponent(id)}`,
       { method: 'DELETE' },
@@ -481,6 +512,7 @@ export const api = {
     title: string;
     description: string;
   }): Promise<StudyActivityType> {
+    assertWriteAllowed();
     const created = await request(
       '/api/settings/study-types',
       { method: 'POST', body: JSON.stringify(payload) },
@@ -494,6 +526,7 @@ export const api = {
     id: string,
     payload: { title: string; description?: string }
   ): Promise<StudyActivityType> {
+    assertWriteAllowed();
     const updated = await request(
       `/api/settings/study-types/${encodeURIComponent(id)}`,
       { method: 'PUT', body: JSON.stringify(payload) },
@@ -504,6 +537,7 @@ export const api = {
   },
 
   async deleteStudyType(id: string): Promise<{ success: boolean }> {
+    assertWriteAllowed();
     const res = await request(
       `/api/settings/study-types/${encodeURIComponent(id)}`,
       { method: 'DELETE' },
@@ -514,6 +548,7 @@ export const api = {
   },
 
   async updatePriority(code: string, payload: { label: string }): Promise<PriorityLevel> {
+    assertWriteAllowed();
     const updated = await request(
       `/api/settings/priorities/${encodeURIComponent(code)}`,
       { method: 'PUT', body: JSON.stringify(payload) },
@@ -530,13 +565,13 @@ export const api = {
 
     const clientPreferences: Record<string, any> = {};
     try {
-      const smartRem = localStorage.getItem('martia_smart_reminder_enabled_v1');
+      const smartRem = safeGetItem('martia_smart_reminder_enabled_v1');
       if (smartRem !== null) clientPreferences.smart_reminder_enabled = smartRem;
-      const customQuotes = localStorage.getItem('martia_motivational_quotes_bank_v1');
+      const customQuotes = safeGetItem('martia_motivational_quotes_bank_v1');
       if (customQuotes !== null) clientPreferences.motivational_quotes_bank = customQuotes;
-      const firedRem = localStorage.getItem('martia_fired_reminders_v1');
+      const firedRem = safeGetItem('martia_fired_reminders_v1');
       if (firedRem !== null) clientPreferences.fired_reminders = firedRem;
-      const themePref = localStorage.getItem('martia_theme_v1');
+      const themePref = safeGetItem('martia_theme_v1');
       if (themePref !== null) clientPreferences.theme = themePref;
       clientPreferences.analytics_coefficients = getAnalyticsCoefficients();
     } catch {}
@@ -681,6 +716,7 @@ export const api = {
   },
 
   async importBackup(payload: any): Promise<{ success: boolean }> {
+    assertWriteAllowed();
     const validation = this.validateBackupPayload(payload);
     if (!validation.valid || !validation.normalizedPayload) {
       throw new Error(validation.error || 'فایل پشتیبان معتبر نیست.');
@@ -703,16 +739,16 @@ export const api = {
       const prefs = cleanPayload.client_preferences;
       if (prefs && typeof prefs === 'object') {
         if (typeof prefs.smart_reminder_enabled === 'string') {
-          localStorage.setItem('martia_smart_reminder_enabled_v1', prefs.smart_reminder_enabled);
+          safeSetItem('martia_smart_reminder_enabled_v1', prefs.smart_reminder_enabled);
         }
         if (typeof prefs.motivational_quotes_bank === 'string') {
-          localStorage.setItem('martia_motivational_quotes_bank_v1', prefs.motivational_quotes_bank);
+          safeSetItem('martia_motivational_quotes_bank_v1', prefs.motivational_quotes_bank);
         }
         if (typeof prefs.fired_reminders === 'string') {
-          localStorage.setItem('martia_fired_reminders_v1', prefs.fired_reminders);
+          safeSetItem('martia_fired_reminders_v1', prefs.fired_reminders);
         }
         if (typeof prefs.theme === 'string') {
-          localStorage.setItem('martia_theme_v1', prefs.theme);
+          safeSetItem('martia_theme_v1', prefs.theme);
         }
         if (prefs.analytics_coefficients && typeof prefs.analytics_coefficients === 'object') {
           saveAnalyticsCoefficients(prefs.analytics_coefficients);
@@ -745,16 +781,16 @@ export const api = {
       const prefs = cleanPayload.client_preferences;
       if (prefs && typeof prefs === 'object') {
         if (typeof prefs.smart_reminder_enabled === 'string') {
-          localStorage.setItem('martia_smart_reminder_enabled_v1', prefs.smart_reminder_enabled);
+          safeSetItem('martia_smart_reminder_enabled_v1', prefs.smart_reminder_enabled);
         }
         if (typeof prefs.motivational_quotes_bank === 'string') {
-          localStorage.setItem('martia_motivational_quotes_bank_v1', prefs.motivational_quotes_bank);
+          safeSetItem('martia_motivational_quotes_bank_v1', prefs.motivational_quotes_bank);
         }
         if (typeof prefs.fired_reminders === 'string') {
-          localStorage.setItem('martia_fired_reminders_v1', prefs.fired_reminders);
+          safeSetItem('martia_fired_reminders_v1', prefs.fired_reminders);
         }
         if (typeof prefs.theme === 'string') {
-          localStorage.setItem('martia_theme_v1', prefs.theme);
+          safeSetItem('martia_theme_v1', prefs.theme);
         }
         if (prefs.analytics_coefficients && typeof prefs.analytics_coefficients === 'object') {
           saveAnalyticsCoefficients(prefs.analytics_coefficients);
@@ -828,6 +864,7 @@ export const api = {
     target_completed_tasks: number;
     custom_goals: any[];
   }): Promise<DailyStudyGoalConfig> {
+    assertWriteAllowed();
     const saved = await request(
       '/api/goals',
       { method: 'POST', body: JSON.stringify(payload) },
@@ -877,6 +914,7 @@ export const api = {
     budget_minutes: number | null;
     input_unit: 'hours' | 'minutes';
   }): Promise<DailyTimeBudgetConfig> {
+    assertWriteAllowed();
     const saved = await request(
       '/api/time-budgets',
       { method: 'POST', body: JSON.stringify(payload) },
@@ -956,6 +994,7 @@ export const api = {
     weeklySampleDaysCount?: number;
     alreadyLoaded?: boolean;
   }> {
+    assertWriteAllowed();
     const res = await request(
       '/api/sample-data/seed',
       { method: 'POST' },
@@ -979,6 +1018,7 @@ export const api = {
     weeklySampleDaysCount?: number;
     removedPlansCount?: number;
   }> {
+    assertWriteAllowed();
     const res = await request(
       '/api/sample-data',
       { method: 'DELETE' },
@@ -1003,6 +1043,7 @@ export const api = {
     alreadyLoaded?: boolean;
     replaced?: boolean;
   }> {
+    assertWriteAllowed();
     const res = await request(
       '/api/sample-data/seed-week',
       { method: 'POST', body: JSON.stringify({ replace }) },
@@ -1026,6 +1067,7 @@ export const api = {
     weeklySampleDaysCount: number;
     removedWeeklyPlansCount?: number;
   }> {
+    assertWriteAllowed();
     const res = await request(
       '/api/sample-data/week',
       { method: 'DELETE' },

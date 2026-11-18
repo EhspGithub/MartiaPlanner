@@ -392,7 +392,9 @@ const ChartModeToggle: React.FC<ChartModeToggleProps> = ({ mode, onChange }) => 
   </div>
 );
 
-export const PerformanceAnalyticsView: React.FC = () => {
+export const PerformanceAnalyticsView: React.FC<{ refreshTrigger?: number }> = ({
+  refreshTrigger = 0,
+}) => {
   const todayIso = getTodayISO();
   const currentWeekDays = useMemo(() => getPersianWeekDays(todayIso), [todayIso]);
 
@@ -449,6 +451,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
     null
   );
   const [loading, setLoading] = useState<boolean>(true);
+  const hasLoadedOnceRef = useRef<boolean>(false);
 
   // Compute active date range for primary period (Period B)
   const activeDateRange = useMemo(() => {
@@ -494,12 +497,14 @@ export const PerformanceAnalyticsView: React.FC = () => {
     setCompStartA(addDaysISO(activeDateRange.start, -len));
   }, [activeDateRange.start, activeDateRange.end]);
 
-  // Load primary period data (and comparison period if enabled)
+  // Load primary period data (and comparison period if enabled) silently after first paint
   useEffect(() => {
     let active = true;
     const fetchAll = async () => {
       try {
-        setLoading(true);
+        if (!hasLoadedOnceRef.current) {
+          setLoading(true);
+        }
         const datesB = getDateRangeISOList(activeDateRange.start, activeDateRange.end);
         const [plansB, budgetsListB] = await Promise.all([
           api.getPlansByRange(activeDateRange.start, activeDateRange.end),
@@ -541,6 +546,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
         } else {
           setComparisonSummaryA(null);
         }
+        hasLoadedOnceRef.current = true;
       } catch {
         // Handled gracefully
       } finally {
@@ -551,7 +557,7 @@ export const PerformanceAnalyticsView: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [activeDateRange.start, activeDateRange.end, showComparison, compStartA, compEndA]);
+  }, [activeDateRange.start, activeDateRange.end, showComparison, compStartA, compEndA, refreshTrigger]);
 
   // Daily Chart data preparation (Short MM/DD format e.g. ۰۸/۲۳ on X-axis per Section 6-1)
   const chartData = useMemo(() => {

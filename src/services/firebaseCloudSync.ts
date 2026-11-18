@@ -12,6 +12,12 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
+import { safeGetItem, safeSetItem, safeRemoveItem } from '../utils/safeStorage.ts';
+import {
+  inspectWorkspaceSyncDiff,
+  smartMergeBackupPayloads,
+  type WorkspaceDiffReport,
+} from './mergePayloads.ts';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
@@ -69,6 +75,9 @@ export function handleFirestoreError(
 }
 
 async function testConnection() {
+  if (currentStatus.connectionMode !== 'cloud' || currentStatus.provider !== 'firebase') {
+    return;
+  }
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch {
@@ -76,12 +85,12 @@ async function testConnection() {
   }
 }
 
-if (typeof window !== 'undefined') {
-  void testConnection();
-}
-
+export type ConnectionModeType = 'offline' | 'cloud';
 export type CloudProviderType = 'firebase' | 'supabase';
+export type WorkspaceRoleType = 'owner' | 'student' | 'observer';
 
+const CONNECTION_MODE_STORAGE_KEY = 'martia_connection_mode_v1';
+const WORKSPACE_ROLE_STORAGE_KEY = 'martia_workspace_role_v1';
 const CLOUD_PROVIDER_STORAGE_KEY = 'martia_cloud_provider_v1';
 const SUPABASE_URL_STORAGE_KEY = 'martia_supabase_url_v1';
 const SUPABASE_ANON_KEY_STORAGE_KEY = 'martia_supabase_anon_key_v1';
@@ -89,6 +98,7 @@ const WORKSPACE_ID_STORAGE_KEY = 'martia_cloud_workspace_id_v1';
 const AUTO_SYNC_STORAGE_KEY = 'martia_cloud_auto_sync_v1';
 const DEVICE_UID_STORAGE_KEY = 'martia_cloud_device_uid_v1';
 const COLLABORATOR_NAME_STORAGE_KEY = 'martia_cloud_collaborator_name_v1';
+const PENDING_OFFLINE_SYNC_KEY = 'martia_pending_offline_sync_v1';
 const DEFAULT_WORKSPACE_ID = 'martia-shared-main';
 
 export const SUPABASE_SETUP_SQL_SCRIPT = `-- اسکریپت ساخت جدول فضای کاری مشترک در Supabase (فقط یک بار در SQL Editor اجرا شود)
@@ -122,75 +132,74 @@ export function extractSupabaseProjectRef(supabaseUrl: string): string | null {
 
 function getOrCreateDeviceUid(): string {
   if (typeof window === 'undefined') return 'device-server';
-  try {
-    const existing = localStorage.getItem(DEVICE_UID_STORAGE_KEY);
-    if (existing && /^[a-zA-Z0-9_-]{4,64}$/.test(existing)) {
-      return existing;
-    }
-    const generated = `dev-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
-    localStorage.setItem(DEVICE_UID_STORAGE_KEY, generated);
-    return generated;
-  } catch {
-    return 'dev-local-fallback';
+  const existing = safeGetItem(DEVICE_UID_STORAGE_KEY);
+  if (existing && /^[a-zA-Z0-9_-]{4,64}$/.test(existing)) {
+    return existing;
   }
+  const generated = `dev-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+  safeSetItem(DEVICE_UID_STORAGE_KEY, generated);
+  return generated;
+}
+
+function getStoredConnectionMode(): ConnectionModeType {
+  if (typeof window === 'undefined') return 'offline';
+  const val = safeGetItem(CONNECTION_MODE_STORAGE_KEY);
+  if (val === 'cloud' || val === 'offline') return val;
+  return 'offline';
+}
+
+function getStoredWorkspaceRole(): WorkspaceRoleType {
+  if (typeof window === 'undefined') return 'owner';
+  const val = safeGetItem(WORKSPACE_ROLE_STORAGE_KEY);
+  if (val === 'owner' || val === 'student' || val === 'observer') return val;
+  return 'owner';
 }
 
 function getStoredProvider(): CloudProviderType {
   if (typeof window === 'undefined') return 'firebase';
-  try {
-    const val = localStorage.getItem(CLOUD_PROVIDER_STORAGE_KEY);
-    if (val === 'supabase' || val === 'firebase') return val;
-  } catch {}
+  const val = safeGetItem(CLOUD_PROVIDER_STORAGE_KEY);
+  if (val === 'supabase' || val === 'firebase') return val;
   return 'firebase';
 }
 
 function getStoredSupabaseUrl(): string {
   const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
   if (typeof window === 'undefined') return envUrl;
-  try {
-    return (localStorage.getItem(SUPABASE_URL_STORAGE_KEY) || envUrl || '').trim();
-  } catch {
-    return envUrl;
-  }
+  return (safeGetItem(SUPABASE_URL_STORAGE_KEY) || envUrl || '').trim();
 }
 
 function getStoredSupabaseAnonKey(): string {
   const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
   if (typeof window === 'undefined') return envKey;
-  try {
-    return (localStorage.getItem(SUPABASE_ANON_KEY_STORAGE_KEY) || envKey || '').trim();
-  } catch {
-    return envKey;
-  }
+  return (safeGetItem(SUPABASE_ANON_KEY_STORAGE_KEY) || envKey || '').trim();
 }
 
 function getStoredCollaboratorName(): string {
   if (typeof window === 'undefined') return 'کاربر ۱';
-  try {
-    const val = localStorage.getItem(COLLABORATOR_NAME_STORAGE_KEY)?.trim();
-    if (val) return val.slice(0, 60);
-  } catch {}
+  const val = safeGetItem(COLLABORATOR_NAME_STORAGE_KEY)?.trim();
+  if (val) return val.slice(0, 60);
   return 'کاربر ۱';
 }
 
 function getStoredWorkspaceId(): string {
   if (typeof window === 'undefined') return DEFAULT_WORKSPACE_ID;
-  try {
-    const val = localStorage.getItem(WORKSPACE_ID_STORAGE_KEY)?.trim();
-    if (val && /^[a-zA-Z0-9_-]{6,128}$/.test(val)) {
-      return val;
-    }
-  } catch {}
+  const val = safeGetItem(WORKSPACE_ID_STORAGE_KEY)?.trim();
+  if (val && /^[a-zA-Z0-9_-]{6,128}$/.test(val)) {
+    return val;
+  }
   return DEFAULT_WORKSPACE_ID;
 }
 
 function getStoredAutoSync(): boolean {
   if (typeof window === 'undefined') return true;
-  try {
-    const val = localStorage.getItem(AUTO_SYNC_STORAGE_KEY);
-    if (val === '0') return false;
-  } catch {}
+  const val = safeGetItem(AUTO_SYNC_STORAGE_KEY);
+  if (val === '0') return false;
   return true;
+}
+
+function getStoredPendingOfflineSync(): boolean {
+  if (typeof window === 'undefined') return false;
+  return safeGetItem(PENDING_OFFLINE_SYNC_KEY) === '1';
 }
 
 function sanitizeWorkspaceId(raw: string): string {
@@ -205,13 +214,28 @@ function normalizeSupabaseUrl(raw: string): string {
   return raw.trim().replace(/\/+$/, '');
 }
 
+export interface CloudSyncConflictInfo {
+  workspaceId: string;
+  provider: CloudProviderType;
+  remoteRevision: number;
+  remoteUpdatedByName: string;
+  remotePayload: any;
+  localPayload: any;
+  diff: WorkspaceDiffReport;
+}
+
 export interface CloudSyncStatus {
+  connectionMode: ConnectionModeType;
+  workspaceRole: WorkspaceRoleType;
   provider: CloudProviderType;
   supabaseUrl: string;
   supabaseAnonKey: string;
   isSupabaseConfigured: boolean;
   needsSupabaseTableSetup: boolean;
   isConnected: boolean;
+  isNetworkOnline: boolean;
+  hasPendingOfflineChanges: boolean;
+  pendingSyncConflict: CloudSyncConflictInfo | null;
   deviceUid: string;
   collaboratorName: string;
   workspaceId: string;
@@ -231,12 +255,17 @@ const initSbUrl = getStoredSupabaseUrl();
 const initSbKey = getStoredSupabaseAnonKey();
 
 let currentStatus: CloudSyncStatus = {
+  connectionMode: getStoredConnectionMode(),
+  workspaceRole: getStoredWorkspaceRole(),
   provider: getStoredProvider(),
   supabaseUrl: initSbUrl,
   supabaseAnonKey: initSbKey,
   isSupabaseConfigured: Boolean(initSbUrl && initSbKey),
   needsSupabaseTableSetup: false,
   isConnected: false,
+  isNetworkOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+  hasPendingOfflineChanges: getStoredPendingOfflineSync(),
+  pendingSyncConflict: null,
   deviceUid: getOrCreateDeviceUid(),
   collaboratorName: getStoredCollaboratorName(),
   workspaceId: getStoredWorkspaceId(),
@@ -267,6 +296,15 @@ function updateStatus(partial: Partial<CloudSyncStatus>) {
   notifyStatusListeners();
 }
 
+function setPendingOfflineFlag(pending: boolean) {
+  if (pending) {
+    safeSetItem(PENDING_OFFLINE_SYNC_KEY, '1');
+  } else {
+    safeRemoveItem(PENDING_OFFLINE_SYNC_KEY);
+  }
+  updateStatus({ hasPendingOfflineChanges: pending });
+}
+
 function stopActiveListeners() {
   if (activeSnapshotUnsubscribe) {
     activeSnapshotUnsubscribe();
@@ -275,6 +313,10 @@ function stopActiveListeners() {
   if (supabasePollTimer) {
     clearInterval(supabasePollTimer);
     supabasePollTimer = null;
+  }
+  if (pushDebounceTimer) {
+    clearTimeout(pushDebounceTimer);
+    pushDebounceTimer = null;
   }
 }
 
@@ -310,6 +352,149 @@ async function applyIncomingPayloadString(
     } finally {
       isApplyingRemoteSnapshot = false;
     }
+  }
+}
+
+interface RemoteWorkspacePeek {
+  exists: boolean;
+  payloadJson: string | null;
+  parsedPayload: any | null;
+  syncRevision: number;
+  lastUpdatedByName: string;
+  needsSupabaseTableSetup?: boolean;
+  error?: string;
+}
+
+async function fetchRemoteWorkspaceRaw(
+  wsId: string,
+  provider: CloudProviderType
+): Promise<RemoteWorkspacePeek> {
+  if (provider === 'supabase') {
+    if (!currentStatus.isSupabaseConfigured) {
+      return {
+        exists: false,
+        payloadJson: null,
+        parsedPayload: null,
+        syncRevision: 0,
+        lastUpdatedByName: '',
+        error: 'تنظیمات Supabase وارد نشده است.',
+      };
+    }
+    const baseUrl = normalizeSupabaseUrl(currentStatus.supabaseUrl);
+    const anonKey = currentStatus.supabaseAnonKey.trim();
+    try {
+      const res = await fetch(
+        `${baseUrl}/rest/v1/martia_workspaces?workspace_id=eq.${encodeURIComponent(
+          wsId
+        )}&select=*`,
+        {
+          method: 'GET',
+          headers: {
+            apikey: anonKey,
+            Authorization: `Bearer ${anonKey}`,
+            Accept: 'application/json',
+          },
+        }
+      );
+      if (!res.ok) {
+        const errText = await res.text();
+        const isMissingTable =
+          errText.includes('PGRST205') || errText.includes('martia_workspaces');
+        return {
+          exists: false,
+          payloadJson: null,
+          parsedPayload: null,
+          syncRevision: 0,
+          lastUpdatedByName: '',
+          needsSupabaseTableSetup: isMissingTable,
+          error: isMissingTable
+            ? 'جدول martia_workspaces در Supabase ساخته نشده است.'
+            : `خطا در ارتباط با Supabase (کد ${res.status}).`,
+        };
+      }
+      const rows = await res.json();
+      if (!Array.isArray(rows) || rows.length === 0 || !rows[0].payload_json) {
+        return {
+          exists: false,
+          payloadJson: null,
+          parsedPayload: null,
+          syncRevision: 0,
+          lastUpdatedByName: '',
+        };
+      }
+      const row = rows[0];
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(row.payload_json);
+      } catch {
+        parsed = null;
+      }
+      return {
+        exists: Boolean(parsed),
+        payloadJson: row.payload_json,
+        parsedPayload: parsed,
+        syncRevision: typeof row.sync_revision === 'number' ? row.sync_revision : 1,
+        lastUpdatedByName: row.last_updated_by_name || 'کاربر همکار',
+      };
+    } catch {
+      return {
+        exists: false,
+        payloadJson: null,
+        parsedPayload: null,
+        syncRevision: 0,
+        lastUpdatedByName: '',
+        error: 'عدم دسترسی به سرور Supabase.',
+      };
+    }
+  }
+
+  // Firebase Firestore
+  const docPath = `workspaces/${wsId}`;
+  const docRef = doc(db, 'workspaces', wsId);
+  try {
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) {
+      return {
+        exists: false,
+        payloadJson: null,
+        parsedPayload: null,
+        syncRevision: 0,
+        lastUpdatedByName: '',
+      };
+    }
+    const data = snap.data();
+    if (!data || typeof data.payloadJson !== 'string') {
+      return {
+        exists: false,
+        payloadJson: null,
+        parsedPayload: null,
+        syncRevision: 0,
+        lastUpdatedByName: '',
+      };
+    }
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(data.payloadJson);
+    } catch {
+      parsed = null;
+    }
+    return {
+      exists: Boolean(parsed),
+      payloadJson: data.payloadJson,
+      parsedPayload: parsed,
+      syncRevision: typeof data.syncRevision === 'number' ? data.syncRevision : 1,
+      lastUpdatedByName: data.lastUpdatedByName || 'کاربر همکار',
+    };
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, docPath);
+    return {
+      exists: false,
+      payloadJson: null,
+      parsedPayload: null,
+      syncRevision: 0,
+      lastUpdatedByName: '',
+      error: 'عدم دسترسی به سرور Firebase.',
+    };
   }
 }
 
@@ -357,12 +542,19 @@ async function pushToFirebaseFirestoreInternal(
 
 async function pollSupabaseWorkspaceOnce() {
   if (
+    currentStatus.connectionMode !== 'cloud' ||
     currentStatus.provider !== 'supabase' ||
     !currentStatus.autoSyncEnabled ||
     !currentStatus.isSupabaseConfigured ||
     currentStatus.needsSupabaseTableSetup ||
+    currentStatus.pendingSyncConflict ||
     isApplyingRemoteSnapshot
   ) {
+    return;
+  }
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    updateStatus({ isConnected: false, isNetworkOnline: false });
     return;
   }
 
@@ -449,7 +641,13 @@ async function pollSupabaseWorkspaceOnce() {
 function startRealtimeWorkspaceSubscription() {
   stopActiveListeners();
 
-  if (typeof window === 'undefined' || !currentStatus.autoSyncEnabled) {
+  // STRICT OFFLINE GUARANTEE: zero background calls or listeners in offline mode
+  if (
+    typeof window === 'undefined' ||
+    currentStatus.connectionMode !== 'cloud' ||
+    !currentStatus.autoSyncEnabled ||
+    currentStatus.pendingSyncConflict
+  ) {
     updateStatus({ isConnected: false });
     return;
   }
@@ -470,6 +668,7 @@ function startRealtimeWorkspaceSubscription() {
   }
 
   // Provider: Firebase Firestore
+  void testConnection();
   const wsId = sanitizeWorkspaceId(currentStatus.workspaceId);
   const docPath = `workspaces/${wsId}`;
   const docRef = doc(db, 'workspaces', wsId);
@@ -496,10 +695,31 @@ function startRealtimeWorkspaceSubscription() {
       updateStatus({
         isConnected: false,
         errorMessage:
-          'خطا در اتصال زنده به دیتابیس ابری Firebase. در صورت محدودیت اینترنت می‌توانید روی حالت Supabase قرار دهید.',
+          'خطا در اتصال زنده به دیتابیس ابری Firebase. اطلاعات محلی شما محفوظ است و در حالت Supabase یا پس از اتصال اینترنت همگام می‌شود.',
       });
     }
   );
+}
+
+// Network online/offline listeners for Automatic Offline Queue Sync
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    updateStatus({ isNetworkOnline: true });
+    if (currentStatus.connectionMode === 'cloud') {
+      if (
+        currentStatus.hasPendingOfflineChanges &&
+        !firebaseCloudSync.isReadOnlyObserver() &&
+        !currentStatus.pendingSyncConflict
+      ) {
+        void firebaseCloudSync.pushToCloudNow();
+      }
+      startRealtimeWorkspaceSubscription();
+    }
+  });
+
+  window.addEventListener('offline', () => {
+    updateStatus({ isNetworkOnline: false, isConnected: false });
+  });
 }
 
 export const firebaseCloudSync = {
@@ -509,13 +729,27 @@ export const firebaseCloudSync = {
   ) {
     localExportHandler = exportFn;
     remotePayloadHandler = applyRemoteFn;
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && currentStatus.connectionMode === 'cloud') {
       startRealtimeWorkspaceSubscription();
+      if (
+        currentStatus.hasPendingOfflineChanges &&
+        navigator.onLine &&
+        !this.isReadOnlyObserver()
+      ) {
+        void this.pushToCloudNow();
+      }
     }
   },
 
   getStatus(): CloudSyncStatus {
     return { ...currentStatus };
+  },
+
+  isReadOnlyObserver(): boolean {
+    return (
+      currentStatus.connectionMode === 'cloud' &&
+      currentStatus.workspaceRole === 'observer'
+    );
   },
 
   subscribeStatus(listener: StatusListener): () => void {
@@ -526,28 +760,228 @@ export const firebaseCloudSync = {
     };
   },
 
-  setProvider(provider: CloudProviderType) {
+  async setConnectionMode(mode: ConnectionModeType): Promise<void> {
+    safeSetItem(CONNECTION_MODE_STORAGE_KEY, mode);
+    if (mode === 'offline') {
+      stopActiveListeners();
+      updateStatus({
+        connectionMode: 'offline',
+        isConnected: false,
+        pendingSyncConflict: null,
+        errorMessage: null,
+      });
+      return;
+    }
+
+    lastAppliedPayloadHash = '';
+    updateStatus({
+      connectionMode: 'cloud',
+      isConnected: false,
+      pendingSyncConflict: null,
+      errorMessage: null,
+    });
+
+    await this.inspectAndConnectCloudWorkspace();
+  },
+
+  setWorkspaceRole(role: WorkspaceRoleType) {
+    safeSetItem(WORKSPACE_ROLE_STORAGE_KEY, role);
+    updateStatus({
+      workspaceRole: role,
+      errorMessage: null,
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('martia:cloud-role-changed', { detail: { role } }));
+    }
+  },
+
+  async inspectAndConnectCloudWorkspace(): Promise<void> {
+    if (currentStatus.connectionMode !== 'cloud') return;
+    if (currentStatus.provider === 'supabase' && !currentStatus.isSupabaseConfigured) {
+      updateStatus({ isConnected: false, errorMessage: null });
+      return;
+    }
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      updateStatus({
+        isNetworkOnline: false,
+        isConnected: false,
+        errorMessage:
+          'اتصال اینترنت برقرار نیست؛ برنامه به‌صورت موقت روی حافظه محلی کار می‌کند و پس از اتصال، تغییرات همگام می‌شوند.',
+      });
+      return;
+    }
+
+    if (!localExportHandler) {
+      startRealtimeWorkspaceSubscription();
+      return;
+    }
+
+    updateStatus({ isSyncing: true, errorMessage: null });
     try {
-      localStorage.setItem(CLOUD_PROVIDER_STORAGE_KEY, provider);
-    } catch {}
+      const wsId = sanitizeWorkspaceId(currentStatus.workspaceId);
+      const [localPayload, remote] = await Promise.all([
+        localExportHandler(),
+        fetchRemoteWorkspaceRaw(wsId, currentStatus.provider),
+      ]);
+
+      if (remote.needsSupabaseTableSetup) {
+        updateStatus({
+          isSyncing: false,
+          isConnected: false,
+          needsSupabaseTableSetup: true,
+          errorMessage: remote.error || null,
+        });
+        return;
+      }
+
+      if (remote.error) {
+        updateStatus({
+          isSyncing: false,
+          isConnected: false,
+          errorMessage: remote.error,
+        });
+        return;
+      }
+
+      if (!remote.exists || !remote.parsedPayload || !remote.payloadJson) {
+        updateStatus({ isSyncing: false, pendingSyncConflict: null });
+        startRealtimeWorkspaceSubscription();
+        return;
+      }
+
+      const diff = inspectWorkspaceSyncDiff(localPayload, remote.parsedPayload);
+      if (diff.isIdentical) {
+        lastAppliedPayloadHash = remote.payloadJson;
+        updateStatus({
+          isSyncing: false,
+          isConnected: true,
+          pendingSyncConflict: null,
+          syncRevision: remote.syncRevision,
+          lastUpdatedByName: remote.lastUpdatedByName,
+          lastSyncedAt: new Date().toISOString(),
+        });
+        startRealtimeWorkspaceSubscription();
+        return;
+      }
+
+      // Data differs between Local and Cloud: pause & let user choose safely
+      stopActiveListeners();
+      updateStatus({
+        isSyncing: false,
+        isConnected: true,
+        pendingSyncConflict: {
+          workspaceId: wsId,
+          provider: currentStatus.provider,
+          remoteRevision: remote.syncRevision,
+          remoteUpdatedByName: remote.lastUpdatedByName,
+          remotePayload: remote.parsedPayload,
+          localPayload,
+          diff,
+        },
+      });
+    } catch {
+      updateStatus({ isSyncing: false });
+      startRealtimeWorkspaceSubscription();
+    }
+  },
+
+  async resolveConflictWithAction(
+    action: 'smart_merge' | 'use_local' | 'use_remote' | 'cancel'
+  ): Promise<boolean> {
+    const conflict = currentStatus.pendingSyncConflict;
+    if (!conflict) return true;
+
+    if (action === 'cancel') {
+      updateStatus({ pendingSyncConflict: null });
+      await this.setConnectionMode('offline');
+      return false;
+    }
+
+    updateStatus({ isSyncing: true, errorMessage: null });
+
+    try {
+      if (action === 'use_remote') {
+        const serialized = JSON.stringify(conflict.remotePayload);
+        await applyIncomingPayloadString(
+          serialized,
+          conflict.remoteRevision,
+          conflict.remoteUpdatedByName
+        );
+        setPendingOfflineFlag(false);
+        updateStatus({ pendingSyncConflict: null, isSyncing: false });
+        startRealtimeWorkspaceSubscription();
+        return true;
+      }
+
+      if (action === 'use_local') {
+        if (this.isReadOnlyObserver()) {
+          updateStatus({
+            isSyncing: false,
+            errorMessage: 'در نقش ناظر فقط‌خواندنی امکان ارسال و جایگزینی اطلاعات ابر وجود ندارد.',
+          });
+          return false;
+        }
+        updateStatus({ pendingSyncConflict: null });
+        const pushed = await this.pushToCloudNow();
+        startRealtimeWorkspaceSubscription();
+        return pushed;
+      }
+
+      // smart_merge
+      const mergedResult = smartMergeBackupPayloads(
+        conflict.localPayload,
+        conflict.remotePayload
+      );
+      if (remotePayloadHandler) {
+        isApplyingRemoteSnapshot = true;
+        try {
+          await remotePayloadHandler(mergedResult.mergedPayload);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('martia:cloud-sync-updated'));
+          }
+        } finally {
+          isApplyingRemoteSnapshot = false;
+        }
+      }
+      updateStatus({ pendingSyncConflict: null });
+      if (!this.isReadOnlyObserver()) {
+        await this.pushToCloudNow();
+      } else {
+        lastAppliedPayloadHash = JSON.stringify(mergedResult.mergedPayload);
+      }
+      startRealtimeWorkspaceSubscription();
+      updateStatus({ isSyncing: false });
+      return true;
+    } catch {
+      updateStatus({
+        isSyncing: false,
+        errorMessage: 'خطا در حل تعارض و همگام‌سازی داده‌ها.',
+      });
+      return false;
+    }
+  },
+
+  async setProvider(provider: CloudProviderType) {
+    safeSetItem(CLOUD_PROVIDER_STORAGE_KEY, provider);
     lastAppliedPayloadHash = '';
     updateStatus({
       provider,
       isConnected: false,
       needsSupabaseTableSetup: false,
+      pendingSyncConflict: null,
       syncRevision: 0,
       errorMessage: null,
     });
-    startRealtimeWorkspaceSubscription();
+    if (currentStatus.connectionMode === 'cloud') {
+      await this.inspectAndConnectCloudWorkspace();
+    }
   },
 
-  setSupabaseCredentials(url: string, anonKey: string) {
+  async setSupabaseCredentials(url: string, anonKey: string) {
     const cleanUrl = normalizeSupabaseUrl(url);
     const cleanKey = anonKey.trim();
-    try {
-      localStorage.setItem(SUPABASE_URL_STORAGE_KEY, cleanUrl);
-      localStorage.setItem(SUPABASE_ANON_KEY_STORAGE_KEY, cleanKey);
-    } catch {}
+    safeSetItem(SUPABASE_URL_STORAGE_KEY, cleanUrl);
+    safeSetItem(SUPABASE_ANON_KEY_STORAGE_KEY, cleanKey);
     const configured = Boolean(cleanUrl && cleanKey);
     lastAppliedPayloadHash = '';
     updateStatus({
@@ -555,11 +989,12 @@ export const firebaseCloudSync = {
       supabaseAnonKey: cleanKey,
       isSupabaseConfigured: configured,
       needsSupabaseTableSetup: false,
+      pendingSyncConflict: null,
       isConnected: false,
       errorMessage: null,
     });
-    if (currentStatus.provider === 'supabase') {
-      startRealtimeWorkspaceSubscription();
+    if (currentStatus.connectionMode === 'cloud' && currentStatus.provider === 'supabase') {
+      await this.inspectAndConnectCloudWorkspace();
     }
   },
 
@@ -568,37 +1003,36 @@ export const firebaseCloudSync = {
       needsSupabaseTableSetup: false,
       errorMessage: null,
     });
-    startRealtimeWorkspaceSubscription();
+    if (currentStatus.connectionMode === 'cloud') {
+      startRealtimeWorkspaceSubscription();
+    }
   },
 
   setCollaboratorName(name: string) {
     const cleanName = (name.trim() || 'کاربر ۱').slice(0, 60);
-    try {
-      localStorage.setItem(COLLABORATOR_NAME_STORAGE_KEY, cleanName);
-    } catch {}
+    safeSetItem(COLLABORATOR_NAME_STORAGE_KEY, cleanName);
     updateStatus({ collaboratorName: cleanName });
   },
 
-  setWorkspaceId(newWorkspaceId: string) {
+  async setWorkspaceId(newWorkspaceId: string) {
     const cleanId = sanitizeWorkspaceId(newWorkspaceId);
-    try {
-      localStorage.setItem(WORKSPACE_ID_STORAGE_KEY, cleanId);
-    } catch {}
+    safeSetItem(WORKSPACE_ID_STORAGE_KEY, cleanId);
     lastAppliedPayloadHash = '';
     updateStatus({
       workspaceId: cleanId,
       syncRevision: 0,
+      pendingSyncConflict: null,
       errorMessage: null,
     });
-    startRealtimeWorkspaceSubscription();
+    if (currentStatus.connectionMode === 'cloud') {
+      await this.inspectAndConnectCloudWorkspace();
+    }
   },
 
   setAutoSyncEnabled(enabled: boolean) {
-    try {
-      localStorage.setItem(AUTO_SYNC_STORAGE_KEY, enabled ? '1' : '0');
-    } catch {}
+    safeSetItem(AUTO_SYNC_STORAGE_KEY, enabled ? '1' : '0');
     updateStatus({ autoSyncEnabled: enabled });
-    if (enabled) {
+    if (currentStatus.connectionMode === 'cloud' && enabled) {
       startRealtimeWorkspaceSubscription();
     } else {
       stopActiveListeners();
@@ -606,9 +1040,44 @@ export const firebaseCloudSync = {
     }
   },
 
+  notifyLocalMutation() {
+    if (currentStatus.connectionMode !== 'cloud') return;
+    if (this.isReadOnlyObserver()) return;
+    if (isApplyingRemoteSnapshot) return;
+
+    setPendingOfflineFlag(true);
+    if (
+      currentStatus.autoSyncEnabled &&
+      !currentStatus.pendingSyncConflict &&
+      (typeof navigator === 'undefined' || navigator.onLine)
+    ) {
+      this.scheduleAutoPush();
+    }
+  },
+
   async pushToCloudNow(): Promise<boolean> {
+    if (currentStatus.connectionMode !== 'cloud') {
+      return false;
+    }
+    if (this.isReadOnlyObserver()) {
+      updateStatus({
+        errorMessage: 'حالت ناظر فقط‌خواندنی (والدین) فعال است؛ امکان تغییر اطلاعات ابری وجود ندارد.',
+      });
+      return false;
+    }
     if (!localExportHandler) return false;
     if (isApplyingRemoteSnapshot) return false;
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setPendingOfflineFlag(true);
+      updateStatus({
+        isNetworkOnline: false,
+        isConnected: false,
+        errorMessage:
+          'اینترنت قطع است. تغییرات شما در حافظه محلی ذخیره شدند و بلافاصله پس از اتصال اینترنت ارسال می‌شوند.',
+      });
+      return false;
+    }
 
     const wsId = sanitizeWorkspaceId(currentStatus.workspaceId);
     const deviceUid = getOrCreateDeviceUid();
@@ -664,15 +1133,12 @@ export const firebaseCloudSync = {
           const isMissingTable =
             errText.includes('PGRST205') || errText.includes('martia_workspaces');
 
-          // Mirror backup to Firebase Firestore automatically so zero data is lost while user sets up table
-          await pushToFirebaseFirestoreInternal(wsId, deviceUid, displayName, serialized);
-
           updateStatus({
             isSyncing: false,
             isConnected: false,
             needsSupabaseTableSetup: isMissingTable,
             errorMessage: isMissingTable
-              ? 'جدول martia_workspaces هنوز در پروژه Supabase شما ساخته نشده است. لطفاً کد SQL زیر را کپی کرده و در SQL Editor سوپابیس Run کنید (اطلاعات شما به صورت خودکار در پشتیبان ابری ذخیره شد).'
+              ? 'جدول martia_workspaces هنوز در پروژه Supabase شما ساخته نشده است. لطفاً کد SQL زیر را کپی کرده و در SQL Editor سوپابیس Run کنید (اطلاعات روی دستگاه شما محفوظ است).'
               : `خطا در اتصال به Supabase (کد ${getRes.status}).`,
           });
           return false;
@@ -710,14 +1176,15 @@ export const firebaseCloudSync = {
         );
 
         if (!upsertRes.ok) {
-          const errText = await upsertRes.text();
+          setPendingOfflineFlag(true);
           updateStatus({
             isSyncing: false,
-            errorMessage: `خطا در ذخیره اطلاعات در Supabase (کد ${upsertRes.status}).`,
+            errorMessage: `خطا در ذخیره اطلاعات در Supabase (کد ${upsertRes.status}). تغییرات در صف همگام‌سازی باقی ماندند.`,
           });
           return false;
         }
 
+        setPendingOfflineFlag(false);
         updateStatus({
           isConnected: true,
           needsSupabaseTableSetup: false,
@@ -741,13 +1208,15 @@ export const firebaseCloudSync = {
       );
 
       if (!fbResult.ok) {
+        setPendingOfflineFlag(true);
         updateStatus({
           isSyncing: false,
-          errorMessage: 'خطا در ارسال اطلاعات به دیتابیس ابری Firebase.',
+          errorMessage: 'خطا در ارسال اطلاعات به دیتابیس ابری Firebase؛ تغییرات محلی حفظ و در صف همگام‌سازی قرار گرفت.',
         });
         return false;
       }
 
+      setPendingOfflineFlag(false);
       updateStatus({
         isConnected: true,
         isSyncing: false,
@@ -758,16 +1227,19 @@ export const firebaseCloudSync = {
       });
       return true;
     } catch {
+      setPendingOfflineFlag(true);
       updateStatus({
         isSyncing: false,
         errorMessage:
-          currentStatus.errorMessage || 'خطا در ارسال اطلاعات به دیتابیس ابری.',
+          currentStatus.errorMessage ||
+          'خطا در ارسال اطلاعات به دیتابیس ابری؛ داده‌ها در حافظه دستگاه محفوظ ماندند.',
       });
       return false;
     }
   },
 
   async pullFromCloudNow(): Promise<boolean> {
+    if (currentStatus.connectionMode !== 'cloud') return false;
     if (!remotePayloadHandler) return false;
 
     const wsId = sanitizeWorkspaceId(currentStatus.workspaceId);
@@ -834,7 +1306,8 @@ export const firebaseCloudSync = {
           typeof row.sync_revision === 'number' ? row.sync_revision : 1,
           row.last_updated_by_name || 'کاربر همکار'
         );
-        updateStatus({ isSyncing: false });
+        setPendingOfflineFlag(false);
+        updateStatus({ isSyncing: false, pendingSyncConflict: null });
         return true;
       }
 
@@ -876,7 +1349,8 @@ export const firebaseCloudSync = {
         typeof data.syncRevision === 'number' ? data.syncRevision : 1,
         data.lastUpdatedByName || 'کاربر همکار'
       );
-      updateStatus({ isSyncing: false });
+      setPendingOfflineFlag(false);
+      updateStatus({ isSyncing: false, pendingSyncConflict: null });
       return true;
     } finally {
       updateStatus({ isSyncing: false });
@@ -884,8 +1358,11 @@ export const firebaseCloudSync = {
   },
 
   scheduleAutoPush() {
+    if (currentStatus.connectionMode !== 'cloud') return;
+    if (this.isReadOnlyObserver()) return;
     if (!currentStatus.autoSyncEnabled) return;
     if (isApplyingRemoteSnapshot) return;
+    if (currentStatus.pendingSyncConflict) return;
     if (currentStatus.provider === 'supabase' && !currentStatus.isSupabaseConfigured) return;
     if (currentStatus.provider === 'supabase' && currentStatus.needsSupabaseTableSetup) return;
 

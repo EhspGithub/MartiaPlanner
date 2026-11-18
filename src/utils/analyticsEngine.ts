@@ -1020,6 +1020,61 @@ export interface PeriodPerformanceSummary {
   totalEssentialActualMinutes: number;
 }
 
+const PERIOD_PERFORMANCE_CACHE = new Map<string, PeriodPerformanceSummary>();
+const MAX_PERIOD_CACHE_ENTRIES = 24;
+
+function buildPeriodCacheKey(params: {
+  dateIsoList: string[];
+  plans: DailyPlanItem[];
+  budgetsMap: Map<string, DailyTimeBudgetConfig>;
+  goalsMap?: Map<string, DailyStudyGoalConfig>;
+  categoriesMap?: Map<string, ActivityCategory>;
+  weights?: AnalyticsWeightsConfig;
+}): string {
+  const { dateIsoList, plans, budgetsMap, goalsMap, categoriesMap, weights } = params;
+  const dateKey =
+    dateIsoList.length > 0
+      ? `${dateIsoList[0]}..${dateIsoList[dateIsoList.length - 1]}:${dateIsoList.length}`
+      : 'empty';
+  let hash = 2166136261;
+  const mix = (s: string) => {
+    for (let j = 0; j < s.length; j++) {
+      hash ^= s.charCodeAt(j);
+      hash = Math.imul(hash, 16777619);
+    }
+  };
+  for (let i = 0; i < plans.length; i++) {
+    const p = plans[i];
+    const perf = p.performance;
+    mix(
+      `${p.id}:${p.plan_date}:${p.status}:${p.is_study}:${p.category_id}:${p.predicted_minutes}:${
+        p.initial_predicted_minutes || 0
+      }:${p.target_exercises || 0}:${perf ? `${perf.actual_minutes}:${perf.exercises_count}:${perf.learning_quality}` : '0'}|`
+    );
+  }
+  for (const [k, b] of budgetsMap.entries()) {
+    mix(`b:${k}:${b.budget_minutes || 0}|`);
+  }
+  if (goalsMap) {
+    for (const [k, g] of goalsMap.entries()) {
+      mix(
+        `g:${k}:${g.target_study_minutes}:${g.target_exercises_count}:${g.target_completed_tasks}|`
+      );
+    }
+  }
+  if (categoriesMap) {
+    for (const [k, c] of categoriesMap.entries()) {
+      mix(`c:${k}:${c.activity_group || ''}:${c.is_study}|`);
+    }
+  }
+  if (weights) {
+    mix(
+      `w:${weights.studyTimeWeight}:${weights.exercisesWeight}:${weights.learningQualityWeight}:${weights.educationalCompositeWeight}:${weights.restrictedControlWeight}`
+    );
+  }
+  return `${dateKey}:${plans.length}:${hash >>> 0}:${getAnalyticsCoefficientsSignature()}`;
+}
+
 export function evaluatePeriodPerformance(params: {
   dateIsoList: string[];
   plans: DailyPlanItem[];
@@ -1036,6 +1091,12 @@ export function evaluatePeriodPerformance(params: {
     categoriesMap,
     weights,
   } = params;
+
+  const cacheKey = buildPeriodCacheKey(params);
+  const cached = PERIOD_PERFORMANCE_CACHE.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
 
   const plansByDateMap = new Map<string, DailyPlanItem[]>();
   for (const p of plans) {
@@ -1176,7 +1237,7 @@ export function evaluatePeriodPerformance(params: {
   const averageRestrictedControlIndexC =
     restrictedCDays > 0 ? Math.round(restrictedCSum / restrictedCDays) : null;
 
-  return {
+  const summary: PeriodPerformanceSummary = {
     startDateIso: dateIsoList[0] || '',
     endDateIso: dateIsoList[dateIsoList.length - 1] || '',
     daysCount: dailyEvaluations.length,
@@ -1214,6 +1275,13 @@ export function evaluatePeriodPerformance(params: {
 
     totalEssentialActualMinutes,
   };
+
+  if (PERIOD_PERFORMANCE_CACHE.size >= MAX_PERIOD_CACHE_ENTRIES) {
+    const oldestKey = PERIOD_PERFORMANCE_CACHE.keys().next().value;
+    if (oldestKey) PERIOD_PERFORMANCE_CACHE.delete(oldestKey);
+  }
+  PERIOD_PERFORMANCE_CACHE.set(cacheKey, summary);
+  return summary;
 }
 
 export interface MetricComparisonDelta {
@@ -2519,8 +2587,16 @@ export function calculateSubjectProgression(params: {
   gradeLevel?: string;
   allTimePlans: DailyPlanItem[];
   todayIso?: string;
+  prebucketedSubjectPlans?: DailyPlanItem[];
 }): SubjectLevelProgress {
-  const { subjectId, subjectName, gradeLevel = 'هشتم', allTimePlans, todayIso: rawTodayIso } = params;
+  const {
+    subjectId,
+    subjectName,
+    gradeLevel = 'هشتم',
+    allTimePlans,
+    todayIso: rawTodayIso,
+    prebucketedSubjectPlans,
+  } = params;
   const todayIso =
     rawTodayIso ||
     (() => {
@@ -2530,13 +2606,15 @@ export function calculateSubjectProgression(params: {
       ).padStart(2, '0')}`;
     })();
 
-  const subjectPlans = allTimePlans.filter(
-    (p) =>
-      Number(p.is_study) === 1 &&
-      (p.subject_id === subjectId ||
-        (!p.subject_id && p.subject_name_snapshot === subjectName) ||
-        (subjectId.startsWith('hist-') && p.subject_name_snapshot === subjectName))
-  );
+  const subjectPlans =
+    prebucketedSubjectPlans ||
+    allTimePlans.filter(
+      (p) =>
+        Number(p.is_study) === 1 &&
+        (p.subject_id === subjectId ||
+          (!p.subject_id && p.subject_name_snapshot === subjectName) ||
+          (subjectId.startsWith('hist-') && p.subject_name_snapshot === subjectName))
+    );
 
   let completedCount = 0;
   let partialCount = 0;
@@ -2990,12 +3068,32 @@ export function calculateSubjectProgression(params: {
   };
 }
 
+let cachedAllSubjectsKey = '';
+let cachedAllSubjectsValue: SubjectLevelProgress[] | null = null;
+
 export function calculateAllSubjectsProgressions(params: {
   subjects: Array<{ id: string; name: string; grade_level?: string; is_archived?: number }>;
   allTimePlans: DailyPlanItem[];
   todayIso?: string;
 }): SubjectLevelProgress[] {
   const { subjects, allTimePlans, todayIso } = params;
+  const resolvedTodayIso =
+    todayIso ||
+    (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+        d.getDate()
+      ).padStart(2, '0')}`;
+    })();
+
+  const subjectsSig = subjects
+    .map((s) => `${s.id}:${s.name}:${s.grade_level || ''}:${Number(s.is_archived ?? 0)}`)
+    .join('|');
+  const cacheKey = `${subjectsSig}::${buildPlansSignature(allTimePlans, resolvedTodayIso)}`;
+  if (cachedAllSubjectsKey === cacheKey && cachedAllSubjectsValue) {
+    return cachedAllSubjectsValue;
+  }
+
   const entries = new Map<string, { id: string; name: string; gradeLevel: string }>();
 
   for (const s of subjects) {
@@ -3008,7 +3106,13 @@ export function calculateAllSubjectsProgressions(params: {
     }
   }
 
-  for (const p of allTimePlans) {
+  // Single-pass O(N) bucketing of study plans by subjectId / fallback name
+  const plansBySubjectId = new Map<string, DailyPlanItem[]>();
+  const unlinkedPlansByName = new Map<string, DailyPlanItem[]>();
+  const allPlansByName = new Map<string, DailyPlanItem[]>();
+
+  for (let i = 0; i < allTimePlans.length; i++) {
+    const p = allTimePlans[i];
     if (Number(p.is_study) !== 1) continue;
     const sid = p.subject_id || `hist-${p.subject_name_snapshot || 'نامشخص'}`;
     if (!entries.has(sid)) {
@@ -3018,20 +3122,47 @@ export function calculateAllSubjectsProgressions(params: {
         gradeLevel: 'هشتم',
       });
     }
+    if (p.subject_id) {
+      const idBucket = plansBySubjectId.get(p.subject_id);
+      if (idBucket) idBucket.push(p);
+      else plansBySubjectId.set(p.subject_id, [p]);
+    } else if (p.subject_name_snapshot) {
+      const unlinkedBucket = unlinkedPlansByName.get(p.subject_name_snapshot);
+      if (unlinkedBucket) unlinkedBucket.push(p);
+      else unlinkedPlansByName.set(p.subject_name_snapshot, [p]);
+    }
+    if (p.subject_name_snapshot) {
+      const nameBucket = allPlansByName.get(p.subject_name_snapshot);
+      if (nameBucket) nameBucket.push(p);
+      else allPlansByName.set(p.subject_name_snapshot, [p]);
+    }
   }
 
   const results: SubjectLevelProgress[] = [];
   for (const e of entries.values()) {
+    let prebucketed: DailyPlanItem[];
+    if (e.id.startsWith('hist-')) {
+      prebucketed = allPlansByName.get(e.name) || [];
+    } else {
+      const byId = plansBySubjectId.get(e.id) || [];
+      const byUnlinkedName = unlinkedPlansByName.get(e.name) || [];
+      prebucketed = byUnlinkedName.length > 0 ? [...byId, ...byUnlinkedName] : byId;
+    }
+
     results.push(
       calculateSubjectProgression({
         subjectId: e.id,
         subjectName: e.name,
         gradeLevel: e.gradeLevel,
         allTimePlans,
-        todayIso,
+        todayIso: resolvedTodayIso,
+        prebucketedSubjectPlans: prebucketed,
       })
     );
   }
+
+  cachedAllSubjectsKey = cacheKey;
+  cachedAllSubjectsValue = results;
   return results;
 }
 
@@ -3106,12 +3237,19 @@ export interface XpVelocityAndProgressAnalysis {
   recent7DaysSeries: DailyHistoricalXpRecord[];
 }
 
+let cachedVelocityKey = '';
+let cachedVelocityValue: XpVelocityAndProgressAnalysis | null = null;
+
 export function analyzeXpVelocityAndProgress(params: {
   allTimePlans: DailyPlanItem[];
   todayIso: string;
   levelProgress: UserLevelProgress;
 }): XpVelocityAndProgressAnalysis {
   const { allTimePlans, todayIso, levelProgress } = params;
+  const velocitySig = `${buildPlansSignature(allTimePlans, todayIso)}::${levelProgress.allTimeXp}:${levelProgress.stageNumber}`;
+  if (cachedVelocityKey === velocitySig && cachedVelocityValue) {
+    return cachedVelocityValue;
+  }
 
   const globalLedger = evaluateGlobalXpLedger(allTimePlans, todayIso);
   const penaltyByDate = new Map<string, GlobalInactivityDayPenalty>();
@@ -3471,7 +3609,7 @@ export function analyzeXpVelocityAndProgress(params: {
       )} XP برای بازگشت به «${nextGoalName}» کسب می‌کنید.`
     : `گام طلایی ادامه مسیر: حفظ پیوستگی روزانه و ثبت حداقل ۱ باکس مطالعه عمیق برای صعود سریع‌تر به «${nextGoalName}».`;
 
-  return {
+  const result: XpVelocityAndProgressAnalysis = {
     todayXp,
     xp7dTotal,
     xp14dTotal,
@@ -3507,6 +3645,9 @@ export function analyzeXpVelocityAndProgress(params: {
     recoveryChallengeTextPersian,
     recent7DaysSeries: records7d,
   };
+  cachedVelocityKey = velocitySig;
+  cachedVelocityValue = result;
+  return result;
 }
 
 

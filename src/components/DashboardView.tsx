@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   TrendingUp,
   Trophy,
@@ -39,10 +39,13 @@ import { PerformanceAnalyticsView } from './PerformanceAnalyticsView.tsx';
 import { XpCoinBadge } from './XpCoinBadge.tsx';
 import { LevelEmblemBadge, StepSegmentDots } from './LevelIdentityCard.tsx';
 
-export const DashboardView: React.FC = () => {
+export const DashboardView: React.FC<{ refreshTrigger?: number }> = ({
+  refreshTrigger = 0,
+}) => {
   const [range] = useState<'today' | 'week' | 'month'>('today');
   const [allTimePlans, setAllTimePlans] = useState<DailyPlanItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const hasLoadedOnceRef = useRef<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [showXpFormulaGuide, setShowXpFormulaGuide] = useState<boolean>(false);
   const [isXpVelocityOpen, setIsXpVelocityOpen] = useState<boolean>(false);
@@ -64,13 +67,16 @@ export const DashboardView: React.FC = () => {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    if (!hasLoadedOnceRef.current) {
+      setLoading(true);
+    }
     setError(null);
     api
       .getPlansByRange('2020-01-01', '2099-12-31')
       .then((allPlans) => {
         if (active) {
           setAllTimePlans(allPlans);
+          hasLoadedOnceRef.current = true;
           setLoading(false);
         }
       })
@@ -83,7 +89,7 @@ export const DashboardView: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [range, todayIso]);
+  }, [range, todayIso, refreshTrigger]);
 
   const globalXpLedger = useMemo(
     () => {
@@ -935,7 +941,7 @@ export const DashboardView: React.FC = () => {
       })()}
 
       {/* Comprehensive Performance Evaluation & Analytics Section (includes all 7 charts) */}
-      <PerformanceAnalyticsView />
+      <PerformanceAnalyticsView refreshTrigger={refreshTrigger} />
 
       {loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
@@ -966,7 +972,7 @@ export const DashboardView: React.FC = () => {
           {/* =================================================================
               WEEKLY ANALYTICAL REPORT (Section 9)
           ================================================================= */}
-          <WeeklyAnalyticalReport />
+          <WeeklyAnalyticalReport refreshTrigger={refreshTrigger} />
         </>
       )}
     </div>
