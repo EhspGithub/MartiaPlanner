@@ -6,9 +6,9 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Phase 3: Hardened Global Helpers
+    // Hardened Global Helpers
     function isValidId(id) {
-      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() >= 6 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     function incoming() {
@@ -19,11 +19,7 @@ service cloud.firestore {
       return resource.data;
     }
 
-    function isSignedIn() {
-      return request.auth != null && request.auth.token.email_verified == true;
-    }
-
-    // Pillar 2: Validation Blueprint for SharedWorkspace
+    // Validation Blueprint for SharedWorkspace (Strict Schema, Size & Temporal Guards)
     function isValidSharedWorkspace(data, workspaceId) {
       return data.keys().hasAll([
           'workspaceId',
@@ -46,7 +42,7 @@ service cloud.firestore {
           'updatedAt'
         ])
         && data.workspaceId is string
-        && data.workspaceId.size() >= 1
+        && data.workspaceId.size() >= 6
         && data.workspaceId.size() <= 128
         && data.workspaceId.matches('^[a-zA-Z0-9_\\-]+$')
         && data.workspaceId == workspaceId
@@ -58,7 +54,6 @@ service cloud.firestore {
         && data.lastUpdatedByUid.size() >= 1
         && data.lastUpdatedByUid.size() <= 128
         && data.lastUpdatedByUid.matches('^[a-zA-Z0-9_\\-]+$')
-        && data.lastUpdatedByUid == request.auth.uid
         && data.lastUpdatedByName is string
         && data.lastUpdatedByName.size() >= 1
         && data.lastUpdatedByName.size() <= 120
@@ -72,23 +67,18 @@ service cloud.firestore {
     }
 
     match /workspaces/{workspaceId} {
-      // Direct read by known workspaceId for verified collaborators
-      allow get: if isSignedIn() && isValidId(workspaceId);
+      // Capability-based direct read by exact secret workspaceId (no list scraping allowed)
+      allow get: if isValidId(workspaceId);
+      allow list: if false;
 
-      // Pillar 8: Query Enforcer for list queries
-      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
-
-      // Create shared workspace snapshot
-      allow create: if isSignedIn()
-        && isValidId(workspaceId)
+      // Create shared workspace snapshot with strict schema and server timestamps
+      allow create: if isValidId(workspaceId)
         && isValidSharedWorkspace(incoming(), workspaceId)
-        && incoming().ownerId == request.auth.uid
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
 
       // Action-Based Update: Sync workspace state while preserving immutable fields
-      allow update: if isSignedIn()
-        && isValidId(workspaceId)
+      allow update: if isValidId(workspaceId)
         && isValidSharedWorkspace(incoming(), workspaceId)
         && incoming().ownerId == existing().ownerId
         && incoming().workspaceId == existing().workspaceId
@@ -105,10 +95,7 @@ service cloud.firestore {
           ])
         );
 
-      // Only the workspace creator can delete the workspace document
-      allow delete: if isSignedIn()
-        && isValidId(workspaceId)
-        && existing().ownerId == request.auth.uid;
+      allow delete: if false;
     }
   }
 }

@@ -1,12 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signOut,
-  onAuthStateChanged,
-  type User,
-} from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import {
   getFirestore,
   doc,
@@ -58,11 +51,11 @@ export function handleFirestoreError(
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
+      userId: auth.currentUser?.uid || getOrCreateDeviceUid(),
+      email: auth.currentUser?.email || null,
+      emailVerified: auth.currentUser?.emailVerified || null,
+      isAnonymous: auth.currentUser?.isAnonymous ?? true,
+      tenantId: auth.currentUser?.tenantId || null,
       providerInfo:
         auth.currentUser?.providerData?.map((provider) => ({
           providerId: provider.providerId,
@@ -92,13 +85,66 @@ if (typeof window !== 'undefined') {
 
 const WORKSPACE_ID_STORAGE_KEY = 'martia_cloud_workspace_id_v1';
 const AUTO_SYNC_STORAGE_KEY = 'martia_cloud_auto_sync_v1';
+const DEVICE_UID_STORAGE_KEY = 'martia_cloud_device_uid_v1';
+const COLLABORATOR_NAME_STORAGE_KEY = 'martia_cloud_collaborator_name_v1';
 const DEFAULT_WORKSPACE_ID = 'martia-shared-main';
 
+function getOrCreateDeviceUid(): string {
+  if (typeof window === 'undefined') return 'device-server';
+  try {
+    const existing = localStorage.getItem(DEVICE_UID_STORAGE_KEY);
+    if (existing && /^[a-zA-Z0-9_-]{4,64}$/.test(existing)) {
+      return existing;
+    }
+    const generated = `dev-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+    localStorage.setItem(DEVICE_UID_STORAGE_KEY, generated);
+    return generated;
+  } catch {
+    return 'dev-local-fallback';
+  }
+}
+
+function getStoredCollaboratorName(): string {
+  if (typeof window === 'undefined') return 'کاربر ۱';
+  try {
+    const val = localStorage.getItem(COLLABORATOR_NAME_STORAGE_KEY)?.trim();
+    if (val) return val.slice(0, 60);
+  } catch {}
+  return 'کاربر ۱';
+}
+
+function getStoredWorkspaceId(): string {
+  if (typeof window === 'undefined') return DEFAULT_WORKSPACE_ID;
+  try {
+    const val = localStorage.getItem(WORKSPACE_ID_STORAGE_KEY)?.trim();
+    if (val && /^[a-zA-Z0-9_-]{6,128}$/.test(val)) {
+      return val;
+    }
+  } catch {}
+  return DEFAULT_WORKSPACE_ID;
+}
+
+function getStoredAutoSync(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    const val = localStorage.getItem(AUTO_SYNC_STORAGE_KEY);
+    if (val === '0') return false;
+  } catch {}
+  return true;
+}
+
+function sanitizeWorkspaceId(raw: string): string {
+  const cleaned = raw.trim().replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 128);
+  if (cleaned.length < 6) {
+    return DEFAULT_WORKSPACE_ID;
+  }
+  return cleaned;
+}
+
 export interface CloudSyncStatus {
-  isAuthenticated: boolean;
-  userEmail: string | null;
-  userName: string | null;
-  userPhoto: string | null;
+  isConnected: boolean;
+  deviceUid: string;
+  collaboratorName: string;
   workspaceId: string;
   autoSyncEnabled: boolean;
   isSyncing: boolean;
@@ -113,10 +159,9 @@ type RemotePayloadApplyHandler = (payload: any) => Promise<void>;
 type LocalPayloadExportHandler = () => Promise<any>;
 
 let currentStatus: CloudSyncStatus = {
-  isAuthenticated: false,
-  userEmail: null,
-  userName: null,
-  userPhoto: null,
+  isConnected: false,
+  deviceUid: getOrCreateDeviceUid(),
+  collaboratorName: getStoredCollaboratorName(),
   workspaceId: getStoredWorkspaceId(),
   autoSyncEnabled: getStoredAutoSync(),
   isSyncing: false,
@@ -134,26 +179,6 @@ let isApplyingRemoteSnapshot = false;
 let lastAppliedPayloadHash = '';
 let pushDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-function getStoredWorkspaceId(): string {
-  if (typeof window === 'undefined') return DEFAULT_WORKSPACE_ID;
-  try {
-    const val = localStorage.getItem(WORKSPACE_ID_STORAGE_KEY)?.trim();
-    if (val && /^[a-zA-Z0-9_-]{1,128}$/.test(val)) {
-      return val;
-    }
-  } catch {}
-  return DEFAULT_WORKSPACE_ID;
-}
-
-function getStoredAutoSync(): boolean {
-  if (typeof window === 'undefined') return true;
-  try {
-    const val = localStorage.getItem(AUTO_SYNC_STORAGE_KEY);
-    if (val === '0') return false;
-  } catch {}
-  return true;
-}
-
 function notifyStatusListeners() {
   const snapshot = { ...currentStatus };
   statusListeners.forEach((cb) => cb(snapshot));
@@ -164,29 +189,26 @@ function updateStatus(partial: Partial<CloudSyncStatus>) {
   notifyStatusListeners();
 }
 
-function sanitizeWorkspaceId(raw: string): string {
-  const cleaned = raw.trim().replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 128);
-  return cleaned || DEFAULT_WORKSPACE_ID;
-}
-
 function startRealtimeWorkspaceSubscription() {
   if (activeSnapshotUnsubscribe) {
     activeSnapshotUnsubscribe();
     activeSnapshotUnsubscribe = null;
   }
 
-  const user = auth.currentUser;
-  if (!user || !currentStatus.autoSyncEnabled) {
+  if (typeof window === 'undefined' || !currentStatus.autoSyncEnabled) {
+    updateStatus({ isConnected: false });
     return;
   }
 
-  const wsId = currentStatus.workspaceId;
+  const wsId = sanitizeWorkspaceId(currentStatus.workspaceId);
   const docPath = `workspaces/${wsId}`;
   const docRef = doc(db, 'workspaces', wsId);
 
   activeSnapshotUnsubscribe = onSnapshot(
     docRef,
     async (snapshot) => {
+      updateStatus({ isConnected: true, errorMessage: null });
+
       if (!snapshot.exists()) {
         return;
       }
@@ -198,6 +220,7 @@ function startRealtimeWorkspaceSubscription() {
         typeof data.lastUpdatedByName === 'string' ? data.lastUpdatedByName : 'کاربر همکار';
 
       updateStatus({
+        isConnected: true,
         syncRevision: incomingRev,
         lastUpdatedByName: updatedByName,
         lastSyncedAt: new Date().toISOString(),
@@ -226,39 +249,14 @@ function startRealtimeWorkspaceSubscription() {
     },
     (error) => {
       updateStatus({
-        errorMessage: 'خطا در اتصال زنده به دیتابیس ابری. لطفاً اتصال اینترنت یا دسترسی را بررسی کنید.',
+        isConnected: false,
+        errorMessage: 'خطا در اتصال زنده به دیتابیس ابری. لطفاً اتصال اینترنت را بررسی کنید.',
       });
       try {
         handleFirestoreError(error, OperationType.GET, docPath);
       } catch {}
     }
   );
-}
-
-if (typeof window !== 'undefined') {
-  onAuthStateChanged(auth, (user: User | null) => {
-    if (user) {
-      updateStatus({
-        isAuthenticated: true,
-        userEmail: user.email || null,
-        userName: user.displayName || user.email?.split('@')[0] || 'کاربر',
-        userPhoto: user.photoURL || null,
-        errorMessage: null,
-      });
-      startRealtimeWorkspaceSubscription();
-    } else {
-      if (activeSnapshotUnsubscribe) {
-        activeSnapshotUnsubscribe();
-        activeSnapshotUnsubscribe = null;
-      }
-      updateStatus({
-        isAuthenticated: false,
-        userEmail: null,
-        userName: null,
-        userPhoto: null,
-      });
-    }
-  });
 }
 
 export const firebaseCloudSync = {
@@ -268,6 +266,9 @@ export const firebaseCloudSync = {
   ) {
     localExportHandler = exportFn;
     remotePayloadHandler = applyRemoteFn;
+    if (typeof window !== 'undefined') {
+      startRealtimeWorkspaceSubscription();
+    }
   },
 
   getStatus(): CloudSyncStatus {
@@ -280,6 +281,14 @@ export const firebaseCloudSync = {
     return () => {
       statusListeners.delete(listener);
     };
+  },
+
+  setCollaboratorName(name: string) {
+    const cleanName = (name.trim() || 'کاربر ۱').slice(0, 60);
+    try {
+      localStorage.setItem(COLLABORATOR_NAME_STORAGE_KEY, cleanName);
+    } catch {}
+    updateStatus({ collaboratorName: cleanName });
   },
 
   setWorkspaceId(newWorkspaceId: string) {
@@ -306,32 +315,19 @@ export const firebaseCloudSync = {
     } else if (activeSnapshotUnsubscribe) {
       activeSnapshotUnsubscribe();
       activeSnapshotUnsubscribe = null;
+      updateStatus({ isConnected: false });
     }
-  },
-
-  async signInWithGoogle(): Promise<void> {
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-    updateStatus({ errorMessage: null });
-    await signInWithPopup(auth, provider);
-  },
-
-  async signOutFromCloud(): Promise<void> {
-    if (activeSnapshotUnsubscribe) {
-      activeSnapshotUnsubscribe();
-      activeSnapshotUnsubscribe = null;
-    }
-    await signOut(auth);
   },
 
   async pushToCloudNow(): Promise<void> {
-    const user = auth.currentUser;
-    if (!user || !localExportHandler) return;
+    if (!localExportHandler) return;
     if (isApplyingRemoteSnapshot) return;
 
     const wsId = sanitizeWorkspaceId(currentStatus.workspaceId);
     const docPath = `workspaces/${wsId}`;
     const docRef = doc(db, 'workspaces', wsId);
+    const deviceUid = getOrCreateDeviceUid();
+    const displayName = (currentStatus.collaboratorName || 'کاربر ۱').slice(0, 120);
 
     updateStatus({ isSyncing: true, errorMessage: null });
 
@@ -348,7 +344,6 @@ export const firebaseCloudSync = {
       }
 
       lastAppliedPayloadHash = serialized;
-      const displayName = (user.displayName || user.email?.split('@')[0] || 'کاربر').slice(0, 120);
 
       let existingSnap;
       try {
@@ -361,8 +356,8 @@ export const firebaseCloudSync = {
         try {
           await setDoc(docRef, {
             workspaceId: wsId,
-            ownerId: user.uid,
-            lastUpdatedByUid: user.uid,
+            ownerId: deviceUid,
+            lastUpdatedByUid: deviceUid,
             lastUpdatedByName: displayName,
             payloadJson: serialized,
             syncRevision: 1,
@@ -370,6 +365,7 @@ export const firebaseCloudSync = {
             updatedAt: serverTimestamp(),
           });
           updateStatus({
+            isConnected: true,
             isSyncing: false,
             lastSyncedAt: new Date().toISOString(),
             lastUpdatedByName: displayName,
@@ -384,13 +380,14 @@ export const firebaseCloudSync = {
           (typeof existingData?.syncRevision === 'number' ? existingData.syncRevision : 1) + 1;
         try {
           await updateDoc(docRef, {
-            lastUpdatedByUid: user.uid,
+            lastUpdatedByUid: deviceUid,
             lastUpdatedByName: displayName,
             payloadJson: serialized,
             syncRevision: nextRev,
             updatedAt: serverTimestamp(),
           });
           updateStatus({
+            isConnected: true,
             isSyncing: false,
             lastSyncedAt: new Date().toISOString(),
             lastUpdatedByName: displayName,
@@ -410,8 +407,7 @@ export const firebaseCloudSync = {
   },
 
   async pullFromCloudNow(): Promise<boolean> {
-    const user = auth.currentUser;
-    if (!user || !remotePayloadHandler) return false;
+    if (!remotePayloadHandler) return false;
 
     const wsId = sanitizeWorkspaceId(currentStatus.workspaceId);
     const docPath = `workspaces/${wsId}`;
@@ -430,7 +426,8 @@ export const firebaseCloudSync = {
       if (!snap || !snap.exists()) {
         updateStatus({
           isSyncing: false,
-          errorMessage: 'هنوز اطلاعاتی در این کد فضای کاری ابری ذخیره نشده است.',
+          errorMessage:
+            'هنوز اطلاعاتی در این کد اتاق مشترک ذخیره نشده است. ابتدا دکمه «ارسال فوری اطلاعات به ابر (Push)» را بزنید.',
         });
         return false;
       }
@@ -447,6 +444,7 @@ export const firebaseCloudSync = {
       await remotePayloadHandler(parsed);
 
       updateStatus({
+        isConnected: true,
         isSyncing: false,
         lastSyncedAt: new Date().toISOString(),
         lastUpdatedByName: data.lastUpdatedByName || 'کاربر همکار',
@@ -463,7 +461,7 @@ export const firebaseCloudSync = {
   },
 
   scheduleAutoPush() {
-    if (!currentStatus.isAuthenticated || !currentStatus.autoSyncEnabled) return;
+    if (!currentStatus.autoSyncEnabled) return;
     if (isApplyingRemoteSnapshot) return;
 
     if (pushDebounceTimer) {
