@@ -1,0 +1,114 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1: Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Hardened Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    // Pillar 2: Validation Blueprint for SharedWorkspace
+    function isValidSharedWorkspace(data, workspaceId) {
+      return data.keys().hasAll([
+          'workspaceId',
+          'ownerId',
+          'lastUpdatedByUid',
+          'lastUpdatedByName',
+          'payloadJson',
+          'syncRevision',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'workspaceId',
+          'ownerId',
+          'lastUpdatedByUid',
+          'lastUpdatedByName',
+          'payloadJson',
+          'syncRevision',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.workspaceId is string
+        && data.workspaceId.size() >= 1
+        && data.workspaceId.size() <= 128
+        && data.workspaceId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.workspaceId == workspaceId
+        && data.ownerId is string
+        && data.ownerId.size() >= 1
+        && data.ownerId.size() <= 128
+        && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.lastUpdatedByUid is string
+        && data.lastUpdatedByUid.size() >= 1
+        && data.lastUpdatedByUid.size() <= 128
+        && data.lastUpdatedByUid.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.lastUpdatedByUid == request.auth.uid
+        && data.lastUpdatedByName is string
+        && data.lastUpdatedByName.size() >= 1
+        && data.lastUpdatedByName.size() <= 120
+        && data.payloadJson is string
+        && data.payloadJson.size() >= 2
+        && data.payloadJson.size() <= 950000
+        && data.syncRevision is int
+        && data.syncRevision >= 1
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /workspaces/{workspaceId} {
+      // Direct read by known workspaceId for verified collaborators
+      allow get: if isSignedIn() && isValidId(workspaceId);
+
+      // Pillar 8: Query Enforcer for list queries
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+
+      // Create shared workspace snapshot
+      allow create: if isSignedIn()
+        && isValidId(workspaceId)
+        && isValidSharedWorkspace(incoming(), workspaceId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      // Action-Based Update: Sync workspace state while preserving immutable fields
+      allow update: if isSignedIn()
+        && isValidId(workspaceId)
+        && isValidSharedWorkspace(incoming(), workspaceId)
+        && incoming().ownerId == existing().ownerId
+        && incoming().workspaceId == existing().workspaceId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().syncRevision >= existing().syncRevision
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'lastUpdatedByUid',
+            'lastUpdatedByName',
+            'payloadJson',
+            'syncRevision',
+            'updatedAt'
+          ])
+        );
+
+      // Only the workspace creator can delete the workspace document
+      allow delete: if isSignedIn()
+        && isValidId(workspaceId)
+        && existing().ownerId == request.auth.uid;
+    }
+  }
+}

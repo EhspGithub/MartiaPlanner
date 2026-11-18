@@ -46,6 +46,7 @@ import {
   SMART_REMINDER_EVENT_NAME,
 } from './StudyReminderManager.tsx';
 import { CoefficientsSettingsPanel } from './CoefficientsSettingsPanel.tsx';
+import { CloudSyncPanel } from './CloudSyncPanel.tsx';
 import type { AnalyticsCoefficientsConfig } from '../utils/analyticsCoefficients.ts';
 
 interface SettingsViewProps {
@@ -914,10 +915,13 @@ git push -u origin main`;
       )}
 
       {/* =====================================================================
-          TAB 1 (DEFAULT): SECTION 4 — COMPREHENSIVE BACKUP & RESTORE
+          TAB 1 (DEFAULT): SECTION 4 — COMPREHENSIVE BACKUP & RESTORE + CLOUD SYNC
       ===================================================================== */}
       {activeSubTab === 'backup' && (
         <div className="space-y-5">
+          {/* دیتابیس ابری زنده و مشترک (Firebase Firestore Cloud Sync) */}
+          <CloudSyncPanel onDataSynced={onRefreshBootstrap} />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* الف) دریافت نسخه پشتیبان (Backup) */}
             <div className="rounded-3xl border border-indigo-200/90 dark:border-indigo-900/60 bg-white dark:bg-slate-900 p-6 shadow-xs flex flex-col justify-between space-y-5">

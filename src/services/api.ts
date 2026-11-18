@@ -25,6 +25,7 @@ import {
   getAnalyticsCoefficients,
   saveAnalyticsCoefficients,
 } from '../utils/analyticsCoefficients.ts';
+import { firebaseCloudSync } from './firebaseCloudSync.ts';
 
 let serverAvailable: boolean | null = null;
 
@@ -45,7 +46,8 @@ const dashboardMetricsCache = new Map<string, DashboardMetrics>();
 const inFlightRequests = new Map<string, Promise<any>>();
 
 export function invalidateApiCache(
-  scope: 'all' | 'plans' | 'bootstrap' | 'budgets' | 'goals' = 'all'
+  scope: 'all' | 'plans' | 'bootstrap' | 'budgets' | 'goals' = 'all',
+  skipCloudPush = false
 ) {
   if (scope === 'all' || scope === 'bootstrap') {
     cachedBootstrap = null;
@@ -64,6 +66,9 @@ export function invalidateApiCache(
   if (scope === 'all' || scope === 'goals') {
     goalsRangeCache.clear();
     goalByDateCache.clear();
+  }
+  if (!skipCloudPush) {
+    firebaseCloudSync.scheduleAutoPush();
   }
 }
 
@@ -719,6 +724,47 @@ export const api = {
     return res;
   },
 
+  async importBackupFromCloud(payload: any): Promise<void> {
+    const validation = this.validateBackupPayload(payload);
+    if (!validation.valid || !validation.normalizedPayload) {
+      return;
+    }
+
+    const cleanPayload = validation.normalizedPayload;
+    await request(
+      '/api/backup/import',
+      { method: 'POST', body: JSON.stringify(cleanPayload) },
+      () => localSQLiteFallback.importBackup(cleanPayload)
+    );
+
+    try {
+      localSQLiteFallback.importBackup(cleanPayload);
+    } catch {}
+
+    try {
+      const prefs = cleanPayload.client_preferences;
+      if (prefs && typeof prefs === 'object') {
+        if (typeof prefs.smart_reminder_enabled === 'string') {
+          localStorage.setItem('martia_smart_reminder_enabled_v1', prefs.smart_reminder_enabled);
+        }
+        if (typeof prefs.motivational_quotes_bank === 'string') {
+          localStorage.setItem('martia_motivational_quotes_bank_v1', prefs.motivational_quotes_bank);
+        }
+        if (typeof prefs.fired_reminders === 'string') {
+          localStorage.setItem('martia_fired_reminders_v1', prefs.fired_reminders);
+        }
+        if (typeof prefs.theme === 'string') {
+          localStorage.setItem('martia_theme_v1', prefs.theme);
+        }
+        if (prefs.analytics_coefficients && typeof prefs.analytics_coefficients === 'object') {
+          saveAnalyticsCoefficients(prefs.analytics_coefficients);
+        }
+      }
+    } catch {}
+
+    invalidateApiCache('all', true);
+  },
+
   async getChangelogDocument(): Promise<string> {
     try {
       const res = await fetch('/CHANGELOG.md');
@@ -992,5 +1038,11 @@ export const api = {
     return res;
   },
 };
+
+firebaseCloudSync.registerDataBridge(
+  () => api.exportBackup(),
+  (remotePayload) => api.importBackupFromCloud(remotePayload)
+);
+
 
 

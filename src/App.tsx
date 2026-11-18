@@ -53,6 +53,7 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isDark, setIsDark] = useState<boolean>(false);
+  const [cloudSyncTick, setCloudSyncTick] = useState<number>(0);
 
   const handleNavigateToCoefficient = useCallback(
     (coeffKey: keyof AnalyticsCoefficientsConfig) => {
@@ -106,10 +107,10 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isMorePopoverOpen]);
 
-  const loadBootstrap = useCallback(async () => {
+  const loadBootstrap = useCallback(async (fromCloudSync = false) => {
     try {
       setError(null);
-      api.invalidateCache('bootstrap');
+      api.invalidateCache('bootstrap', fromCloudSync);
       const data = await api.getBootstrap();
       setBootstrapData(data);
     } catch (err: any) {
@@ -125,6 +126,15 @@ export default function App() {
 
   useEffect(() => {
     loadBootstrap();
+  }, [loadBootstrap]);
+
+  useEffect(() => {
+    const onCloudUpdated = () => {
+      setCloudSyncTick((prev) => prev + 1);
+      loadBootstrap(true);
+    };
+    window.addEventListener('martia:cloud-sync-updated', onCloudUpdated);
+    return () => window.removeEventListener('martia:cloud-sync-updated', onCloudUpdated);
   }, [loadBootstrap]);
 
   const handleSelectMoreItem = (target: 'settings' | 'subjects') => {
@@ -333,7 +343,7 @@ export default function App() {
             <p className="text-sm font-bold text-rose-700 dark:text-rose-300">{error}</p>
             <button
               type="button"
-              onClick={loadBootstrap}
+              onClick={() => loadBootstrap(false)}
               className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 cursor-pointer"
             >
               تلاش مجدد
@@ -343,10 +353,11 @@ export default function App() {
 
         {!loading && bootstrapData && (
           <>
-            {activeMenu === 'dashboard' && <DashboardView />}
+            {activeMenu === 'dashboard' && <DashboardView key={`dash-${cloudSyncTick}`} />}
 
             {activeMenu === 'planner' && (
               <PlannerView
+                key={`plan-${cloudSyncTick}`}
                 categories={bootstrapData.categories}
                 studyTypes={bootstrapData.studyTypes}
                 priorities={bootstrapData.priorities}
@@ -359,6 +370,7 @@ export default function App() {
 
             {activeMenu === 'reports' && (
               <ReportsHubView
+                key={`rep-${cloudSyncTick}`}
                 subjects={bootstrapData.subjects}
                 categories={bootstrapData.categories}
                 onNavigateToPlanner={() => setActiveMenu('planner')}
