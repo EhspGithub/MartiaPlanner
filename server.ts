@@ -1271,13 +1271,68 @@ app.get(['/CHANGELOG.md', '/api/changelog'], (_req, res) => {
   }
 });
 
+// Standalone Single-File HTML Endpoint (bypasses proxy static-HTML cookie interstitials)
+app.get('/api/standalone-html', (_req, res) => {
+  try {
+    const pkgPath = path.join(process.cwd(), 'package.json');
+    const pkg = fs.existsSync(pkgPath)
+      ? JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+      : { version: '1.21.0' };
+    const ver = pkg.version || '1.21.0';
+    const expectedName = `MartiaPlanner-v${ver}.html`;
+
+    const candidates = [
+      path.join(process.cwd(), expectedName),
+      path.join(process.cwd(), 'public', expectedName),
+      path.join(process.cwd(), 'dist', expectedName),
+    ];
+
+    // Also fallback to any MartiaPlanner-v*.html present in root or public/
+    for (const dir of [process.cwd(), path.join(process.cwd(), 'public')]) {
+      if (fs.existsSync(dir)) {
+        for (const f of fs.readdirSync(dir)) {
+          if (/^MartiaPlanner-v[\d.]+\.html$/i.test(f)) {
+            candidates.push(path.join(dir, f));
+          }
+        }
+      }
+    }
+
+    for (const candidatePath of candidates) {
+      if (fs.existsSync(candidatePath)) {
+        const htmlContent = fs.readFileSync(candidatePath, 'utf-8');
+        if (htmlContent.includes('id="martia-bundle-script"')) {
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+          return res.json({
+            ok: true,
+            version: ver,
+            fileName: expectedName,
+            html: htmlContent,
+          });
+        }
+      }
+    }
+
+    return res.status(404).json({
+      ok: false,
+      error: 'بسته تک‌فایل HTML روی سرور یافت نشد.',
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      ok: false,
+      error: err?.message || 'خطا در خواندن بسته تک‌فایل HTML از سرور',
+    });
+  }
+});
+
 // Full Database Backup & Restore
 app.get('/api/backup/export', (_req, res) => {
   try {
     const data = {
       exportedAt: new Date().toISOString(),
       app: 'MartiaPlanner',
-      version: '1.12.0',
+      version: '1.21.0',
       schemaVersion: 2,
       activity_categories: db.prepare('SELECT * FROM activity_categories ORDER BY sort_order ASC').all(),
       study_activity_types: db.prepare('SELECT * FROM study_activity_types ORDER BY sort_order ASC').all(),

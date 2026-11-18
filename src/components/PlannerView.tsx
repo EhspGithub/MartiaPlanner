@@ -65,7 +65,7 @@ import {
   classifyPlanActivityGroup,
 } from '../utils/analyticsEngine.ts';
 import { PerformanceModal } from './PerformanceModal.tsx';
-import { ShamsiDateField } from './PerformanceAnalyticsView.tsx';
+import { ShamsiDateField } from './ShamsiDateField.tsx';
 import {
   StudyReminderManager,
   getSmartReminderEnabled,

@@ -64,7 +64,7 @@ import {
   ShamsiDateField,
   type AnalyticsFilterMode,
   type ChartDisplayMode,
-} from './PerformanceAnalyticsView.tsx';
+} from './ShamsiDateField.tsx';
 import { SubjectLevelCard } from './LevelIdentityCard.tsx';
 import { SubjectsLevelMap } from './SubjectsLevelMap.tsx';
 

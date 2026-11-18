@@ -23,13 +23,17 @@ import { api } from './services/api.ts';
 import { firebaseCloudSync, type CloudSyncStatus } from './services/firebaseCloudSync.ts';
 import { APP_VERSION } from './version.ts';
 import { toPersianDigits } from './utils/jalali.ts';
-import { DashboardView } from './components/DashboardView.tsx';
 import { PlannerView } from './components/PlannerView.tsx';
-import { ReportsHubView } from './components/ReportsHubView.tsx';
 import type { GuideExternalNavRequest } from './components/MetricsDefinitionsView.tsx';
 import { PWAInstallButton } from './components/PWAInstallButton.tsx';
 import type { AnalyticsCoefficientsConfig } from './utils/analyticsCoefficients.ts';
 
+const DashboardView = lazy(() =>
+  import('./components/DashboardView.tsx').then((m) => ({ default: m.DashboardView }))
+);
+const ReportsHubView = lazy(() =>
+  import('./components/ReportsHubView.tsx').then((m) => ({ default: m.ReportsHubView }))
+);
 const SubjectsView = lazy(() =>
   import('./components/SubjectsView.tsx').then((m) => ({ default: m.SubjectsView }))
 );

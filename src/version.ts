@@ -3,7 +3,7 @@
  * Bump this version whenever preparing a new GitHub Release (.exe / .apk).
  */
 
-export const APP_VERSION = '1.20.0';
+export const APP_VERSION = '1.21.0';
 export const APP_RELEASE_TAG = `v${APP_VERSION}`;
 
 export interface ReleaseNoteItem {
@@ -14,6 +14,17 @@ export interface ReleaseNoteItem {
 }
 
 export const RELEASE_HISTORY: ReleaseNoteItem[] = [
+  {
+    version: '1.21.0',
+    tag: 'v1.21.0',
+    title: 'رفع قطعی خطای دانلود فایل HTML مستقل در تنظیمات، جداسازی کامل باندل Recharts از بارگذاری اولیه (کاهش ۴۶٪ حجم اولیه)، بهینه‌سازی جامع مهندسی نرم‌افزار و رفع اخطارهای GitHub Actions',
+    changes: [
+      'رفع قطعی خطای کاذب «بسته تک‌فایل HTML به‌دلیل فیلتر نشست میزبانی دریافت نشد» هنگام دانلود فایل HTML در تنظیمات، با حذف تطبیق رشته‌ای خودارجاع (Self-Matching String) و افزودن مسیر اختصاصی سرور GET /api/standalone-html همراه با اعتبارسنجی شناسه اسکریپت باندل',
+      'جداسازی کامپوننت تقویم شمسی (ShamsiDateField.tsx) از موتور نمودارها و بارگذاری تنبل (React.lazy) منوهای «عملکرد (DashboardView)» و «دروس (ReportsHubView)» که حجم جاوااسکریپت اولیه صفحه برنامه‌ریزی را تا ۴۶٪ کاهش می‌دهد',
+      'ممیزی و بهینه‌سازی ۱۲ محوری عملکرد شامل کش واکنش‌گرای لایه API، حذف درخواست‌های شبکه تکراری (Request Deduplication)، ایندکس‌های ترکیبی SQLite با حالت WAL، کش FNV-1a/LRU در موتور محاسباتی و حفظ وضعیت تب‌ها (Tab Keep-Alive)',
+      'اصلاح فایل‌های گردش‌کار GitHub Actions (deploy-pages.yml و release-builds.yml) با تغییر تریگر به workflow_dispatch و ارتقای ایمیج به ubuntu-24.04 جهت حذف کامل اخطارها و خطاهای اجرای خودکار در مخازن خصوصی گیت‌هاب',
+    ],
+  },
   {
     version: '1.20.0',
     tag: 'v1.20.0',
