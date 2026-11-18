@@ -3,7 +3,7 @@
  * Bump this version whenever preparing a new GitHub Release (.exe / .apk).
  */
 
-export const APP_VERSION = '1.18.0';
+export const APP_VERSION = '1.19.0';
 export const APP_RELEASE_TAG = `v${APP_VERSION}`;
 
 export interface ReleaseNoteItem {
@@ -14,6 +14,17 @@ export interface ReleaseNoteItem {
 }
 
 export const RELEASE_HISTORY: ReleaseNoteItem[] = [
+  {
+    version: '1.19.0',
+    tag: 'v1.19.0',
+    title: 'موتور دوگانه همگام‌سازی ابری زنده (Firebase Firestore و Supabase PostgreSQL) بدون نیاز به لاگین گوگل برای نسخه‌های اندروید (.apk)، ویندوز (.exe)، وب و فایل مستقل HTML',
+    changes: [
+      'پیاده‌سازی معماری دو موتوره همگام‌سازی ابری زنده (Dual-Engine Cloud Sync) در منوی سایر ← تنظیمات با اختیار کامل کاربر برای انتخاب بین «۱. Google Firebase Firestore (از پیش متصل و آماده)» و «۲. Supabase PostgreSQL (مناسب اینترنت ایران و پروژه‌های شخصی)»',
+      'رفع کامل خطای auth/unauthorized-domain در گوشی‌ها و دامنه‌های مختلف با اتصال مستقیم مبتنی بر «کد اتاق مشترک (Shared Workspace ID)» بدون نیاز به پنجره پاپ‌آپ لاگین جیمیل روی اندروید، ویندوز، GitHub Pages و فایل HTML مستقل',
+      'افزودن پنل تنظیمات مستقیم Supabase درون برنامه (Project URL و Anon/Public Key) همراه با راهنمای ۱ دقیقه‌ای و دکمه کپی خودکار اسکریپت SQL ساخت جدول martia_workspaces',
+      'افزودن دکمه‌های «دانلود فایل مقاله (HTML)»، «مشاهده و پیش‌نمایش HTML» و «چاپ / PDF» به رساله ۱۰ فصلی فلسفه علمی و روان‌شناختی نظام ارزیابی در منوی راهنما ← تب راهنما',
+    ],
+  },
   {
     version: '1.18.0',
     tag: 'v1.18.0',

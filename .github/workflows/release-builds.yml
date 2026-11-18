@@ -33,10 +33,11 @@ jobs:
       - name: Setup Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install frontend dependencies & build dist
+      - name: Install frontend dependencies & build dist + singlefile HTML
         run: |
           npm install --legacy-peer-deps
           npm run build
+          npm run build:singlefile
 
       - name: Install Tauri CLI & build Windows (.exe / .msi)
         run: |
@@ -44,7 +45,7 @@ jobs:
           npx tauri icon public/pwa-512x512.png
           npx tauri build
 
-      - name: Prepare Versioned Windows Binaries
+      - name: Prepare Versioned Windows Binaries & Portable HTML
         shell: bash
         run: |
           mkdir -p release-dist
@@ -57,6 +58,9 @@ jobs:
           if [ -f "src-tauri/target/release/martia-planner.exe" ]; then
             cp "src-tauri/target/release/martia-planner.exe" "release-dist/MartiaPlanner-Windows-v${{ steps.pkg.outputs.version }}.exe"
           fi
+          if [ -f "MartiaPlanner-v${{ steps.pkg.outputs.version }}.html" ]; then
+            cp "MartiaPlanner-v${{ steps.pkg.outputs.version }}.html" "release-dist/MartiaPlanner-v${{ steps.pkg.outputs.version }}.html"
+          fi
 
       - name: Upload Windows .exe & .msi Artifacts
         uses: actions/upload-artifact@v4
@@ -68,11 +72,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.pkg.outputs.tag }}
-          name: "MartiaPlanner ${{ steps.pkg.outputs.tag }} — نسخه نصبی ویندوز (.exe) و اندروید (.apk)"
+          name: "MartiaPlanner ${{ steps.pkg.outputs.tag }} — نسخه نصبی ویندوز (.exe)، اندروید (.apk) و تک‌فایل HTML"
           body: |
-            ### دانلود نسخه نصبی ویندوز و اندروید MartiaPlanner (${{ steps.pkg.outputs.tag }})
+            ### دانلود نسخه نصبی ویندوز، اندروید و نسخه پرتابل MartiaPlanner (${{ steps.pkg.outputs.tag }})
             - **فایل نصبی ویندوز (`.exe` / `.msi`):** `MartiaPlanner-Windows-${{ steps.pkg.outputs.tag }}-Setup.exe`
             - **فایل نصبی اندروید (`.apk`):** `MartiaPlanner-Android-${{ steps.pkg.outputs.tag }}.apk`
+            - **فایل پرتابل تک‌صفحه‌ای (`.html`):** `MartiaPlanner-${{ steps.pkg.outputs.tag }}.html`
           files: release-dist/*
 
   build-android:

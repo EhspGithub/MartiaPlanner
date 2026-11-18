@@ -10,8 +10,18 @@ import {
   Copy,
   Check,
   UserCheck,
+  Database,
+  KeyRound,
+  Code2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { firebaseCloudSync, type CloudSyncStatus } from '../services/firebaseCloudSync.ts';
+import {
+  firebaseCloudSync,
+  SUPABASE_SETUP_SQL_SCRIPT,
+  type CloudSyncStatus,
+  type CloudProviderType,
+} from '../services/firebaseCloudSync.ts';
 import { toPersianDigits } from '../utils/jalali.ts';
 
 interface CloudSyncPanelProps {
@@ -22,6 +32,10 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
   const [status, setStatus] = useState<CloudSyncStatus>(() => firebaseCloudSync.getStatus());
   const [workspaceInput, setWorkspaceInput] = useState<string>(status.workspaceId);
   const [nameInput, setNameInput] = useState<string>(status.collaboratorName);
+  const [sbUrlInput, setSbUrlInput] = useState<string>(status.supabaseUrl);
+  const [sbKeyInput, setSbKeyInput] = useState<string>(status.supabaseAnonKey);
+  const [showSqlGuide, setShowSqlGuide] = useState<boolean>(false);
+  const [copiedSql, setCopiedSql] = useState<boolean>(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [copiedWorkspace, setCopiedWorkspace] = useState<boolean>(false);
@@ -32,6 +46,42 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
     });
     return unsub;
   }, []);
+
+  const handleSelectProvider = (provider: CloudProviderType) => {
+    setActionError(null);
+    setActionMessage(null);
+    firebaseCloudSync.setProvider(provider);
+    setActionMessage(
+      provider === 'firebase'
+        ? 'موتور همگام‌سازی ابری روی «Google Firebase Firestore (پیش‌فرض)» قرار گرفت.'
+        : 'موتور همگام‌سازی ابری روی «Supabase PostgreSQL» قرار گرفت.'
+    );
+  };
+
+  const handleSaveSupabaseConfig = () => {
+    setActionError(null);
+    setActionMessage(null);
+    const cleanUrl = sbUrlInput.trim();
+    const cleanKey = sbKeyInput.trim();
+    if (!cleanUrl || !cleanUrl.startsWith('http')) {
+      setActionError('لطفاً آدرس معتبر Project URL سوپابیس (شروع با https://) را وارد کنید.');
+      return;
+    }
+    if (!cleanKey || cleanKey.length < 20) {
+      setActionError('لطفاً کلید عمومی (anon / public key) پروژه سوپابیس را به صورت کامل وارد کنید.');
+      return;
+    }
+    firebaseCloudSync.setSupabaseCredentials(cleanUrl, cleanKey);
+    setActionMessage('تنظیمات اتصال به پروژه Supabase شما با موفقیت ذخیره و فعال شد.');
+  };
+
+  const handleCopySqlScript = async () => {
+    try {
+      await navigator.clipboard.writeText(SUPABASE_SETUP_SQL_SCRIPT);
+      setCopiedSql(true);
+      setTimeout(() => setCopiedSql(false), 2500);
+    } catch {}
+  };
 
   const handleSaveCollaboratorName = () => {
     firebaseCloudSync.setCollaboratorName(nameInput);
@@ -67,10 +117,15 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
       firebaseCloudSync.setCollaboratorName(nameInput);
       await firebaseCloudSync.pushToCloudNow();
       setActionMessage(
-        'تمامی اطلاعات شما با موفقیت در دیتابیس ابری ذخیره شد و هم‌اکنون روی گوشی یا سیستم سایر اعضای این اتاق مشترک قابل مشاهده است.'
+        `تمامی اطلاعات شما با موفقیت در دیتابیس ابری (${
+          status.provider === 'firebase' ? 'Firebase Firestore' : 'Supabase'
+        }) ذخیره شد و هم‌اکنون روی گوشی و ویندوز سایر اعضای این اتاق مشترک قابل مشاهده است.`
       );
     } catch (err: any) {
-      setActionError('خطا در ارسال اطلاعات به دیتابیس ابری. لطفاً اتصال اینترنت را بررسی کنید.');
+      setActionError(
+        status.errorMessage ||
+          'خطا در ارسال اطلاعات به دیتابیس ابری. لطفاً اتصال اینترنت یا تنظیمات موتور انتخابی را بررسی کنید.'
+      );
     }
   };
 
@@ -95,8 +150,8 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
       dir="rtl"
       className="rounded-3xl border-2 border-emerald-300/90 dark:border-emerald-800/70 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/50 dark:from-slate-900 dark:via-slate-900 dark:to-emerald-950/30 p-5 sm:p-6 shadow-md space-y-5"
     >
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-emerald-200/70 dark:border-slate-800 pb-4">
+      {/* Header & Provider Switcher */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-emerald-200/70 dark:border-slate-800 pb-4">
         <div className="flex items-start gap-3.5">
           <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-emerald-600/25">
             <Cloud className="w-6 h-6" />
@@ -104,7 +159,7 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                دیتابیس ابری زنده و مشترک (اتصال مستقیم بدون نیاز به لاگین گوگل)
+                دیتابیس ابری زنده و مشترک (دو موتوره: Firebase و Supabase)
               </h3>
               <span
                 className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold ${
@@ -120,28 +175,159 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
                 />
                 <span>
                   {status.isConnected
-                    ? 'متصل و فعال روی دیتابیس ابری'
+                    ? `متصل به ${status.provider === 'firebase' ? 'Firebase Firestore' : 'Supabase'}`
+                    : status.provider === 'supabase' && !status.isSupabaseConfigured
+                    ? 'منتظر وارد کردن کلیدهای Supabase'
                     : status.autoSyncEnabled
-                    ? 'در حال برقراری ارتباط...'
+                    ? 'آماده همگام‌سازی ابری'
                     : 'همگام‌سازی خودکار غیرفعال'}
                 </span>
               </span>
             </div>
             <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed text-justify">
-              این بخش بدون نیاز به ورود با جیمیل و بدون خطای دامنه روی{' '}
-              <strong className="text-emerald-700 dark:text-emerald-300">
-                تمام گوشی‌ها، لینک گیت‌هاب، فایل HTML و کامپیوتر
+              شما می‌توانید به دلخواه خود بین دو سرویس ابری قدرتمند{' '}
+              <strong className="text-indigo-700 dark:text-indigo-300">
+                Google Firebase Firestore (از پیش متصل و آماده)
               </strong>{' '}
-              به‌طور مستقیم به دیتابیس ابری متصل است. هر دو نفر (فرد A و فرد B) که دارای{' '}
-              <strong>کد اتاق مشترک</strong> یکسانی باشند (پیش‌فرض:{' '}
-              <code className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                martia-shared-main
-              </code>
-              )، اطلاعات یکسانی را به‌صورت زنده می‌بینند و ویرایش می‌کنند.
+              یا{' '}
+              <strong className="text-emerald-700 dark:text-emerald-300">
+                Supabase PostgreSQL (مناسب اینترنت ایران و پروژه‌های شخصی)
+              </strong>{' '}
+              انتخاب کنید. این قابلیت روی نسخه اندروید (`.apk`)، ویندوز (`.exe`)، لینک گیت‌هاب و فایل HTML بدون نیاز به لاگین جیمیل کار می‌کند.
             </p>
           </div>
         </div>
+
+        {/* Provider Selector Buttons */}
+        <div className="grid grid-cols-2 gap-2 bg-slate-200/80 dark:bg-slate-800 p-1.5 rounded-2xl shrink-0">
+          <button
+            type="button"
+            onClick={() => handleSelectProvider('firebase')}
+            className={`flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              status.provider === 'firebase'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-700 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
+            }`}
+          >
+            <Cloud className="w-4 h-4 shrink-0" />
+            <span>۱. Firebase (آماده)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSelectProvider('supabase')}
+            className={`flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              status.provider === 'supabase'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-700 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
+            }`}
+          >
+            <Database className="w-4 h-4 shrink-0" />
+            <span>۲. Supabase (انتخابی)</span>
+          </button>
+        </div>
       </div>
+
+      {/* Supabase Configuration Box (Shown when provider === 'supabase') */}
+      {status.provider === 'supabase' && (
+        <div className="rounded-2xl bg-emerald-950/5 dark:bg-emerald-950/30 border-2 border-emerald-400/60 dark:border-emerald-700/70 p-4 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-emerald-900 dark:text-emerald-200">
+              <KeyRound className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>تنظیمات اتصال مستقیم به پروژه Supabase شما</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowSqlGuide((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 text-[11px] font-extrabold hover:bg-emerald-50 cursor-pointer"
+            >
+              <Code2 className="w-3.5 h-3.5" />
+              <span>راهنمای ۱ دقیقه‌ای و اسکریپت ساخت جدول SQL در Supabase</span>
+              {showSqlGuide ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="block text-[11px] font-extrabold text-slate-700 dark:text-slate-300">
+                آدرس پروژه (Supabase Project URL)
+              </label>
+              <input
+                type="text"
+                dir="ltr"
+                value={sbUrlInput}
+                onChange={(e) => setSbUrlInput(e.target.value)}
+                placeholder="https://xyzcompany.supabase.co"
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-[11px] font-extrabold text-slate-700 dark:text-slate-300">
+                کلید عمومی پروژه (Supabase Anon / Public Key)
+              </label>
+              <input
+                type="password"
+                dir="ltr"
+                value={sbKeyInput}
+                onChange={(e) => setSbKeyInput(e.target.value)}
+                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[11px] text-slate-600 dark:text-slate-400">
+              این مقادیر را از پنل Supabase خود در مسیر{' '}
+              <code className="font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                Project Settings → API
+              </code>{' '}
+              کپی کنید.
+            </p>
+            <button
+              type="button"
+              onClick={handleSaveSupabaseConfig}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition-colors cursor-pointer shadow-xs"
+            >
+              ذخیره و فعال‌سازی اتصال Supabase
+            </button>
+          </div>
+
+          {showSqlGuide && (
+            <div className="rounded-2xl bg-slate-950 text-slate-100 p-4 border border-slate-800 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-extrabold text-emerald-400">
+                  فقط یک بار کد زیر را در بخش SQL Editor پروژه Supabase خود Paste و Run کنید:
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopySqlScript}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black cursor-pointer"
+                >
+                  {copiedSql ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>کپی شد!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>کپی کد SQL ساخت جدول</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <pre
+                dir="ltr"
+                className="text-[11px] font-mono text-emerald-200 bg-slate-900/90 p-3 rounded-xl border border-slate-800 overflow-x-auto leading-relaxed"
+              >
+                {SUPABASE_SETUP_SQL_SCRIPT}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Workspace Room ID & Controls */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -231,7 +417,7 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
                 className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
               />
               <span className="text-xs font-extrabold text-slate-900 dark:text-white">
-                همگام‌سازی خودکار و زنده (Real-time Auto-Sync)
+                همگام‌سازی خودکار و زنده ({status.provider === 'firebase' ? 'Firebase' : 'Supabase'})
               </span>
             </label>
 
@@ -252,7 +438,7 @@ export const CloudSyncPanel: React.FC<CloudSyncPanelProps> = ({ onDataSynced }) 
               </div>
             ) : (
               <div>
-                کافی است نفر اول یک بار دکمه سبز <strong>«ارسال فوری اطلاعات به ابر (Push)»</strong> را بزند؛ از آن لحظه به بعد، تمام تغییرات بین همه دستگاه‌ها به صورت خودکار و آنی همگام می‌شود.
+                کافی است نفر اول یک بار دکمه سبز <strong>«ارسال فوری اطلاعات به ابر (Push)»</strong> را بزند؛ از آن لحظه به بعد، تمام تغییرات بین گوشی و ویندوز به صورت خودکار همگام می‌شود.
               </div>
             )}
           </div>
