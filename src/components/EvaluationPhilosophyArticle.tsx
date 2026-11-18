@@ -23,6 +23,10 @@ import {
   Zap,
   Clock,
   Sliders,
+  Download,
+  Printer,
+  Eye,
+  X,
 } from 'lucide-react';
 
 const MathFormula: React.FC<{ tex: string; inline?: boolean; className?: string }> = ({
@@ -172,6 +176,8 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
   onNavigateToDefinition,
 }) => {
   const [activeChapterId, setActiveChapterId] = useState<string>(CHAPTERS[0].id);
+  const [isHtmlModalOpen, setIsHtmlModalOpen] = useState<boolean>(false);
+  const [standaloneHtmlContent, setStandaloneHtmlContent] = useState<string>('');
 
   const scrollToChapter = (id: string) => {
     setActiveChapterId(id);
@@ -188,30 +194,269 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
     }
   };
 
+  const buildStandaloneArticleHtml = (): string => {
+    const container = document.getElementById('martia-evaluation-philosophy-article');
+    if (!container) return '';
+
+    const clone = container.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('.no-export-btn').forEach((el) => el.remove());
+
+    return `<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>فلسفه علمی و روان‌شناختی نظام ارزیابی، انگیزش و سنجش پیشرفت تحصیلی در Martia Planner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+  <style>
+    body {
+      font-family: 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #020617;
+      color: #f8fafc;
+      margin: 0;
+      padding: 24px;
+    }
+    html {
+      scroll-behavior: smooth;
+    }
+    @media print {
+      body {
+        background-color: #020617 !important;
+        color: #f8fafc !important;
+        padding: 0 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      section {
+        break-inside: avoid-page;
+        margin-bottom: 16px !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="max-w-6xl mx-auto space-y-6">
+    <div class="no-print flex flex-wrap items-center justify-between gap-3 bg-slate-900/95 border border-indigo-500/30 rounded-2xl px-4 py-3 shadow-lg sticky top-3 z-50 backdrop-blur-md">
+      <div class="text-xs sm:text-sm font-black text-indigo-300">
+        نسخه مستقل رساله علمی ۱۰ فصلی — Martia Planner
+      </div>
+      <button
+        onclick="window.print()"
+        class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold transition-colors cursor-pointer"
+      >
+        <span>چاپ / ذخیره به صورت PDF</span>
+      </button>
+    </div>
+    <div id="philosophy-article-top" class="space-y-6">
+      ${clone.innerHTML}
+    </div>
+  </div>
+  <script>
+    document.querySelectorAll('[data-chapter-target]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var targetId = btn.getAttribute('data-chapter-target');
+        var el = targetId ? document.getElementById(targetId) : null;
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    document.querySelectorAll('[data-scroll-top]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var topEl = document.getElementById('philosophy-article-top');
+        if (topEl) topEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        else window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+  </script>
+</body>
+</html>`;
+  };
+
+  const handleDownloadStandaloneArticle = () => {
+    const htmlContent = buildStandaloneArticleHtml();
+    if (!htmlContent) return;
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'MartiaPlanner-Evaluation-Philosophy-Article.html';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleOpenHtmlPreview = () => {
+    const htmlContent = buildStandaloneArticleHtml();
+    if (!htmlContent) return;
+    setStandaloneHtmlContent(htmlContent);
+    setIsHtmlModalOpen(true);
+  };
+
+  const handlePrintArticle = () => {
+    const htmlContent = buildStandaloneArticleHtml();
+    if (!htmlContent) {
+      window.print();
+      return;
+    }
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      window.print();
+      return;
+    }
+
+    doc.open();
+    doc.write(htmlContent);
+    doc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch {
+        window.print();
+      } finally {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 2000);
+      }
+    }, 650);
+  };
+
   return (
-    <div id="philosophy-article-top" className="space-y-6 pb-12" dir="rtl">
-      {/* Hero Banner & Treatise Header */}
-      <div className="bg-gradient-to-br from-slate-900 via-indigo-950/80 to-slate-900 border border-indigo-500/30 rounded-2xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
-        <div className="absolute -top-24 -left-24 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-bold">
-              <BookOpen className="w-4 h-4 text-indigo-400" />
-              <span>مرجع علمی، آماری و روان‌شناختی (۱۰ فصل تحلیلی)</span>
-            </div>
-
-            {onSwitchToDefinitionsTab && (
-              <button
-                onClick={onSwitchToDefinitionsTab}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all cursor-pointer"
-              >
-                <span>انتقال به تب تعاریف، فرمول‌ها و جدول جامع</span>
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-            )}
+    <div id="philosophy-article-top" className="space-y-4 pb-12" dir="rtl">
+      {/* Top Action Bar (Matching Definitions Tab Poster & Table Controls) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-100/90 dark:bg-slate-800/70 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 print:hidden">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-700 dark:text-indigo-300 text-xs font-extrabold">
+            <BookOpen className="w-4 h-4 text-indigo-500 dark:text-indigo-400 shrink-0" />
+            <span>خروجی مستقل و قابل چاپ رساله ۱۰ فصلی فلسفه علمی و روان‌شناختی</span>
           </div>
+
+          <button
+            type="button"
+            onClick={handleOpenHtmlPreview}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition-colors cursor-pointer shadow-xs"
+          >
+            <Eye className="w-4 h-4 shrink-0" />
+            <span>مشاهده و پیش‌نمایش HTML</span>
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadStandaloneArticle}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition-colors cursor-pointer shadow-xs"
+          >
+            <Download className="w-4 h-4 shrink-0" />
+            <span>دانلود فایل مقاله (HTML)</span>
+          </button>
+          <button
+            type="button"
+            onClick={handlePrintArticle}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-xs font-extrabold transition-colors cursor-pointer"
+          >
+            <Printer className="w-4 h-4 shrink-0" />
+            <span>چاپ / PDF</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Standalone HTML Viewer & Download Modal */}
+      {isHtmlModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 print:hidden">
+          <div className="bg-slate-900 border border-indigo-500/40 rounded-3xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 bg-slate-950 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <BookOpen className="w-5 h-5 text-indigo-400" />
+                <div>
+                  <h4 className="text-sm sm:text-base font-black text-white">
+                    پیش‌نمایش زنده و دانلود فایل مستقل HTML رساله فلسفه ارزیابی
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    شامل هر ۱۰ فصل تحلیلی، فهرست تعاملی فصول، فرمول‌ها و منابع علمی — آماده مطالعه آفلاین و چاپ
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadStandaloneArticle}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black transition-all cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>دانلود فایل HTML مستقل</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintArticle}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black transition-all cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>چاپ / PDF</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsHtmlModalOpen(false)}
+                  className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                  <span>بستن</span>
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 bg-slate-950 p-2 sm:p-4 overflow-hidden">
+              <iframe
+                title="پیش‌نمایش رساله فلسفه علمی و روان‌شناختی در قالب HTML"
+                srcDoc={standaloneHtmlContent}
+                className="w-full h-full rounded-2xl border border-slate-800 bg-slate-900"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Exportable Article Container */}
+      <div id="martia-evaluation-philosophy-article" className="space-y-6">
+        {/* Hero Banner & Treatise Header */}
+        <div className="bg-gradient-to-br from-slate-900 via-indigo-950/80 to-slate-900 border border-indigo-500/30 rounded-2xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+          <div className="absolute -top-24 -left-24 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative z-10 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-bold">
+                <BookOpen className="w-4 h-4 text-indigo-400" />
+                <span>مرجع علمی، آماری و روان‌شناختی (۱۰ فصل تحلیلی)</span>
+              </div>
+
+              {onSwitchToDefinitionsTab && (
+                <button
+                  onClick={onSwitchToDefinitionsTab}
+                  className="no-export-btn inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all cursor-pointer"
+                >
+                  <span>انتقال به تب تعاریف، فرمول‌ها و جدول جامع</span>
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
 
           <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-white leading-snug">
             فلسفه علمی و روان‌شناختی نظام ارزیابی، انگیزش و سنجش پیشرفت تحصیلی در Martia Planner
@@ -285,6 +530,7 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
             return (
               <button
                 key={chap.id}
+                data-chapter-target={chap.id}
                 onClick={() => scrollToChapter(chap.id)}
                 className={`text-right p-3 rounded-xl border transition-all flex items-start gap-3 cursor-pointer ${
                   isActive
@@ -327,6 +573,7 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
             </h2>
           </div>
           <button
+            data-scroll-top="true"
             onClick={scrollToTop}
             className="text-[11px] text-slate-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
           >
@@ -471,6 +718,7 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
             </h2>
           </div>
           <button
+            data-scroll-top="true"
             onClick={scrollToTop}
             className="text-[11px] text-slate-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
           >
@@ -712,6 +960,7 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
             </h2>
           </div>
           <button
+            data-scroll-top="true"
             onClick={scrollToTop}
             className="text-[11px] text-slate-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
           >
@@ -792,6 +1041,7 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
             </h2>
           </div>
           <button
+            data-scroll-top="true"
             onClick={scrollToTop}
             className="text-[11px] text-slate-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
           >
@@ -858,6 +1108,7 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
             </h2>
           </div>
           <button
+            data-scroll-top="true"
             onClick={scrollToTop}
             className="text-[11px] text-slate-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
           >
@@ -923,6 +1174,7 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
             </h2>
           </div>
           <button
+            data-scroll-top="true"
             onClick={scrollToTop}
             className="text-[11px] text-slate-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
           >
@@ -1000,6 +1252,7 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
             </h2>
           </div>
           <button
+            data-scroll-top="true"
             onClick={scrollToTop}
             className="text-[11px] text-slate-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
           >
@@ -1111,6 +1364,7 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
             </h2>
           </div>
           <button
+            data-scroll-top="true"
             onClick={scrollToTop}
             className="text-[11px] text-slate-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
           >
@@ -1187,6 +1441,7 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
             </h2>
           </div>
           <button
+            data-scroll-top="true"
             onClick={scrollToTop}
             className="text-[11px] text-slate-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
           >
@@ -1351,6 +1606,7 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
             </h2>
           </div>
           <button
+            data-scroll-top="true"
             onClick={scrollToTop}
             className="text-[11px] text-slate-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
           >
@@ -1407,6 +1663,7 @@ export const EvaluationPhilosophyArticle: React.FC<EvaluationPhilosophyArticlePr
           </div>
         </div>
       </section>
+      </div>
     </div>
   );
 };
