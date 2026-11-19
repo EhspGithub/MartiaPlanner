@@ -3,7 +3,7 @@
  * Bump this version whenever preparing a new GitHub Release (.exe / .apk).
  */
 
-export const APP_VERSION = '1.21.0';
+export const APP_VERSION = '1.21.1';
 export const APP_RELEASE_TAG = `v${APP_VERSION}`;
 
 export interface ReleaseNoteItem {
@@ -14,6 +14,16 @@ export interface ReleaseNoteItem {
 }
 
 export const RELEASE_HISTORY: ReleaseNoteItem[] = [
+  {
+    version: '1.21.1',
+    tag: 'v1.21.1',
+    title: 'اصلاح استقرار خودکار GitHub Pages در گردش‌کار انتشار، پاک‌سازی فایل‌های موقت و امن‌سازی همگام‌سازی گیت‌هاب',
+    changes: [
+      'افزودن پارامتر enablement: true به مرحله configure-pages در deploy-pages.yml جهت فعال‌سازی خودکار و رفع خطای 404 در استقرار GitHub Pages',
+      'فیلتر کردن خودکار فایل‌های موقت و پیش‌نویس (مانند DRAFT_firestore.rules، dist-singlefile و فایل‌های .env) در سرویس githubSync.ts و حذف کامل پرچم --force از gitLocalRunner.ts',
+      'انتشار هماهنگ و همسان روی هر دو مخزن MartiaPlanner و martiaplanner-demo بدون هیچ محدودیت و تولید نسخه مستقل تک‌فایل MartiaPlanner-v1.21.1.html',
+    ],
+  },
   {
     version: '1.21.0',
     tag: 'v1.21.0',

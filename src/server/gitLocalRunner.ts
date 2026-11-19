@@ -35,7 +35,7 @@ export async function syncLocalGitAndPushToGitHub(
       await execFileAsync('git', ['remote', 'add', 'origin', authedRemoteUrl], { cwd });
     }
 
-    await execFileAsync('git', ['push', '-u', 'origin', result.branch, '--force'], { cwd }).catch(() => {});
+    await execFileAsync('git', ['push', '-u', 'origin', result.branch], { cwd }).catch(() => {});
     // Strip token from stored remote URL for security
     await execFileAsync('git', ['remote', 'set-url', 'origin', cleanRemoteUrl], { cwd }).catch(() => {});
     localGitSynced = true;

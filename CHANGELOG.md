@@ -4,6 +4,14 @@
 
 ---
 
+## [1.21.1] — ۱۴۰۵/۰۸/۲۹ (2026-11-19)
+### اصلاح استقرار خودکار GitHub Pages، امن‌سازی فرآیند انتشار و همگام‌سازی هماهنگ دو مخزن (Fixed)
+- **رفع خطای استقرار GitHub Pages (`deploy-pages.yml`):** افزودن `enablement: true` به مرحله `actions/configure-pages@v5` برای جلوگیری از خطای `404 Not Found` هنگام استقرار روی مخازن عمومی جدید.
+- **سخت‌افزاری کردن فیلتر انتشار گیت‌هاب (`githubSync.ts` و `gitLocalRunner.ts`):** مسدود کردن ارسال فایل‌های موقت و پیش‌نویس (`DRAFT_firestore.rules`، `security_spec.md`، `dist-singlefile` و فایل‌های `.env*`) و حذف کامل پرچم `--force` از push محلی.
+- **انتشار همسان دو مخزن و ساخت فایل مستقل HTML (`MartiaPlanner-v1.21.1.html`):** انتشار یکسان روی هر دو مخزن `EhspGithub/MartiaPlanner` و `EhspGithub/martiaplanner-demo` بدون هیچ محدودیت.
+
+---
+
 ## [1.21.0] — ۱۴۰۵/۰۸/۲۸ (2026-11-19)
 ### رفع قطعی خطای دانلود فایل HTML مستقل در تنظیمات، جداسازی باندل Recharts از بارگذاری اولیه، ممیزی جامع مهندسی نرم‌افزار و رفع اخطارهای گیت‌هاب (Fixed & Optimized)
 - **رفع قطعی خطای دانلود فایل تک‌صفحه‌ای HTML در تنظیمات (`standaloneHtmlExport.ts` و `server.ts`):** شناسایی و رفع باگ خودارجاع (Self-Matching String Literal) که در آن رشته خطای داخل کد کامپایل‌شده خودِ فایل `MartiaPlanner-vX.Y.Z.html` باعث رد شدن اعتبارسنجی دانلود می‌شد؛ افزودن مسیر اختصاصی `GET /api/standalone-html` در سرور با اعتبارسنجی دقیق تگ `id="martia-bundle-script"` و هدر `Cache-Control: no-store`.
